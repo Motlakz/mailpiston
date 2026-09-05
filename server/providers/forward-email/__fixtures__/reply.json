@@ -1,0 +1,17 @@
+{
+  "messageId": "<reply-004@mail.example.net>",
+  "inReplyTo": "<plain-001@mail.example.net>",
+  "references": "<root-000@mail.example.net> <plain-001@mail.example.net>",
+  "subject": "Re: Order 4821 has not arrived",
+  "date": "2026-09-03T08:00:00.000Z",
+  "text": "Any update on this?",
+  "from": { "value": [{ "address": "rhian@example.net", "name": "Rhian Okafor" }], "text": "Rhian Okafor <rhian@example.net>" },
+  "to": { "value": [{ "address": "support@fixture-domain.test", "name": null }], "text": "support@fixture-domain.test" },
+  "recipients": ["support@fixture-domain.test"],
+  "attachments": [],
+  "session": {
+    "sender": "rhian@example.net",
+    "recipient": "support@fixture-domain.test",
+    "arrivalDate": "2026-09-03T08:00:01.000Z"
+  }
+}

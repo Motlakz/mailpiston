@@ -1,0 +1,15 @@
+{
+  "messageId": "<bcc-005@mail.example.net>",
+  "subject": "Weekly digest",
+  "date": "2026-09-04T06:00:00.000Z",
+  "text": "You are receiving this because you were BCC'd.",
+  "from": { "value": [{ "address": "digest@example.net", "name": "Digest" }], "text": "Digest <digest@example.net>" },
+  "to": { "value": [{ "address": "someone-else@example.net", "name": null }], "text": "someone-else@example.net" },
+  "recipients": ["support@fixture-domain.test"],
+  "attachments": [],
+  "session": {
+    "sender": "digest@example.net",
+    "recipient": "support@fixture-domain.test",
+    "arrivalDate": "2026-09-04T06:00:01.000Z"
+  }
+}

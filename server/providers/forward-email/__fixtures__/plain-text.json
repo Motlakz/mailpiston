@@ -1,0 +1,20 @@
+{
+  "messageId": "<plain-001@mail.example.net>",
+  "subject": "Order 4821 has not arrived",
+  "date": "2026-09-01T09:14:22.000Z",
+  "text": "Hi, my order still has not arrived. Can you check?\n\nThanks,\nRhian",
+  "from": { "value": [{ "address": "Rhian@Example.NET", "name": "Rhian Okafor" }], "text": "Rhian Okafor <Rhian@Example.NET>" },
+  "to": { "value": [{ "address": "support@fixture-domain.test", "name": null }], "text": "support@fixture-domain.test" },
+  "recipients": ["support@fixture-domain.test"],
+  "attachments": [],
+  "headerLines": [
+    { "key": "message-id", "line": "Message-ID: <plain-001@mail.example.net>" },
+    { "key": "subject", "line": "Subject: Order 4821 has not arrived" }
+  ],
+  "session": {
+    "sender": "rhian@example.net",
+    "recipient": "support@fixture-domain.test",
+    "arrivalDate": "2026-09-01T09:14:23.000Z",
+    "remoteAddress": "203.0.113.10"
+  }
+}

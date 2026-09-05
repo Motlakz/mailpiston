@@ -1,0 +1,23 @@
+{
+  "messageId": "<attach-003@mail.example.net>",
+  "subject": "Signed contract",
+  "date": "2026-09-02T15:30:00.000Z",
+  "text": "Signed and attached.",
+  "from": { "value": [{ "address": "legal@example.net", "name": "Legal" }], "text": "Legal <legal@example.net>" },
+  "to": { "value": [{ "address": "support@fixture-domain.test", "name": null }], "text": "support@fixture-domain.test" },
+  "recipients": ["support@fixture-domain.test"],
+  "attachments": [
+    {
+      "filename": "contract.pdf",
+      "contentType": "application/pdf",
+      "size": 11,
+      "content": "SGVsbG8gd29ybGQ=",
+      "cid": "<att-1@example.net>"
+    }
+  ],
+  "session": {
+    "sender": "legal@example.net",
+    "recipient": "support@fixture-domain.test",
+    "arrivalDate": "2026-09-02T15:30:01.000Z"
+  }
+}

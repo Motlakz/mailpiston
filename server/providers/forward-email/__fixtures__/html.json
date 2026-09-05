@@ -1,0 +1,18 @@
+{
+  "messageId": "<html-002@mail.example.net>",
+  "subject": "Re: Invoice for August",
+  "date": "2026-09-02T11:02:00.000Z",
+  "text": "The invoice is attached to the portal, not this email.",
+  "html": "<p>The invoice is attached to <a href=\"https://example.net/portal\">the portal</a>, not this email.</p>",
+  "textAsHtml": "<p>The invoice is attached to the portal, not this email.</p>",
+  "from": { "value": [{ "address": "billing@example.net", "name": "Billing" }], "text": "Billing <billing@example.net>" },
+  "to": { "value": [{ "address": "support@fixture-domain.test", "name": null }], "text": "support@fixture-domain.test" },
+  "cc": { "value": [{ "address": "finance@example.net", "name": null }], "text": "finance@example.net" },
+  "recipients": ["support@fixture-domain.test"],
+  "attachments": [],
+  "session": {
+    "sender": "billing@example.net",
+    "recipient": "support@fixture-domain.test",
+    "arrivalDate": "2026-09-02T11:02:01.000Z"
+  }
+}
