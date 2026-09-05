@@ -1,0 +1,15 @@
+import { Brand } from "./brand";
+
+export function SiteFooter() {
+  return (
+    <footer className="site-footer">
+      <Brand label="Back to top" />
+      <p>An ownership-first email control plane. Private build.</p>
+      <div>
+        <a href="#ownership">Principles</a>
+        <a href="#pricing">Access</a>
+        <a href="#top">Back to top ↑</a>
+      </div>
+    </footer>
+  );
+}
