@@ -33,9 +33,11 @@ There is intentionally no fake waitlist, contact form, customer count, testimoni
 - A unique, descriptive title and meta description state the product category and primary value.
 - The page uses one descriptive H1 and a semantic heading hierarchy.
 - Important product language appears in visible copy instead of being hidden in metadata.
-- `WebApplication` structured data describes the current private owner build truthfully, with no fabricated rating or review.
+- `WebApplication` structured data describes the product and its self-hosted tier truthfully, with no fabricated rating or review.
 - A generated social sharing image and SVG application icon establish a consistent search and share presentation.
-- A canonical URL, sitemap, and production `metadataBase` should be finalized when the public domain is selected. Set `NEXT_PUBLIC_SITE_URL` to the production origin.
+- `metadataBase` defaults to `https://mailpiston.vercel.app`, the production origin today, and the page declares a canonical URL. `NEXT_PUBLIC_SITE_URL` overrides both so a preview deploy does not claim the production origin as its canonical.
+- When `mailpiston.com` is registered it becomes the origin. Set `NEXT_PUBLIC_SITE_URL`, keep a 301 from the Vercel subdomain, and follow roadmap §5.9 — the app origin is also baked into every provider alias, so it is a migration rather than a DNS change.
+- `sitemap.ts` and `robots.ts` are not written yet. One public page makes them close to a formality, but they should land before the domain is submitted anywhere.
 
 Google's guidance favors helpful, people-first content and clear, concise titles. Search snippets are commonly drawn from page content or the meta description, so both were written to stand on their own.
 

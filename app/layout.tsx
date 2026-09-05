@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  // Production origin today is the Vercel subdomain; mailpiston.com replaces it
+  // once the apex is registered. Override with NEXT_PUBLIC_SITE_URL rather than
+  // editing this default, so a preview deploy resolves its own origin.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://mailpiston.vercel.app"),
   title: "MailPiston - Own Your Email Control Plane",
   description:
     "Receive, route, view, and reply across every domain you manage. Keep your email control plane while proven providers handle delivery.",
@@ -26,6 +29,9 @@ export const metadata: Metadata = {
     title: "MailPiston - Own the inbox. Offload the mail server.",
     description:
       "A programmable, reply-ready inbox for every domain you manage - with proven email infrastructure underneath.",
+  },
+  alternates: {
+    canonical: "/",
   },
   icons: {
     icon: "/icon.svg",

@@ -265,7 +265,7 @@ export interface ReplyRelay {
 ```
 
 The public relay address contains only a random, opaque token, for example
-`reply+rr_opaque@reply.mailpiston.app`. It must not encode an email address, thread id, customer id,
+`reply+rr_opaque@reply.mailpiston.com`. It must not encode an email address, thread id, customer id,
 or other discoverable state. Store the token hashed and show/store the plaintext only where it is
 needed to construct the relay address.
 
@@ -1646,7 +1646,7 @@ customer <customer@example.com>
        └→ verified personal inbox
 
 personal inbox replies
-  → reply+<opaque-token>@reply.mailpiston.app
+  → reply+<opaque-token>@reply.mailpiston.com
   → MailPiston verifies token + personal sender
   → MailPiston creates a new customer-facing message
   → Forward Email sends From: managed-address@customer-domain.com
@@ -1662,7 +1662,7 @@ internal notification message with:
 ```text
 From: "Customer Name via Managed Address" <managed-address@customer-domain.com>
 To: operator-personal@example.com
-Reply-To: reply+<opaque-token>@reply.mailpiston.app
+Reply-To: reply+<opaque-token>@reply.mailpiston.com
 Subject: original subject
 ```
 
@@ -1724,7 +1724,7 @@ Application-controlled forwarding is the default. Do not configure the personal 
 second Forward Email alias recipient: MailPiston needs to create the safe `Reply-To` relay, record the
 delivery, and prevent personal identity leakage.
 
-`reply.mailpiston.app` represents a MailPiston-owned, provider-verified relay domain with a catch-all
+`reply.mailpiston.com` represents a MailPiston-owned, provider-verified relay domain with a catch-all
 alias routed only to MailPiston ingress. It is shared infrastructure for all managed domains; each
 opaque token resolves the correct managed address, thread, and verified email endpoint recipient.
 

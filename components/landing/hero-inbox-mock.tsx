@@ -4,12 +4,27 @@ import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Archive02Icon,
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
   ArrowUpRight01Icon,
+  Attachment01Icon,
+  Cancel01Icon,
   CheckmarkCircle02Icon,
   Database01Icon,
+  FileEditIcon,
   Globe02Icon,
   Mail01Icon,
+  MailSend01Icon,
+  MoreHorizontalIcon,
+  PencilEdit02Icon,
+  Remove01Icon,
+  Search01Icon,
   ShieldKeyIcon,
+  SourceCodeIcon,
+  SquareIcon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 
 const conversations = [
@@ -83,8 +98,12 @@ export function HeroInboxMock() {
     <div className="mail-app" aria-label="Interactive MailPiston inbox preview">
       <div className="mail-app__browser">
         <span className="window-dots" aria-hidden="true"><i /><i /><i /></span>
-        <div className="browser-address"><ShieldKeyIconView /> app.mailpiston.local/inbox</div>
-        <div className="browser-actions"><span>−</span><span>□</span><span>×</span></div>
+        <div className="browser-address"><ShieldKeyIconView /> mailpiston.vercel.app/inbox</div>
+        <div className="browser-actions" aria-hidden="true">
+            <span><HugeiconsIcon icon={Remove01Icon} size={9} /></span>
+            <span><HugeiconsIcon icon={SquareIcon} size={9} /></span>
+            <span><HugeiconsIcon icon={Cancel01Icon} size={9} /></span>
+          </div>
       </div>
 
       <div className="mail-app__shell">
@@ -92,15 +111,15 @@ export function HeroInboxMock() {
           <div className="mail-workspace">
             <span className="mail-workspace__mark">N</span>
             <span><strong>Northstar</strong><small>Workspace</small></span>
-            <button type="button" aria-label="Workspace menu">⌄</button>
+            <button type="button" aria-label="Workspace menu"><HugeiconsIcon icon={ArrowDown01Icon} size={11} /></button>
           </div>
 
-          <button className="compose-button" type="button"><span>＋</span> Compose</button>
+          <button className="compose-button" type="button"><HugeiconsIcon icon={PencilEdit02Icon} size={12} /> Compose</button>
 
           <nav aria-label="Inbox preview navigation">
             <button className="is-active" type="button"><HugeiconsIcon icon={Mail01Icon} size={15} /><span>Inbox</span><b>3</b></button>
-            <button type="button"><span className="nav-glyph">↗</span><span>Sent</span></button>
-            <button type="button"><span className="nav-glyph">⌁</span><span>Drafts</span><b>1</b></button>
+            <button type="button"><HugeiconsIcon icon={MailSend01Icon} size={15} /><span>Sent</span></button>
+            <button type="button"><HugeiconsIcon icon={FileEditIcon} size={15} /><span>Drafts</span><b>1</b></button>
           </nav>
 
           <div className="address-list">
@@ -119,10 +138,10 @@ export function HeroInboxMock() {
         <section className="conversation-list" aria-label="Conversations">
           <div className="conversation-list__head">
             <div><strong>Inbox</strong><span>3 open</span></div>
-            <button type="button" aria-label="Conversation options">•••</button>
+            <button type="button" aria-label="Conversation options"><HugeiconsIcon icon={MoreHorizontalIcon} size={12} /></button>
           </div>
           <label className="mail-search">
-            <span aria-hidden="true">⌕</span>
+            <HugeiconsIcon icon={Search01Icon} size={11} />
             <input aria-label="Search conversations" placeholder="Search mail" readOnly />
             <kbd>⌘ K</kbd>
           </label>
@@ -151,8 +170,15 @@ export function HeroInboxMock() {
 
         <section className="conversation-detail" aria-live="polite">
           <div className="detail-toolbar">
-            <div><button type="button" aria-label="Back">←</button><button type="button" aria-label="Archive">⌄</button><button type="button" aria-label="Mark complete">✓</button></div>
-            <div><span>{selected.id}</span><button type="button" aria-label="More options">•••</button></div>
+            <div>
+              <button type="button" aria-label="Back"><HugeiconsIcon icon={ArrowLeft01Icon} size={12} /></button>
+              <button type="button" aria-label="Archive"><HugeiconsIcon icon={Archive02Icon} size={12} /></button>
+              <button type="button" aria-label="Mark complete"><HugeiconsIcon icon={Tick02Icon} size={12} /></button>
+            </div>
+            <div>
+              <span>{selected.id}</span>
+              <button type="button" aria-label="More options"><HugeiconsIcon icon={MoreHorizontalIcon} size={12} /></button>
+            </div>
           </div>
 
           <AnimatePresence mode="wait" initial={false}>
@@ -171,7 +197,7 @@ export function HeroInboxMock() {
 
               <div className="route-audit">
                 <span><HugeiconsIcon icon={Globe02Icon} size={13} /> {selected.address}</span>
-                <b>→</b>
+                <b aria-hidden="true"><HugeiconsIcon icon={ArrowRight01Icon} size={11} /></b>
                 <span><HugeiconsIcon icon={Database01Icon} size={13} /> Inbox</span>
                 <small>rule: support-primary</small>
               </div>
@@ -186,11 +212,15 @@ export function HeroInboxMock() {
 
               <div className="reply-composer">
                 <div className="reply-composer__identity">
-                  <span>Reply as</span><strong><i /> {selected.address}</strong><button type="button" aria-label="Change reply identity">⌄</button>
+                  <span>Reply as</span><strong><i /> {selected.address}</strong><button type="button" aria-label="Change reply identity"><HugeiconsIcon icon={ArrowDown01Icon} size={11} /></button>
                 </div>
                 <textarea value={draft} onChange={(event) => { setDraft(event.target.value); setQueued(false); }} aria-label="Reply draft" />
                 <div className="reply-composer__footer">
-                  <div><button type="button" aria-label="Attach file">⌕</button><button type="button" aria-label="Insert variable">{'{ }'}</button><span>Saved</span></div>
+                  <div>
+                    <button type="button" aria-label="Attach file"><HugeiconsIcon icon={Attachment01Icon} size={12} /></button>
+                    <button type="button" aria-label="Insert variable"><HugeiconsIcon icon={SourceCodeIcon} size={12} /></button>
+                    <span>Saved</span>
+                  </div>
                   <button className="send-button" onClick={queueReply} type="button">Send reply <HugeiconsIcon icon={ArrowUpRight01Icon} size={13} /></button>
                 </div>
               </div>

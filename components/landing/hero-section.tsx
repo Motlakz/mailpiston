@@ -12,7 +12,7 @@ export function HeroSection() {
       <div className="hero-grid" aria-hidden="true" />
 
       <div className="hero-copy">
-        <span className="eyebrow"><span className="eyebrow__dot" /> Private build · opening carefully</span>
+        <span className="eyebrow"><span className="eyebrow__dot" /> Email control plane · every domain you manage</span>
         <h1>Own the inbox.<br /><em>Offload the server.</em></h1>
         <p className="hero-lede">
           MailPiston gives every address on every domain you manage a programmable,

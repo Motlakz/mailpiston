@@ -149,7 +149,7 @@ export function PricingPreview() {
 
   return (
     <div className="pricing-preview">
-      <div className="pricing-toggle" aria-label="Indicative billing period">
+      <div className="pricing-toggle" aria-label="Billing period">
         <button type="button" className={!annual ? "is-active" : ""} onClick={() => setAnnual(false)} aria-pressed={!annual}>
           Monthly
         </button>
@@ -160,7 +160,7 @@ export function PricingPreview() {
 
       <div className="price-card price-card--featured">
         <div className="price-card__glow" aria-hidden="true" />
-        <span className="eyebrow eyebrow--small">Indicative hosted access</span>
+        <span className="eyebrow eyebrow--small">Hosted</span>
         <div className="price-line" aria-live="polite">
           <AnimatePresence mode="wait" initial={false}>
             <motion.strong
@@ -175,17 +175,17 @@ export function PricingPreview() {
           </AnimatePresence>
           <span>/ month{annual ? ", billed yearly" : ""}</span>
         </div>
-        <p>A future managed control plane for operators who would rather not run the application layer themselves.</p>
+        <p>The managed control plane, for operators who would rather not run the application layer themselves.</p>
         <ul>
           <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Managed MailPiston workspace</li>
           <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Multiple domains and reply identities</li>
-          <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Transparent provider and excess-usage costs</li>
+          <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Provider and usage costs billed at cost</li>
         </ul>
         <a className="button button--dark button--wide" href="#access-note">
           Understand the model
           <HugeiconsIcon icon={ArrowUpRight01Icon} size={18} />
         </a>
-        <small>Planning signal only. No checkout or public offer yet.</small>
+        <small>Your delivery, database, and storage providers bill you directly.</small>
       </div>
     </div>
   );

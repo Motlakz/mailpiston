@@ -54,7 +54,7 @@ MailPiston; all examples and acceptance tests use throwaway fixture domains rath
 instead:
 
 ```
-*@customer-domain.com  →  https://mailpiston.app/api/providers/forward-email/inbound
+*@customer-domain.com  →  https://mailpiston.vercel.app/api/providers/forward-email/inbound
 ```
 
 Use the catch-all for local, inbound-only routes. Create a concrete Forward Email alias for every
@@ -584,14 +584,14 @@ Index `emails.message_id`; add the `thread_id` FK. Thread list + conversation vi
   `email` and `email_group` subtypes; every recipient is independently verified and revocable.
 - Application-controlled forwarding after durable ingress. Construct a new internal notification;
   never configure the personal address as a direct provider forwarding recipient.
-- Opaque `reply+<token>@reply.mailpiston.app` routes bound to address + thread + verified forwarding
+- Opaque `reply+<token>@reply.mailpiston.com` routes bound to address + thread + verified forwarding
   endpoint recipient. Store token hashes, support expiry/revocation, and require envelope-sender equality.
 - Relay replies are parsed and rebuilt as fresh customer-facing mail. Never reuse personal raw MIME,
   Message-ID, Return-Path, Received, Sender, or authentication headers.
 - Emit the relayed outbound/thread event to every HTTP endpoint bound to the managed address.
 - Public endpoint payloads contain only customer-facing message data. Personal destinations, relay
   tokens, and personal transport metadata remain private operator audit data.
-- Configure one MailPiston-owned relay domain (for example `reply.mailpiston.app`) with a catch-all
+- Configure one MailPiston-owned relay domain (`reply.mailpiston.com`) with a catch-all
   routed exclusively to MailPiston ingress; it serves every managed customer domain.
 - Count constructed personal notifications as internal outbound mail. A handled inbound message can
   consume two outbound sends—one notification to the operator and one relayed reply to the customer—
@@ -779,6 +779,44 @@ drift. The payload is a **public contract** from its first delivery, so version 
 
 Use **MailPiston** in product prose and `X-Mailpiston-*` for HTTP headers. The execution plan, roadmap,
 and public contract now use one product identity.
+
+### 5.9 Which domain is MailPiston itself on? — *decided; one part blocks Phase 6*
+
+Two different domains are in play and conflating them causes real breakage.
+
+| Role | Value | Notes |
+| --- | --- | --- |
+| **App origin** (dashboard, API, provider ingress) | `https://mailpiston.vercel.app` | In use now. `mailpiston.com` replaces it when the apex is registered. |
+| **Relay domain** (opaque reply addresses) | `reply.mailpiston.com` | ⚠️ Not yet registered. Any domain you control DNS for will do — see below. |
+| **Managed domains** (customer-facing addresses) | the operator's own domains | Unaffected by either of the above. |
+
+**The app origin is not a free choice at runtime.** Every provider alias MailPiston creates carries
+the absolute ingress URL as its recipient, so moving the origin means every alias on every domain now
+points at a dead URL. Two consequences:
+
+1. Nothing hard-codes it. `APP_URL` is the single source, read only by `server/core/config.ts`, and
+   `inboundIngressUrl()` is the only way to build the ingress address.
+2. **Cutting over to `mailpiston.com` is a migration, not a DNS change.** Serve both origins during
+   the switch, repoint every alias through the provider interface, and let Phase 10 reconciliation
+   confirm zero drift before retiring the old URL. Do it before Phase 11's batch migration, while the
+   alias count is small.
+
+**The relay domain is a separate requirement, and it is not a branding one.**
+`mailpiston.vercel.app` is a Vercel-owned subdomain: we cannot publish MX records on it, so it can
+never accept the relayed replies §19 depends on. Phase 6 therefore needs **a domain whose DNS we
+control** — but it does not need a new one, and it does not need to be `mailpiston.com`. A subdomain
+of any domain the operator already owns works, because the relay address only ever appears in the
+`Reply-To` of a notification sent to the operator's own private mailbox. It is never customer-facing.
+
+So the requirement is, in order of preference:
+
+1. `reply.mailpiston.com`, once the apex is registered — cleanest, and keeps relay traffic off any
+   domain that also serves customers;
+2. `reply.<any-domain-you-already-own>` — functionally identical, available today;
+3. a subdomain of a managed domain — works, but mixes relay tokens into a customer's namespace, so
+   prefer 1 or 2.
+
+Phases 1–5 need none of this: `mailpiston.vercel.app` is a complete app origin on its own.
 
 ---
 

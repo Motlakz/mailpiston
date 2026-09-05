@@ -4,7 +4,7 @@ export function SiteFooter() {
   return (
     <footer className="site-footer">
       <Brand label="Back to top" />
-      <p>An ownership-first email control plane. Private build.</p>
+      <p>An ownership-first email control plane.</p>
       <div>
         <a href="#ownership">Principles</a>
         <a href="#pricing">Access</a>
