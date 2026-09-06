@@ -83,6 +83,7 @@ export class DomainService {
     return this.domains.update(id, {
       status: verification.verified ? 'verified' : 'failed',
       dnsRecords: verification.records,
+      verificationErrors: verification.errors,
       lastVerifiedAt: new Date(),
     });
   }

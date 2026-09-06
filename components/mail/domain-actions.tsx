@@ -1,5 +1,6 @@
 'use client';
 
+import { Popover } from '@base-ui/react/popover';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -90,6 +91,53 @@ export function VerifyDomainButton({ domainId }: { domainId: string }) {
       </Button>
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
     </span>
+  );
+}
+
+/**
+ * The provider's reasons a check did not pass, behind a disclosure.
+ *
+ * They arrive as prose — "Domain is missing required DNS MX records of: …" —
+ * and there can be several, so they belong in a panel the operator opens next
+ * to the status rather than as inline text beside the button.
+ */
+export function VerificationIssues({ issues }: { issues: string[] }) {
+  if (issues.length === 0) return null;
+
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        render={
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-full border border-warning/40 px-2 py-0.5 text-[11px] text-warning outline-none hover:bg-warning/10 focus-visible:ring-2 focus-visible:ring-ring/30"
+          />
+        }
+      >
+        <Icon name="failed" size={11} />
+        {issues.length} DNS {issues.length === 1 ? 'issue' : 'issues'}
+      </Popover.Trigger>
+
+      <Popover.Portal>
+        <Popover.Positioner sideOffset={6} align="start">
+          <Popover.Popup className="z-50 max-h-80 w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-border bg-popover p-3 text-xs shadow-lg outline-none">
+            <Popover.Title className="mb-2 font-medium">
+              Waiting on DNS
+            </Popover.Title>
+            <ul className="flex flex-col gap-2">
+              {issues.map((issue, index) => (
+                <li
+                  key={index}
+                  className="border-t border-border pt-2 text-muted-foreground whitespace-pre-wrap first:border-t-0 first:pt-0"
+                >
+                  {issue}
+                </li>
+              ))}
+            </ul>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 

@@ -88,6 +88,7 @@ function toDomain(row: DomainRow): Domain {
     status: row.status,
     catchAllAliasId: row.catchAllAliasId,
     dnsRecords: (row.dnsRecords ?? []) as DomainDnsRecord[],
+    verificationErrors: (row.verificationErrors ?? []) as string[],
     lastVerifiedAt: row.lastVerifiedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

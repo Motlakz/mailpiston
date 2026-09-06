@@ -63,19 +63,22 @@ export class ForwardEmailProvider implements MailProvider {
   }
 
   async verifyDomain(domainId: string): Promise<DomainVerification> {
-    // The verification endpoints trigger fresh DNS checks but acknowledge
-    // with text/plain. Fetch the domain afterwards for the updated JSON state.
-    await Promise.all([
+    // The verification endpoints trigger fresh DNS checks and answer in plain
+    // text, reporting anything missing as a 400 the client hands back as
+    // issues. `verify-smtp` only covers sending, so it never decides the
+    // outcome here. The updated JSON state comes from the domain endpoint.
+    const [recordIssues, smtpIssues] = await Promise.all([
       this.client.verifyRecords(domainId),
-      this.client.verifySmtp(domainId).catch(() => undefined),
+      this.client.verifySmtp(domainId).catch(() => [] as string[]),
     ]);
 
     const domain = await this.client.getDomain(domainId);
+    const verified = Boolean(domain.has_mx_record && domain.has_txt_record);
 
     return {
-      verified: Boolean(domain.has_mx_record && domain.has_txt_record),
+      verified,
       records: dnsRecordsFor(domainId, domain),
-      errors: [],
+      errors: verified ? [] : [...new Set([...recordIssues, ...smtpIssues])],
     };
   }
 

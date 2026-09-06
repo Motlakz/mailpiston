@@ -40,6 +40,7 @@ export interface UpdateDomainData {
   providerDomainId?: string | null;
   catchAllAliasId?: string | null;
   dnsRecords?: DomainDnsRecord[];
+  verificationErrors?: string[];
   lastVerifiedAt?: Date | null;
 }
 

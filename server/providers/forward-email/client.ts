@@ -90,22 +90,33 @@ export class ForwardEmailClient {
     return this.request<void>('DELETE', `/v1/domains/${encode(domain)}`);
   }
 
-  verifyRecords(domain: string): Promise<void> {
-    return this.request<void>(
-      'GET',
-      `/v1/domains/${encode(domain)}/verify-records`,
-      undefined,
-      { responseType: 'none' },
-    );
+  /**
+   * Triggers a fresh check of the receiving records.
+   *
+   * Records that have not propagated yet come back as a 400 whose body lists
+   * what is missing. Mid-onboarding that is the expected answer, not a provider
+   * failure, so the reasons are returned rather than thrown; only a genuinely
+   * broken response still raises.
+   */
+  verifyRecords(domain: string): Promise<string[]> {
+    return this.runVerification(`/v1/domains/${encode(domain)}/verify-records`);
   }
 
   /** Reports the DKIM/SPF/DMARC set required for *sending*, not just receiving. */
-  verifySmtp(domain: string): Promise<void> {
-    return this.request<void>(
-      'GET',
-      `/v1/domains/${encode(domain)}/verify-smtp`,
-      undefined,
-      { responseType: 'none' },
+  verifySmtp(domain: string): Promise<string[]> {
+    return this.runVerification(`/v1/domains/${encode(domain)}/verify-smtp`);
+  }
+
+  private async runVerification(path: string): Promise<string[]> {
+    const response = await this.fetchRaw('GET', path);
+    const body = await safeText(response, 4000);
+
+    if (response.ok) return [];
+    if (response.status === 400) return parseVerificationIssues(body);
+
+    throw new ExternalAPIError(
+      `Forward Email GET ${path} returned ${response.status}: ${body.slice(0, 500)}`,
+      PROVIDER,
     );
   }
 
@@ -183,33 +194,7 @@ export class ForwardEmailClient {
       responseType?: 'json' | 'none';
     } = {},
   ): Promise<T> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
-
-    let response: Response;
-
-    try {
-      response = await fetch(new URL(path, this.options.baseUrl), {
-        method,
-        signal: controller.signal,
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${this.options.apiToken}:`).toString('base64')}`,
-          Accept: 'application/json',
-          ...(body !== undefined && { 'Content-Type': 'application/json' }),
-        },
-        ...(body !== undefined && { body: JSON.stringify(body) }),
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new ProviderTimeoutError(PROVIDER);
-      }
-      throw new ExternalAPIError(
-        `Forward Email request failed: ${(error as Error).message}`,
-        PROVIDER,
-      );
-    } finally {
-      clearTimeout(timer);
-    }
+    const response = await this.fetchRaw(method, path, body);
 
     if (options.allowNotFound && response.status === 404) return null as T;
 
@@ -241,15 +226,74 @@ export class ForwardEmailClient {
       );
     }
   }
+
+  /** The transport itself, shared by the JSON and verification paths. */
+  private async fetchRaw(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
+
+    try {
+      return await fetch(new URL(path, this.options.baseUrl), {
+        method,
+        signal: controller.signal,
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${this.options.apiToken}:`).toString('base64')}`,
+          Accept: 'application/json',
+          ...(body !== undefined && { 'Content-Type': 'application/json' }),
+        },
+        ...(body !== undefined && { body: JSON.stringify(body) }),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ProviderTimeoutError(PROVIDER);
+      }
+      throw new ExternalAPIError(
+        `Forward Email request failed: ${(error as Error).message}`,
+        PROVIDER,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/**
+ * Splits a verification 400 into one string per complaint.
+ *
+ * Forward Email packs them all into a single `message` joined by a comma and a
+ * blank line, with MX entries as bullet lines under their own heading — so the
+ * split is on that joiner rather than on newlines, which keeps each complaint
+ * together with its bullets.
+ */
+function parseVerificationIssues(body: string): string[] {
+  let message = body;
+
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown };
+    if (typeof parsed.message === 'string') message = parsed.message;
+  } catch {
+    // Some responses are text/plain; the raw body is then the message.
+  }
+
+  const issues = message
+    .split(/\s*,\s*\n\s*\n\s*|\s*\n\s*\n\s*,\s*/)
+    .map((issue) => issue.replace(/^[\s,]+|[\s,]+$/g, ''))
+    .filter(Boolean);
+
+  return issues.length > 0 ? issues : [message.trim()].filter(Boolean);
 }
 
 function encode(value: string): string {
   return encodeURIComponent(value);
 }
 
-async function safeText(response: Response): Promise<string> {
+async function safeText(response: Response, limit = 500): Promise<string> {
   try {
-    return (await response.text()).slice(0, 500);
+    return (await response.text()).slice(0, limit);
   } catch {
     return '<unreadable body>';
   }

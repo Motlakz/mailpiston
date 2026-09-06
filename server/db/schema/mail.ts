@@ -41,6 +41,14 @@ export const domains = pgTable(
     catchAllAliasId: text('catch_all_alias_id'),
     /** DNS records the provider requires, cached for the dashboard table. */
     dnsRecords: jsonb('dns_records').notNull().default(sql`'[]'::jsonb`),
+    /**
+     * What the provider said was missing at the last check. A domain whose
+     * records have not propagated is a normal onboarding state, so the reasons
+     * are cached for the dashboard rather than surfaced as a failed request.
+     */
+    verificationErrors: jsonb('verification_errors')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

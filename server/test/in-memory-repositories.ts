@@ -52,6 +52,7 @@ export class InMemoryDomainRepository implements DomainRepository {
       status: data.status,
       catchAllAliasId: null,
       dnsRecords: data.dnsRecords,
+      verificationErrors: [],
       lastVerifiedAt: null,
       createdAt: now,
       updatedAt: now,

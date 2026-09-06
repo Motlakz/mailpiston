@@ -21,6 +21,11 @@ export interface Domain {
   status: 'pending' | 'verified' | 'failed' | 'disabled';
   catchAllAliasId: string | null;
   dnsRecords: DomainDnsRecord[];
+  /**
+   * Why the last check did not pass, in the provider's own words. Empty once
+   * the domain verifies, and the dashboard shows it instead of an error.
+   */
+  verificationErrors: string[];
   lastVerifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

@@ -3,6 +3,7 @@ import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import {
   AddDomainForm,
   CopyButton,
+  VerificationIssues,
   VerifyDomainButton,
   WebhookKeyForm,
 } from '@/components/mail/domain-actions';
@@ -62,6 +63,7 @@ function DomainCard({
         <div className="flex items-center gap-2">
           <h2 className="font-mono text-sm">{domain.name}</h2>
           <StatusBadge status={domain.status} />
+          <VerificationIssues issues={domain.verificationErrors} />
           {domain.catchAllAliasId ? (
             <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
               catch-all
