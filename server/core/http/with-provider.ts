@@ -26,9 +26,10 @@ import { errorResponse } from './with-api';
  *   5. run the handler, which claims its own idempotency key from the
  *      normalised payload.
  *
- * A handler that throws still returns 200. Provider ingress must never reject a
- * message because something downstream of durable capture went wrong — the
- * provider would retry, and we would keep failing the same way.
+ * A handler that throws returns 503. At this boundary the handler includes
+ * durable capture itself, so acknowledging an error with 200 would permanently
+ * discard the provider's retry opportunity. Work triggered after capture must
+ * handle its own errors without throwing back through this wrapper.
  */
 export interface ProviderContext {
   request: Request;
@@ -99,13 +100,14 @@ export function withProvider(
       const payload: unknown = rawBody.length > 0 ? JSON.parse(rawBody) : {};
       return await handler({ request, rawBody, payload });
     } catch (error) {
-      // Authenticated, but processing failed. Swallow it into a 200 with a
-      // flag so the provider does not retry forever, and log loudly.
+      // Authenticated, but durable processing failed. Ask the provider to
+      // retry; a 200 here would turn a temporary storage/database failure into
+      // permanent mail loss.
       console.error(`[${options.provider}] ingress handler failed`, error);
 
       return NextResponse.json(
         { received: true, processed: false },
-        { status: 200 },
+        { status: 503, headers: { 'Retry-After': '60' } },
       );
     }
   };

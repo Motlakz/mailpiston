@@ -87,6 +87,51 @@ describe('InboundService', () => {
     expect(emails.events[0].type).toBe('email.received');
   });
 
+  it('does not require object storage for a message with no stored bytes', async () => {
+    const withoutStorage = new InboundService(
+      emails,
+      addresses,
+      events,
+      () => {
+        throw new Error('No object storage configured');
+      },
+      { storeRawMime: false },
+    );
+
+    const result = await withoutStorage.capture(delivery());
+
+    expect(result.status).toBe('captured');
+    expect(emails.rows.size).toBe(1);
+  });
+
+  it('still requires object storage when a message has an attachment', async () => {
+    const withoutStorage = new InboundService(
+      emails,
+      addresses,
+      events,
+      () => {
+        throw new Error('No object storage configured');
+      },
+      { storeRawMime: false },
+    );
+
+    await expect(
+      withoutStorage.capture(
+        delivery({
+          attachments: [
+            {
+              filename: 'invoice.pdf',
+              contentType: 'application/pdf',
+              sizeBytes: 1,
+              content: Buffer.from('x').toString('base64'),
+              contentId: null,
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow('No object storage configured');
+  });
+
   it('treats a replayed provider POST as a duplicate, not a second row', async () => {
     const payload = delivery();
 

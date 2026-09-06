@@ -42,7 +42,10 @@ export function getInboundService(): InboundService {
     repositories.emails,
     repositories.addresses,
     repositories.events,
-    getStorage(),
+    // Object storage is only needed when a message has attachments or raw MIME
+    // retention is enabled. Resolve it lazily so plain messages can still be
+    // captured in production before R2 is configured.
+    getStorage,
     { storeRawMime: env.STORE_RAW_MIME },
   );
   return inboundService;
