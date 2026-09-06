@@ -2,11 +2,14 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import {
   Activity03Icon,
   AlertCircleIcon,
+  ArrowLeft02Icon,
   ArrowRight02Icon,
+  Attachment01Icon,
   CheckmarkCircle02Icon,
   Copy01Icon,
   DashboardSquare01Icon,
   Delete02Icon,
+  Download01Icon,
   GlobalIcon,
   InboxIcon,
   Key01Icon,
@@ -55,6 +58,9 @@ const ICONS = {
   pending: Loading03Icon,
   failed: AlertCircleIcon,
   arrowRight: ArrowRight02Icon,
+  arrowLeft: ArrowLeft02Icon,
+  attachment: Attachment01Icon,
+  download: Download01Icon,
   signIn: ShieldKeyIcon,
 } as const;
 
