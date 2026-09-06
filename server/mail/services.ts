@@ -7,6 +7,7 @@ import { getStorage } from '@/server/storage';
 
 import { AddressService } from './addresses/address-service';
 import { DomainService } from './domains/domain-service';
+import { OutboundService } from './emails/outbound-service';
 import { InboundService } from './inbound/inbound-service';
 import { DefaultThreadResolver } from './threads/thread-resolver';
 
@@ -20,6 +21,7 @@ import { DefaultThreadResolver } from './threads/thread-resolver';
 let domainService: DomainService | undefined;
 let addressService: AddressService | undefined;
 let inboundService: InboundService | undefined;
+let outboundService: OutboundService | undefined;
 
 export function getDomainService(): DomainService {
   domainService ??= new DomainService(
@@ -53,4 +55,15 @@ export function getInboundService(): InboundService {
   return inboundService;
 }
 
-export { AddressService, DomainService, InboundService };
+export function getOutboundService(): OutboundService {
+  outboundService ??= new OutboundService(
+    repositories.emails,
+    repositories.addresses,
+    repositories.events,
+    repositories.threads,
+    mailProviderRegistry.active(),
+  );
+  return outboundService;
+}
+
+export { AddressService, DomainService, InboundService, OutboundService };

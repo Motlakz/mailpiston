@@ -126,6 +126,17 @@ export class NeonEmailRepository implements EmailRepository {
     return row ? toEmail(row) : null;
   }
 
+  async findByProviderMessageId(providerMessageId: string): Promise<Email | null> {
+    const [row] = await db
+      .select()
+      .from(emails)
+      .where(eq(emails.providerMessageId, providerMessageId))
+      .orderBy(desc(emails.createdAt))
+      .limit(1);
+
+    return row ? toEmail(row) : null;
+  }
+
   async list(filter: {
     direction?: Email['direction'];
     addressId?: string;
@@ -185,6 +196,25 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .update(emails)
       .set({ status, updatedAt: new Date() })
+      .where(eq(emails.id, id))
+      .returning();
+
+    if (!row) throw new NotFoundError(`Email ${id} not found`);
+    return toEmail(row);
+  }
+
+  async recordSent(
+    id: string,
+    data: {
+      status: Email['status'];
+      providerMessageId: string | null;
+      messageId: string | null;
+      sentAt: Date | null;
+    },
+  ): Promise<Email> {
+    const [row] = await db
+      .update(emails)
+      .set({ ...data, updatedAt: new Date() })
       .where(eq(emails.id, id))
       .returning();
 

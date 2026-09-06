@@ -48,6 +48,17 @@ export class NeonAddressRepository implements AddressRepository {
     return row ? toAddress(row) : null;
   }
 
+  async findByIdWithDomain(id: string): Promise<AddressWithDomain | null> {
+    const [row] = await db
+      .select({ address: addresses, domainName: domains.name })
+      .from(addresses)
+      .innerJoin(domains, eq(addresses.domainId, domains.id))
+      .where(eq(addresses.id, id))
+      .limit(1);
+
+    return row ? withDomain(row.address, row.domainName) : null;
+  }
+
   /**
    * The inbound routing lookup. Both sides are lower-cased because an envelope
    * recipient arrives in whatever case the sender typed, and the unique index

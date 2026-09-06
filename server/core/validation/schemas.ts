@@ -61,6 +61,37 @@ export const updateAddressSchema = z
     message: 'At least one field must be provided',
   });
 
+const recipients = z.array(z.email()).min(1).max(50);
+
+/** A body has to be *something*: an empty message is never intentional. */
+const messageBody = {
+  text: z.string().max(1_000_000).optional(),
+  html: z.string().max(1_000_000).optional(),
+};
+
+const hasBody = (value: { text?: string; html?: string }) =>
+  Boolean(value.text?.trim() || value.html?.trim());
+
+export const sendEmailSchema = z
+  .object({
+    addressId: z.string().min(1),
+    to: recipients,
+    cc: z.array(z.email()).max(50).optional(),
+    bcc: z.array(z.email()).max(50).optional(),
+    subject: z.string().trim().min(1).max(998),
+    ...messageBody,
+  })
+  .refine(hasBody, { message: 'A message needs a text or HTML body' });
+
+export const replyEmailSchema = z
+  .object({
+    /** Defaults to the sender of the message being answered. */
+    to: recipients.optional(),
+    cc: z.array(z.email()).max(50).optional(),
+    ...messageBody,
+  })
+  .refine(hasBody, { message: 'A reply needs a text or HTML body' });
+
 export const createApiKeySchema = z.object({
   name: z.string().trim().min(1).max(100),
   expiresAt: z.iso.datetime().nullable().default(null),
@@ -70,3 +101,5 @@ export type CreateDomainInput = z.infer<typeof createDomainSchema>;
 export type CreateAddressInput = z.infer<typeof createAddressSchema>;
 export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;
 export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
+export type SendEmailInput = z.infer<typeof sendEmailSchema>;
+export type ReplyEmailInput = z.infer<typeof replyEmailSchema>;

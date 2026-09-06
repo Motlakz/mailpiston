@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { Icon } from '@/components/icon';
 import { PageHeader } from '@/components/layout/page-shell';
 import { EmailBody } from '@/components/mail/email-body';
+import { ReplyForm } from '@/components/mail/compose';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Message · MailPiston' };
@@ -59,6 +60,8 @@ export default async function EmailPage({
       </dl>
 
       <EmailBody html={email.html} text={email.text} />
+
+      {email.direction === 'inbound' ? <ReplyForm emailId={email.id} /> : null}
 
       {attachments.length > 0 ? (
         <section className="mt-5">

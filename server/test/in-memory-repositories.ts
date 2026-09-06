@@ -132,6 +132,14 @@ export class InMemoryAddressRepository implements AddressRepository {
     return this.rows.get(id) ?? null;
   }
 
+  async findByIdWithDomain(id: string): Promise<AddressWithDomain | null> {
+    const address = this.rows.get(id);
+    if (!address) return null;
+
+    const domain = await this.domains.findById(address.domainId);
+    return domain ? this.withDomain(address, domain.name) : null;
+  }
+
   async findByEmail(email: string): Promise<AddressWithDomain | null> {
     const at = email.lastIndexOf('@');
     if (at <= 0) return null;
@@ -276,6 +284,14 @@ export class InMemoryEmailRepository implements EmailRepository {
     return [...this.rows.values()].find((row) => row.messageId === messageId) ?? null;
   }
 
+  async findByProviderMessageId(providerMessageId: string): Promise<Email | null> {
+    return (
+      [...this.rows.values()].find(
+        (row) => row.providerMessageId === providerMessageId,
+      ) ?? null
+    );
+  }
+
   async list(filter: {
     direction?: Email['direction'];
     addressId?: string;
@@ -305,6 +321,26 @@ export class InMemoryEmailRepository implements EmailRepository {
 
     const updated = { ...existing, status, updatedAt: new Date() };
     this.rows.set(id, updated);
+    return updated;
+  }
+
+  async recordSent(
+    id: string,
+    data: {
+      status: Email['status'];
+      providerMessageId: string | null;
+      messageId: string | null;
+      sentAt: Date | null;
+    },
+  ): Promise<Email> {
+    const existing = this.rows.get(id);
+    if (!existing) throw new NotFoundError(`Email ${id} not found`);
+
+    const updated = { ...existing, ...data, updatedAt: new Date() };
+    this.rows.set(id, updated);
+    if (existing.threadId) {
+      this.threads.index([updated.messageId, updated.providerMessageId], existing.threadId);
+    }
     return updated;
   }
 

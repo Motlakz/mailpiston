@@ -24,6 +24,20 @@ export interface DnsRecord {
   present: boolean;
 }
 
+/**
+ * What the provider will still accept today.
+ *
+ * `daily` is what the provider actually reports and enforces.
+ * `monthlyAllowance` is the number advertised on the plan, carried separately
+ * and never derived from the daily figure — multiplying one by thirty produces
+ * a confident number that is wrong.
+ */
+export interface OutboundQuota {
+  daily: { used: number; limit: number | null };
+  monthlyAllowance: number | null;
+  checkedAt: Date;
+}
+
 export interface DomainVerification {
   verified: boolean;
   records: DnsRecord[];
@@ -175,6 +189,9 @@ export interface MailProvider {
   updateAlias(aliasId: string, input: UpdateAliasInput): Promise<ProviderAlias>;
   deleteAlias(aliasId: string, domainId: string): Promise<void>;
   listAliases(domainId: string): Promise<ProviderAlias[]>;
+
+  /** Remaining send capacity, as the provider reports it. */
+  outboundQuota(): Promise<OutboundQuota>;
 
   send(input: SendEmailInput): Promise<ProviderSendResult>;
   reply(input: ReplyEmailInput): Promise<ProviderSendResult>;

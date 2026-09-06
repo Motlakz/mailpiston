@@ -51,6 +51,11 @@ export interface ForwardEmailSendResponse {
   created_at?: string;
 }
 
+export interface ForwardEmailLimitResponse {
+  count?: number;
+  limit?: number;
+}
+
 export interface ForwardEmailClientOptions {
   apiToken: string;
   baseUrl: string;
@@ -178,6 +183,11 @@ export class ForwardEmailClient {
   }
 
   // --- Outbound -------------------------------------------------------------
+
+  /** Today's outbound usage. Forward Email reports the daily pair only. */
+  getEmailLimit(): Promise<ForwardEmailLimitResponse> {
+    return this.request<ForwardEmailLimitResponse>('GET', '/v1/emails/limit');
+  }
 
   sendEmail(body: Record<string, unknown>): Promise<ForwardEmailSendResponse> {
     return this.request<ForwardEmailSendResponse>('POST', '/v1/emails', body);

@@ -70,6 +70,8 @@ export interface UpdateAddressData {
 export interface AddressRepository {
   create(data: CreateAddressData): Promise<Address>;
   findById(id: string): Promise<Address | null>;
+  /** Sending needs the domain too: the `From:` is built from both halves. */
+  findByIdWithDomain(id: string): Promise<AddressWithDomain | null>;
   /** Routing lookup for inbound mail. Case-insensitive on both sides. */
   findByEmail(email: string): Promise<AddressWithDomain | null>;
   findByDomainAndLocalPart(
@@ -167,6 +169,8 @@ export interface EmailRepository {
 
   findById(id: string): Promise<Email | null>;
   findByMessageId(messageId: string): Promise<Email | null>;
+  /** Bounce mapping: provider events name their own id, not ours. */
+  findByProviderMessageId(providerMessageId: string): Promise<Email | null>;
   list(filter: {
     direction?: Email['direction'];
     addressId?: string;
@@ -175,6 +179,21 @@ export interface EmailRepository {
     cursor?: string | null;
   }): Promise<Paginated<EmailListItem>>;
   updateStatus(id: string, status: Email['status']): Promise<Email>;
+  /**
+   * The outbound acknowledgement: the ids the provider assigned, plus the
+   * status they imply. Separate from `updateStatus` because a send that
+   * succeeded must record its ids and its status as one write — a row that is
+   * `sent` with no message id cannot be threaded against or reconciled.
+   */
+  recordSent(
+    id: string,
+    data: {
+      status: Email['status'];
+      providerMessageId: string | null;
+      messageId: string | null;
+      sentAt: Date | null;
+    },
+  ): Promise<Email>;
 
   addAttachment(
     data: Omit<EmailAttachment, 'id' | 'createdAt'>,

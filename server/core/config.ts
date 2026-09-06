@@ -48,6 +48,14 @@ const envSchema = z.object({
   /** Shared key Forward Email signs inbound webhook bodies with. */
   FORWARD_EMAIL_WEBHOOK_KEY: z.string().min(1).optional(),
   FORWARD_EMAIL_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  /**
+   * The monthly send allowance advertised on the plan.
+   *
+   * Carried as configuration because the API reports the *daily* pair only.
+   * Deriving a month from a day produces a confident number that is wrong, so
+   * an unset value shows as unknown rather than as a guess.
+   */
+  FORWARD_EMAIL_MONTHLY_ALLOWANCE: z.coerce.number().int().positive().optional(),
 
   // --- Crypto ---------------------------------------------------------------
   /** 32-byte key, base64 or hex, for endpoint-secret encryption at rest. */

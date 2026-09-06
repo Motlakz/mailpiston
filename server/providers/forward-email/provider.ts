@@ -9,6 +9,7 @@ import type {
   MailProvider,
   NormalizedInboundEmail,
   NormalizedMailEvent,
+  OutboundQuota,
   ProviderAlias,
   ProviderDomain,
   ProviderSendResult,
@@ -48,6 +49,8 @@ export class ForwardEmailProvider implements MailProvider {
     private readonly verifier: ForwardEmailVerifier,
     /** Every alias MailPiston creates delivers here. */
     private readonly ingressUrl: string,
+    /** Advertised on the plan; the API reports only the daily pair. */
+    private readonly monthlyAllowance: number | null = null,
   ) {}
 
   // --- Domains --------------------------------------------------------------
@@ -130,6 +133,25 @@ export class ForwardEmailProvider implements MailProvider {
   }
 
   // --- Outbound -------------------------------------------------------------
+
+  /**
+   * Forward Email reports one pair — today's count and today's limit.
+   *
+   * The monthly figure is the plan's advertised allowance and is passed in as
+   * configuration; nothing here multiplies the daily limit to invent one.
+   */
+  async outboundQuota(): Promise<OutboundQuota> {
+    const limit = await this.client.getEmailLimit();
+
+    return {
+      daily: {
+        used: limit.count ?? 0,
+        limit: typeof limit.limit === 'number' ? limit.limit : null,
+      },
+      monthlyAllowance: this.monthlyAllowance,
+      checkedAt: new Date(),
+    };
+  }
 
   async send(input: SendEmailInput): Promise<ProviderSendResult> {
     return this.dispatch(input);

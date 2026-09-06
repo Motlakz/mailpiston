@@ -56,6 +56,7 @@ class MailProviderRegistry {
           // fallback for domains with nothing stored yet.
           new ForwardEmailVerifier(resolveInboundWebhookKeys),
           inboundIngressUrl(),
+          env.FORWARD_EMAIL_MONTHLY_ALLOWANCE ?? null,
         );
 
       default:

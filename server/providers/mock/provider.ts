@@ -6,6 +6,7 @@ import type {
   MailProvider,
   NormalizedInboundEmail,
   NormalizedMailEvent,
+  OutboundQuota,
   ProviderAlias,
   ProviderDomain,
   ProviderSendResult,
@@ -32,7 +33,10 @@ export class MockMailProvider implements MailProvider {
   private counter = 0;
 
   /** Signature checking is a no-op here; flip it to exercise the 401 path. */
-  constructor(private readonly acceptWebhooks = true) {}
+  constructor(
+    private readonly acceptWebhooks = true,
+    private readonly dailyLimit: number | null = 100,
+  ) {}
 
   async findDomain(name: string): Promise<ProviderDomain | null> {
     return this.domains.get(name.toLowerCase()) ?? null;
@@ -160,6 +164,15 @@ export class MockMailProvider implements MailProvider {
   async listAliases(domainId: string): Promise<ProviderAlias[]> {
     const domain = this.requireDomain(domainId);
     return [...this.aliases.values()].filter((alias) => alias.domain === domain.name);
+  }
+
+  /** Enough of a quota to render; tests that care set `dailyLimit`. */
+  async outboundQuota(): Promise<OutboundQuota> {
+    return {
+      daily: { used: this.sentMessages.length, limit: this.dailyLimit },
+      monthlyAllowance: null,
+      checkedAt: new Date(),
+    };
   }
 
   async send(input: SendEmailInput): Promise<ProviderSendResult> {
