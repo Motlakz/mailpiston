@@ -14,7 +14,8 @@
     "check": "bun run lint && bun run typecheck && bun run test && bun run check:boundaries",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "post:inbound": "node scripts/post-inbound.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

@@ -4,7 +4,7 @@ Companion to [`PROJECT_ROADMAP.md`](./PROJECT_ROADMAP.md). What is built, what i
 deliberately deferred, and what still needs a live domain before it can be
 called done.
 
-Last updated: 2026-09-05.
+Last updated: 2026-09-06.
 
 ---
 
@@ -127,8 +127,99 @@ Still needs a live domain:
 
 ---
 
+## Phase 4 — Inbound email · **built, unverified against a live delivery**
+
+`InboundService` (`server/mail/inbound/`) is the pipeline; the ingress route is
+now thin around it. `NeonEmailRepository` is real. Storage is an interface with
+an R2 driver and a development filesystem driver. The Inbox lists messages and
+opens them.
+
+| Deliverable | Where |
+| --- | --- |
+| Recipient resolution → capture / reject / duplicate | `server/mail/inbound/inbound-service.ts` |
+| Atomic message + attachments + event write | `NeonEmailRepository.createInbound` |
+| Object storage, two drivers | `server/storage/` |
+| Read API + authenticated attachment download | `app/api/v1/emails`, `app/api/v1/attachments/[id]/download` |
+| Inbox list and message viewer | `app/(dashboard)/inbox/` |
+
+Four decisions were made here that the roadmap left implicit. Each one is a
+place where the obvious implementation is wrong.
+
+### Idempotency moved onto the row it protects
+
+The plan (§10.2) claims an `idempotency_keys` row, then writes the message.
+That leaves a window: a process that dies between the two loses the message
+permanently, because the provider's retry finds the key taken and correctly
+concludes the message is already stored.
+
+`emails.fingerprint` now carries a unique index, and the insert *is* the claim.
+There is no window — the transaction either commits or it does not. Migration
+`0001_heavy_mister_sinister.sql`. `idempotency_keys` stays for Phase 6/7
+sources that have no row of their own to protect.
+
+### The fingerprint needed a content fallback
+
+`provider:providerMessageId:messageId:recipient:addressId` collapses to
+`provider:::recipient:addressId` when a delivery carries neither id — identical
+for *every* message that sender→address pair ever exchanges. The first would
+store and every one after it would be silently discarded as a duplicate.
+
+`createInboundFingerprint` now appends a SHA-256 of the raw MIME (or of
+sender/subject/date/body) when, and only when, both ids are absent. A genuine
+retry still deduplicates; two different messages no longer collide. Message-ID
+is mandated by RFC 5322 but is not guaranteed to survive every relay, so this
+path is reachable in production.
+
+### The catch-all does not accept unknown local parts
+
+Easy to misread. The catch-all is a *transport* mechanism: it gets mail for any
+local part to our ingress so an inbound-only address can exist without its own
+provider alias (Phase 3). It is not permission to invent addresses. A message
+for a local part with no `addresses` row is recorded as `email.rejected` and
+dropped — otherwise every typo and every dictionary spam run becomes a durable
+row. Mail to a disabled address is rejected the same way, with a distinct
+reason so the two are told apart in the log.
+
+### HTML mail gets two independent defences
+
+The viewer never touches `dangerouslySetInnerHTML`. Bodies render in an iframe
+with `sandbox` and **no** allow-tokens — no scripts, no forms, no
+`allow-same-origin` — and the document carries `default-src 'none'` internally.
+The CSP is not primarily an XSS control: it blocks remote images, which in email
+are tracking pixels that report when the operator opened the message. Inline
+styles and `data:` images survive, so newsletters still look right.
+
+Covered by tests (10 cases in `inbound-service.test.ts`): capture, replay →
+duplicate, one message fanned to two addresses → two rows, two id-less messages
+→ two rows, replayed id-less message → duplicate, unknown recipient → rejected
+event and no row, disabled address → rejected, attachment bytes to storage with
+the *decoded* length recorded, raw MIME only under the flag, and envelope-based
+routing when `To:` names someone else.
+
+Still needs a live delivery:
+
+- [ ] A real external email appears in the Inbox
+- [ ] A tampered body returns 401 and writes nothing
+- [ ] A 2 MB PDF round-trips through R2 and downloads intact
+- [ ] Ingress p95 under ~2 s
+
+Still open, and deliberately so:
+
+- **Spike 0.4, the payload ceiling.** Unmeasured. If Forward Email's inlined
+  base64 exceeds Vercel's ~4.5 MB body cap, the fix is a Cloudflare Worker that
+  streams the body to R2 and POSTs a pointer (§5.1) — the pipeline above does
+  not change, only where `NormalizedAttachment.content` comes from.
+- **Threading.** Every message currently gets `threadId: null`. Phase 5.
+- **Endpoint fan-out.** `email.received` is written but delivered nowhere.
+  Phase 6/7.
+- **Orphaned objects.** Attachment bytes are written before the row, so a
+  delivery that then turns out to be a duplicate leaves objects nothing
+  references. That is the correct direction to fail — the alternative is a
+  committed row pointing at a key that does not exist — but it wants a sweep
+  eventually.
+
+---
+
 ## Not started
 
-Phases 4–11 as written in the roadmap. The Phase 4 ingress route exists and is
-authenticated and normalising, but it persists nothing yet and says so in its
-response (`{ received: true, persisted: false }`).
+Phases 5–11 as written in the roadmap.
