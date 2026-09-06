@@ -98,7 +98,7 @@ export function HeroInboxMock() {
     <div className="mail-app" aria-label="Interactive MailPiston inbox preview">
       <div className="mail-app__browser">
         <span className="window-dots" aria-hidden="true"><i /><i /><i /></span>
-        <div className="browser-address"><ShieldKeyIconView /> mailpiston.vercel.app/inbox</div>
+        <div className="browser-address"><ShieldKeyIconView /> mailpiston.com/inbox</div>
         <div className="browser-actions" aria-hidden="true">
             <span><HugeiconsIcon icon={Remove01Icon} size={9} /></span>
             <span><HugeiconsIcon icon={SquareIcon} size={9} /></span>

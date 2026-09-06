@@ -51,7 +51,7 @@ export const landingPageStructuredData = {
   name: "MailPiston",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
-  url: "https://mailpiston.vercel.app",
+  url: "https://mailpiston.com",
   description: "An ownership-first email control plane for receiving, routing, viewing, and replying across every domain you manage.",
   offers: {
     "@type": "Offer",

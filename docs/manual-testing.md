@@ -12,7 +12,7 @@ Set these once per shell (Git Bash, or any POSIX shell):
 FE_TOKEN='your-forward-email-api-token'      # My Account → Security
 FE_WEBHOOK_KEY='your-domain-webhook-key'     # per-DOMAIN, not the API token
 DOMAIN='your-test-domain.example'
-APP='https://mailpiston.vercel.app'          # or http://localhost:3000
+APP='https://mailpiston.com'          # or http://localhost:3000
 ```
 
 ---

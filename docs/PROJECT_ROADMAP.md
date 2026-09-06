@@ -54,7 +54,7 @@ MailPiston; all examples and acceptance tests use throwaway fixture domains rath
 instead:
 
 ```
-*@customer-domain.com  →  https://mailpiston.vercel.app/api/providers/forward-email/inbound
+*@customer-domain.com  →  https://mailpiston.com/api/providers/forward-email/inbound
 ```
 
 Use the catch-all for local, inbound-only routes. Create a concrete Forward Email alias for every
@@ -786,7 +786,7 @@ Two different domains are in play and conflating them causes real breakage.
 
 | Role | Value | Notes |
 | --- | --- | --- |
-| **App origin** (dashboard, API, provider ingress) | `https://mailpiston.vercel.app` | In use now. `mailpiston.com` replaces it when the apex is registered. |
+| **App origin** (dashboard, API, provider ingress) | `https://mailpiston.com` | In use now. `mailpiston.com` replaces it when the apex is registered. |
 | **Relay domain** (opaque reply addresses) | `reply.mailpiston.com` | ⚠️ Not yet registered. Any domain you control DNS for will do — see below. |
 | **Managed domains** (customer-facing addresses) | the operator's own domains | Unaffected by either of the above. |
 
@@ -802,7 +802,7 @@ points at a dead URL. Two consequences:
    alias count is small.
 
 **The relay domain is a separate requirement, and it is not a branding one.**
-`mailpiston.vercel.app` is a Vercel-owned subdomain: we cannot publish MX records on it, so it can
+`mailpiston.com` is a Vercel-owned subdomain: we cannot publish MX records on it, so it can
 never accept the relayed replies §19 depends on. Phase 6 therefore needs **a domain whose DNS we
 control** — but it does not need a new one, and it does not need to be `mailpiston.com`. A subdomain
 of any domain the operator already owns works, because the relay address only ever appears in the
@@ -816,7 +816,7 @@ So the requirement is, in order of preference:
 3. a subdomain of a managed domain — works, but mixes relay tokens into a customer's namespace, so
    prefer 1 or 2.
 
-Phases 1–5 need none of this: `mailpiston.vercel.app` is a complete app origin on its own.
+Phases 1–5 need none of this: `mailpiston.com` is a complete app origin on its own.
 
 ---
 
