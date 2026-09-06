@@ -24,7 +24,7 @@ export function Sidebar() {
   return (
     <nav
       aria-label="Dashboard"
-      className="flex h-full w-56 shrink-0 flex-col gap-6 border-r border-border bg-card/60 px-3 py-5"
+      className="sticky top-0 flex h-dvh w-56 shrink-0 flex-col gap-6 overflow-y-auto border-r border-border bg-card/60 px-3 py-5"
     >
       <Link href="/overview" className="px-2">
         {/* Wordmark: the logo already says the name. */}
