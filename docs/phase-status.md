@@ -142,7 +142,7 @@ opens them.
 | Read API + authenticated attachment download | `app/api/v1/emails`, `app/api/v1/attachments/[id]/download` |
 | Inbox list and message viewer | `app/(dashboard)/inbox/` |
 
-Four decisions were made here that the roadmap left implicit. Each one is a
+Five decisions were made here that the roadmap left implicit. Each one is a
 place where the obvious implementation is wrong.
 
 ### Idempotency moved onto the row it protects
@@ -179,6 +179,24 @@ for a local part with no `addresses` row is recorded as `email.rejected` and
 dropped — otherwise every typo and every dictionary spam run becomes a durable
 row. Mail to a disabled address is rejected the same way, with a distinct
 reason so the two are told apart in the log.
+
+### Webhook keys are per domain, not per deployment
+
+Forward Email issues one webhook key per domain, so the single
+`FORWARD_EMAIL_WEBHOOK_KEY` verifies exactly one of them. Keys now live
+encrypted in `domain_webhook_keys` — a sibling table, for the same reason
+`endpoint_webhook_configs` is a sibling of `endpoints`: the domain row is read
+on ordinary paths that have no business carrying a secret.
+
+Verification tries every candidate key rather than selecting one. Picking a key
+by reading the recipient domain out of the body would be faster and is safe in
+principle — claiming a domain does not let you forge its HMAC — but it means
+parsing before authenticating, and that inverts the ordering `withProvider`
+exists to guarantee. Tens of domains, microseconds per HMAC.
+
+The env var stays as a fallback so a single-domain setup keeps working and an
+upgrade cannot lock an operator out of their own ingress. Migration
+`0002_high_vargas.sql`.
 
 ### HTML mail gets two independent defences
 

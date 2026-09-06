@@ -77,6 +77,26 @@ export const addresses = pgTable(
   ],
 );
 
+/**
+ * The per-domain key Forward Email signs inbound webhook bodies with.
+ *
+ * A sibling table rather than a column on `domains`, for the same reason
+ * `endpoint_webhook_configs` is a sibling of `endpoints`: the domain row is
+ * read on ordinary paths that have no business carrying a secret, and keeping
+ * the ciphertext out of it means an accidental `select *` cannot leak one.
+ *
+ * Encrypted, not hashed. The server has to recover the plaintext to recompute
+ * an HMAC — a hash would make the key unusable for the one thing it is for.
+ */
+export const domainWebhookKeys = pgTable('domain_webhook_keys', {
+  domainId: text('domain_id')
+    .primaryKey()
+    .references(() => domains.id, { onDelete: 'cascade' }),
+  keyCiphertext: text('key_ciphertext').notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 /** §4.3 */
 export const endpoints = pgTable('endpoints', {
   id: id(),

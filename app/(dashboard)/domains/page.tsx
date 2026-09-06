@@ -4,14 +4,21 @@ import {
   AddDomainForm,
   CopyButton,
   VerifyDomainButton,
+  WebhookKeyForm,
 } from '@/components/mail/domain-actions';
 import type { Domain } from '@/server/core/types';
+import { listDomainsWithWebhookKeys } from '@/server/mail/domains/webhook-keys';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Domains · MailPiston' };
 
 export default async function DomainsPage() {
-  const domains = await repositories.domains.list();
+  const [domains, withKeys] = await Promise.all([
+    repositories.domains.list(),
+    listDomainsWithWebhookKeys(),
+  ]);
+
+  const configuredKeys = new Set(withKeys.map((row) => row.domainId));
 
   return (
     <>
@@ -30,7 +37,11 @@ export default async function DomainsPage() {
       ) : (
         <div className="flex flex-col gap-4">
           {domains.map((domain) => (
-            <DomainCard key={domain.id} domain={domain} />
+            <DomainCard
+              key={domain.id}
+              domain={domain}
+              webhookKeyConfigured={configuredKeys.has(domain.id)}
+            />
           ))}
         </div>
       )}
@@ -38,7 +49,13 @@ export default async function DomainsPage() {
   );
 }
 
-function DomainCard({ domain }: { domain: Domain }) {
+function DomainCard({
+  domain,
+  webhookKeyConfigured,
+}: {
+  domain: Domain;
+  webhookKeyConfigured: boolean;
+}) {
   return (
     <section className="rounded-lg border border-border bg-card">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
@@ -54,6 +71,25 @@ function DomainCard({ domain }: { domain: Domain }) {
 
         <VerifyDomainButton domainId={domain.id} />
       </header>
+
+      <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-3">
+        <span className="text-xs text-muted-foreground">
+          Inbound webhook key
+        </span>
+        <span
+          className={
+            webhookKeyConfigured
+              ? 'rounded-full border border-border px-2 py-0.5 text-[11px] text-success'
+              : 'rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground'
+          }
+        >
+          {webhookKeyConfigured ? 'stored' : 'using env fallback'}
+        </span>
+        <WebhookKeyForm
+          domainId={domain.id}
+          configured={webhookKeyConfigured}
+        />
+      </div>
 
       <div className="px-5 py-4">
         {domain.dnsRecords.length === 0 ? (

@@ -177,3 +177,39 @@ Two things that are not code and will break the deployment if skipped:
 
    `MAIL_PROVIDER=mock` is also refused in production: the mock accepts unsigned
    inbound webhooks, and that must not be reachable by getting one env var wrong.
+
+---
+
+## 4. Per-domain webhook keys
+
+Forward Email issues **one webhook key per domain**, so `FORWARD_EMAIL_WEBHOOK_KEY`
+verifies exactly one of them. Keys for additional domains are stored encrypted
+in `domain_webhook_keys` and set from the Domains page, or over the API:
+
+```bash
+curl -sS -X PUT "$APP/api/v1/domains/$DOMAIN_ID/webhook-key" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY" \
+  -d "{\"webhookKey\":\"$FE_WEBHOOK_KEY\"}"
+```
+
+Remove one, falling back to the environment variable:
+
+```bash
+curl -sS -X DELETE "$APP/api/v1/domains/$DOMAIN_ID/webhook-key" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+There is no `GET`. The plaintext is needed only on the server to recompute an
+HMAC, and a route that read it back would exist only to be misused — the
+Domains page shows `stored` or `using env fallback` instead.
+
+An inbound request is verified against **every** candidate key. Picking one key
+by reading the recipient domain out of the body would be faster, but it means
+parsing a body before it has been authenticated, and that inverts the ordering
+the ingress wrapper exists to guarantee. A single-tenant control plane has tens
+of domains; an HMAC costs microseconds.
+
+Rotating a key takes effect within 60 seconds on its own, or immediately for
+whoever saved it — the resolver caches, because it runs before authentication
+and must not let an unauthenticated caller drive one query per request.

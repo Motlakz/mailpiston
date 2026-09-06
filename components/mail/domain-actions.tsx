@@ -117,3 +117,85 @@ function messageFor(error: unknown): string {
     ? error.message
     : 'Something went wrong. Check the server logs.';
 }
+
+/**
+ * Stores the per-domain inbound webhook key.
+ *
+ * Write-only by design. Forward Email issues one webhook key per domain, and
+ * the plaintext is needed only on the server to recompute an HMAC — so there is
+ * no route that reads it back and nothing here ever displays it. The only
+ * thing the operator needs to see is whether one is stored.
+ */
+export function WebhookKeyForm({
+  domainId,
+  configured,
+}: {
+  domainId: string;
+  configured: boolean;
+}) {
+  const router = useRouter();
+  const [value, setValue] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+
+    try {
+      await apiRequest(`/api/v1/domains/${domainId}/webhook-key`, {
+        method: 'PUT',
+        body: JSON.stringify({ webhookKey: value }),
+      });
+
+      setValue('');
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
+
+  async function clear() {
+    setError(null);
+
+    try {
+      await apiRequest(`/api/v1/domains/${domainId}/webhook-key`, {
+        method: 'DELETE',
+      });
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
+
+  return (
+    <form onSubmit={save} className="flex flex-wrap items-center gap-2">
+      <input
+        type="password"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={configured ? 'Replace stored key' : 'Paste webhook key'}
+        autoComplete="off"
+        required
+        className="h-7 w-56 rounded-md border border-input bg-card px-2 font-mono text-xs outline-none focus-visible:border-ring"
+      />
+
+      <Button type="submit" disabled={pending}>
+        {configured ? 'Replace' : 'Save'}
+      </Button>
+
+      {configured ? (
+        <button
+          type="button"
+          onClick={clear}
+          disabled={pending}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Remove
+        </button>
+      ) : null}
+
+      {error ? <span className="text-xs text-destructive">{error}</span> : null}
+    </form>
+  );
+}

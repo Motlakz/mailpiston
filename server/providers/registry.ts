@@ -2,6 +2,7 @@ import 'server-only';
 
 import { env, inboundIngressUrl } from '@/server/core/config';
 import { NotFoundError } from '@/server/core/errors';
+import { resolveInboundWebhookKeys } from '@/server/mail/domains/webhook-keys';
 
 import { ForwardEmailClient } from './forward-email/client';
 import { ForwardEmailProvider } from './forward-email/provider';
@@ -49,7 +50,11 @@ class MailProviderRegistry {
             baseUrl: env.FORWARD_EMAIL_API_URL,
             timeoutMs: env.FORWARD_EMAIL_TIMEOUT_MS,
           }),
-          new ForwardEmailVerifier(env.FORWARD_EMAIL_WEBHOOK_KEY!),
+          // A resolver, not a key. Forward Email issues one webhook key per
+          // domain, so the verifier is handed every candidate and tries them
+          // all; `FORWARD_EMAIL_WEBHOOK_KEY` survives inside it as the
+          // fallback for domains with nothing stored yet.
+          new ForwardEmailVerifier(resolveInboundWebhookKeys),
           inboundIngressUrl(),
         );
 
