@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Keep the template; real env files stay ignored above.
 !.env.example
+
+# Development object storage. The R2 driver replaces it in any real deployment.
+.mailpiston-storage/

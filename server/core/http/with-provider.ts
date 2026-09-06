@@ -60,7 +60,16 @@ export function withProvider(
     try {
       // 2. Authenticity. Re-create a Request so the provider verifier sees an
       //    unconsumed body while we keep the exact bytes.
-      const provider = mailProviderRegistry.get(options.provider);
+      //
+      //    The *active* provider verifies, not the one this path is named for.
+      //    In production they are the same object. With MAIL_PROVIDER=mock they
+      //    are not, and that is the entire point of the mock: it exists so the
+      //    pipeline can run with no provider account, which necessarily means
+      //    there is no real signature to check. Asking the Forward Email
+      //    verifier to do it anyway would only throw on the absent webhook key.
+      //    `config.ts` refuses `mock` in production, so this cannot become an
+      //    unauthenticated ingress on a deployed instance.
+      const provider = mailProviderRegistry.active();
       const verified = await provider.verifyInboundWebhook(
         new Request(request.url, {
           method: request.method,

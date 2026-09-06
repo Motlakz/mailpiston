@@ -53,12 +53,34 @@ const envSchema = z.object({
   /** 32-byte key, base64 or hex, for endpoint-secret encryption at rest. */
   SECRET_ENCRYPTION_KEY: z.string().min(32),
 
-  // --- Storage (Phase 4; optional until then) -------------------------------
+  // --- Storage --------------------------------------------------------------
+  /**
+   * All four together select the R2 driver. Absent, development falls back to
+   * the filesystem driver and production refuses to start the first time
+   * something needs to store bytes.
+   */
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
+  /** Development-only object root. Git-ignored. */
+  LOCAL_STORAGE_DIR: z.string().default('.mailpiston-storage'),
+  /**
+   * Raw MIME is the single best debugging artifact and it is large. Toggleable
+   * from day one so the bill is a decision rather than a discovery.
+   */
   STORE_RAW_MIME: booleanish.default(false),
+
+  // --- Private reply relay (Phase 6) ---------------------------------------
+  /**
+   * Domain carrying opaque `reply+<token>@` addresses (roadmap §5.9). It must
+   * be a domain whose DNS we control — a Vercel subdomain cannot publish MX —
+   * but it is never customer-facing, so any owned domain works.
+   */
+  RELAY_DOMAIN: z
+    .string()
+    .transform((value) => value.toLowerCase())
+    .optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -72,6 +94,20 @@ function loadEnv(): Env {
       .join('\n');
 
     throw new Error(`Invalid environment configuration:\n${issues}`);
+  }
+
+  // The mock provider accepts any inbound webhook without a signature, because
+  // it has no key to check one against. That is correct for development and a
+  // wide-open ingress anywhere else, so it is refused outright rather than
+  // documented as a footgun.
+  if (
+    parsed.data.MAIL_PROVIDER === 'mock' &&
+    parsed.data.NODE_ENV === 'production'
+  ) {
+    throw new Error(
+      'MAIL_PROVIDER=mock cannot be used in production: it accepts unsigned ' +
+        'inbound webhooks. Set MAIL_PROVIDER=forward-email.',
+    );
   }
 
   // Provider credentials are optional in the schema so `mock` can run with no
