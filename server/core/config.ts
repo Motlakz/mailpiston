@@ -110,13 +110,14 @@ function loadEnv(): Env {
     );
   }
 
-  // Provider credentials are optional in the schema so `mock` can run with no
-  // Forward Email account at all, but they are mandatory once the real
-  // provider is selected. Check that here rather than at the first API call.
+  // The API token is optional in the schema so `mock` can run with no Forward
+  // Email account, but it is mandatory once the real provider is selected.
+  // The webhook key is only an optional fallback: per-domain keys live in the
+  // database and the verifier safely rejects every request when no key exists.
   if (parsed.data.MAIL_PROVIDER === 'forward-email') {
-    const missing = (
-      ['FORWARD_EMAIL_API_TOKEN', 'FORWARD_EMAIL_WEBHOOK_KEY'] as const
-    ).filter((key) => !parsed.data[key]);
+    const missing = (['FORWARD_EMAIL_API_TOKEN'] as const).filter(
+      (key) => !parsed.data[key],
+    );
 
     if (missing.length > 0) {
       throw new Error(

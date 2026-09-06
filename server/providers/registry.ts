@@ -44,7 +44,7 @@ class MailProviderRegistry {
       case 'forward-email':
         return new ForwardEmailProvider(
           new ForwardEmailClient({
-            // config.ts has already refused to boot without these when this
+            // config.ts has already refused to boot without this when this
             // provider is selected, so the assertions cannot fire in practice.
             apiToken: env.FORWARD_EMAIL_API_TOKEN!,
             baseUrl: env.FORWARD_EMAIL_API_URL,
