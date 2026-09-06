@@ -46,6 +46,15 @@ export default async function EmailPage({
           {(email.receivedAt ?? email.createdAt).toISOString().replace('T', ' ').slice(0, 19)} UTC
         </Field>
         <Field label="Message-ID">{email.messageId ?? '—'}</Field>
+        <Field label="Thread">
+          {email.threadId ? (
+            <Link href={`/threads/${email.threadId}`} className="text-primary hover:underline">
+              View conversation
+            </Link>
+          ) : (
+            '—'
+          )}
+        </Field>
         <Field label="Status">{email.status}</Field>
       </dl>
 

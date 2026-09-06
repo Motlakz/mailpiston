@@ -120,6 +120,18 @@ export type CreateAttachmentData = Omit<
 >;
 
 /**
+ * Where an inbound message lands in the thread graph.
+ *
+ * Resolution happens before the write (it is a read of existing messages), but
+ * *creating* a thread has to happen inside the capture transaction: a message
+ * that turns out to be a duplicate must not leave a thread behind with nothing
+ * in it.
+ */
+export type InboundThreadTarget =
+  | { existingId: string; subject?: undefined }
+  | { existingId?: undefined; subject: string | null };
+
+/**
  * Result of an inbound capture. `duplicate` means the provider re-delivered a
  * message we already hold — not an error, and the caller returns 200.
  */
@@ -149,6 +161,8 @@ export interface EmailRepository {
     email: CreateEmailData & { id: string; fingerprint: string };
     attachments: CreateAttachmentData[];
     eventMetadata: Record<string, unknown>;
+    /** Resolved by the thread resolver; the thread row is written here. */
+    thread: InboundThreadTarget;
   }): Promise<InboundCaptureResult>;
 
   findById(id: string): Promise<Email | null>;

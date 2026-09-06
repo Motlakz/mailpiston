@@ -7,7 +7,9 @@ import {
   InMemoryEmailRepository,
   InMemoryEventRepository,
   InMemoryStorage,
+  InMemoryThreadRepository,
 } from '@/server/test/in-memory-repositories';
+import { DefaultThreadResolver } from '@/server/mail/threads/thread-resolver';
 
 import { InboundService } from './inbound-service';
 
@@ -15,6 +17,7 @@ let domains: InMemoryDomainRepository;
 let addresses: InMemoryAddressRepository;
 let emails: InMemoryEmailRepository;
 let events: InMemoryEventRepository;
+let threads: InMemoryThreadRepository;
 let storage: InMemoryStorage;
 let inbound: InboundService;
 
@@ -23,12 +26,18 @@ const DOMAIN = 'fixture-domain.test';
 beforeEach(async () => {
   domains = new InMemoryDomainRepository();
   addresses = new InMemoryAddressRepository(domains);
-  emails = new InMemoryEmailRepository();
+  threads = new InMemoryThreadRepository();
+  emails = new InMemoryEmailRepository(threads);
   events = new InMemoryEventRepository();
   storage = new InMemoryStorage();
-  inbound = new InboundService(emails, addresses, events, storage, {
-    storeRawMime: false,
-  });
+  inbound = new InboundService(
+    emails,
+    addresses,
+    events,
+    new DefaultThreadResolver(threads),
+    storage,
+    { storeRawMime: false },
+  );
 
   const domain = await domains.create({
     name: DOMAIN,
@@ -92,6 +101,7 @@ describe('InboundService', () => {
       emails,
       addresses,
       events,
+      new DefaultThreadResolver(threads),
       () => {
         throw new Error('No object storage configured');
       },
@@ -109,6 +119,7 @@ describe('InboundService', () => {
       emails,
       addresses,
       events,
+      new DefaultThreadResolver(threads),
       () => {
         throw new Error('No object storage configured');
       },
@@ -242,9 +253,14 @@ describe('InboundService', () => {
     await inbound.capture(delivery({ raw }));
     expect([...storage.objects.keys()]).toHaveLength(0);
 
-    const withRaw = new InboundService(emails, addresses, events, storage, {
-      storeRawMime: true,
-    });
+    const withRaw = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: true },
+    );
     await withRaw.capture(delivery({ messageId: '<second@example.com>', raw }));
 
     const key = [...storage.objects.keys()].find((k) => k.startsWith('raw/'));
@@ -263,5 +279,90 @@ describe('InboundService', () => {
     );
 
     expect(result.status).toBe('captured');
+  });
+});
+
+describe('InboundService thread resolution', () => {
+  it('keeps a reply in the thread of the message it answers', async () => {
+    await inbound.capture(delivery({ messageId: '<first@example.com>' }));
+
+    await inbound.capture(
+      delivery({
+        messageId: '<second@example.com>',
+        inReplyTo: '<first@example.com>',
+        subject: 'Re: Help please',
+      }),
+    );
+
+    const [first, second] = [...emails.rows.values()];
+    expect(second.threadId).toBe(first.threadId);
+    expect(threads.rows.size).toBe(1);
+    // The thread keeps the subject it opened with, not the "Re:" of the reply.
+    expect([...threads.rows.values()][0].subject).toBe('Help please');
+  });
+
+  it('follows the References chain when In-Reply-To is missing', async () => {
+    await inbound.capture(delivery({ messageId: '<root@example.com>' }));
+
+    await inbound.capture(
+      delivery({
+        messageId: '<descendant@example.com>',
+        inReplyTo: null,
+        references: ['<root@example.com>', '<lost-in-transit@example.com>'],
+      }),
+    );
+
+    const [root, descendant] = [...emails.rows.values()];
+    expect(descendant.threadId).toBe(root.threadId);
+    expect(threads.rows.size).toBe(1);
+  });
+
+  it('does not merge two unrelated messages that share a subject', async () => {
+    // The plan's step 4 — a subject-and-participant fallback — is deliberately
+    // not implemented: merging two customers is a data-leak-shaped bug.
+    await inbound.capture(
+      delivery({ messageId: '<one@example.com>', subject: 'Invoice' }),
+    );
+
+    await inbound.capture(
+      delivery({
+        messageId: '<two@elsewhere.test>',
+        from: 'other-customer@elsewhere.test',
+        subject: 'Invoice',
+      }),
+    );
+
+    const [one, two] = [...emails.rows.values()];
+    expect(two.threadId).not.toBe(one.threadId);
+    expect(threads.rows.size).toBe(2);
+  });
+
+  it('threads a reply that quotes the provider id we sent under', async () => {
+    // Our outbound copy carries the provider's id; the customer's client
+    // replies to whichever id their copy showed.
+    await inbound.capture(
+      delivery({ messageId: null, providerMessageId: 'fe_outbound_1' }),
+    );
+
+    await inbound.capture(
+      delivery({
+        messageId: '<reply@example.com>',
+        providerMessageId: 'fe_2',
+        inReplyTo: 'fe_outbound_1',
+      }),
+    );
+
+    const [parent, reply] = [...emails.rows.values()];
+    expect(reply.threadId).toBe(parent.threadId);
+  });
+
+  it('leaves no thread behind when the delivery turns out to be a duplicate', async () => {
+    await inbound.capture(delivery());
+    const afterFirst = threads.rows.size;
+
+    const replay = await inbound.capture(delivery());
+
+    expect(replay.status).toBe('duplicate');
+    expect(threads.rows.size).toBe(afterFirst);
   });
 });

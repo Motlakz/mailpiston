@@ -5,7 +5,6 @@ import type {
   DeliveryRepository,
   EndpointRepository,
   ReplyRelayRepository,
-  ThreadRepository,
 } from '@/server/repositories/types';
 
 /**
@@ -25,24 +24,6 @@ function notImplemented(phase: string, method: string): never {
     501,
     'NOT_IMPLEMENTED',
   );
-}
-
-export class NeonThreadRepository implements ThreadRepository {
-  create(): never {
-    notImplemented('Phase 5 (threads)', 'ThreadRepository.create');
-  }
-  findById(): never {
-    notImplemented('Phase 5 (threads)', 'ThreadRepository.findById');
-  }
-  findByMessageIds(): never {
-    notImplemented('Phase 5 (threads)', 'ThreadRepository.findByMessageIds');
-  }
-  list(): never {
-    notImplemented('Phase 5 (threads)', 'ThreadRepository.list');
-  }
-  touch(): never {
-    notImplemented('Phase 5 (threads)', 'ThreadRepository.touch');
-  }
 }
 
 export class NeonEndpointRepository implements EndpointRepository {

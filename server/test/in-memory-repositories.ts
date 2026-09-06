@@ -9,6 +9,7 @@ import type {
   MailEvent,
   MailEventType,
   Paginated,
+  Thread,
 } from '@/server/core/types';
 import type {
   AddressRepository,
@@ -17,6 +18,8 @@ import type {
   EmailRepository,
   EventRepository,
   InboundCaptureResult,
+  InboundThreadTarget,
+  ThreadRepository,
   CreateAddressData,
   CreateDomainData,
   DomainRepository,
@@ -207,6 +210,13 @@ export class InMemoryEmailRepository implements EmailRepository {
   readonly attachments = new Map<string, EmailAttachment>();
   readonly events: MailEvent[] = [];
 
+  /**
+   * Threads are written through the email repository, exactly as the Neon one
+   * does inside the capture transaction, so a test sees the same rollback
+   * behaviour: a duplicate leaves no thread behind.
+   */
+  constructor(readonly threads = new InMemoryThreadRepository()) {}
+
   async create(data: CreateEmailData): Promise<Email> {
     const now = new Date();
     const email: Email = { ...data, id: nextId('em'), createdAt: now, updatedAt: now };
@@ -218,6 +228,7 @@ export class InMemoryEmailRepository implements EmailRepository {
     email: CreateEmailData & { id: string; fingerprint: string };
     attachments: CreateAttachmentData[];
     eventMetadata: Record<string, unknown>;
+    thread: InboundThreadTarget;
   }): Promise<InboundCaptureResult> {
     const taken = [...this.rows.values()].some(
       (row) => row.fingerprint === input.email.fingerprint,
@@ -226,8 +237,19 @@ export class InMemoryEmailRepository implements EmailRepository {
     if (taken) return { duplicate: true, email: null, event: null };
 
     const now = new Date();
-    const email: Email = { ...input.email, createdAt: now, updatedAt: now };
+    const lastMessageAt = input.email.receivedAt ?? now;
+
+    const threadId =
+      input.thread.existingId !== undefined
+        ? input.thread.existingId
+        : (await this.threads.create({ subject: input.thread.subject, lastMessageAt })).id;
+
+    await this.threads.touch(threadId, lastMessageAt);
+
+    const email: Email = { ...input.email, threadId, createdAt: now, updatedAt: now };
     this.rows.set(email.id, email);
+    // Stands in for the Neon join the resolver runs against `emails`.
+    this.threads.index([email.messageId, email.providerMessageId], threadId);
 
     for (const attachment of input.attachments) {
       const id = nextId('att');
@@ -304,6 +326,64 @@ export class InMemoryEmailRepository implements EmailRepository {
 
   async findAttachment(id: string): Promise<EmailAttachment | null> {
     return this.attachments.get(id) ?? null;
+  }
+}
+
+export class InMemoryThreadRepository implements ThreadRepository {
+  readonly rows = new Map<string, Thread>();
+  /** message id (ours or the provider's) → thread id */
+  private readonly byMessageId = new Map<string, string>();
+
+  async create(data: { subject: string | null; lastMessageAt: Date }): Promise<Thread> {
+    const now = new Date();
+    const thread: Thread = {
+      ...data,
+      id: nextId('thr'),
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.rows.set(thread.id, thread);
+    return thread;
+  }
+
+  async findById(id: string): Promise<Thread | null> {
+    return this.rows.get(id) ?? null;
+  }
+
+  async findByMessageIds(messageIds: string[]): Promise<Thread | null> {
+    for (const messageId of messageIds) {
+      const threadId = this.byMessageId.get(messageId);
+      if (threadId) return this.rows.get(threadId) ?? null;
+    }
+    return null;
+  }
+
+  async list(filter: { limit?: number }): Promise<Paginated<Thread>> {
+    const items = [...this.rows.values()]
+      .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime())
+      .slice(0, filter.limit ?? 50);
+
+    return { items, nextCursor: null };
+  }
+
+  async touch(id: string, lastMessageAt: Date): Promise<void> {
+    const existing = this.rows.get(id);
+    if (!existing) return;
+
+    this.rows.set(id, {
+      ...existing,
+      lastMessageAt: new Date(
+        Math.max(existing.lastMessageAt.getTime(), lastMessageAt.getTime()),
+      ),
+      updatedAt: new Date(),
+    });
+  }
+
+  /** Test-side stand-in for the Neon join from emails to threads. */
+  index(messageIds: (string | null)[], threadId: string): void {
+    for (const messageId of messageIds) {
+      if (messageId) this.byMessageId.set(messageId, threadId);
+    }
   }
 }
 

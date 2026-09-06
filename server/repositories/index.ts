@@ -9,8 +9,8 @@ import {
   NeonDeliveryRepository,
   NeonEndpointRepository,
   NeonReplyRelayRepository,
-  NeonThreadRepository,
 } from './neon/pending';
+import { NeonThreadRepository } from './neon/thread-repository';
 
 export * from './types';
 

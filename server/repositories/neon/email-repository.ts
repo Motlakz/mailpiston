@@ -12,12 +12,20 @@ import type {
   Paginated,
 } from '@/server/core/types';
 import { db } from '@/server/db/client';
-import { addresses, domains, emailAttachments, emails, mailEvents } from '@/server/db/schema';
+import {
+  addresses,
+  domains,
+  emailAttachments,
+  emails,
+  mailEvents,
+  threads,
+} from '@/server/db/schema';
 import type {
   CreateAttachmentData,
   CreateEmailData,
   EmailRepository,
   InboundCaptureResult,
+  InboundThreadTarget,
 } from '@/server/repositories/types';
 
 import { isUniqueViolation } from './domain-repository';
@@ -51,12 +59,15 @@ export class NeonEmailRepository implements EmailRepository {
     email: CreateEmailData & { id: string; fingerprint: string };
     attachments: CreateAttachmentData[];
     eventMetadata: Record<string, unknown>;
+    thread: InboundThreadTarget;
   }): Promise<InboundCaptureResult> {
     try {
       return await db.transaction(async (tx) => {
+        const threadId = await attachToThread(tx, input.thread, input.email);
+
         const [emailRow] = await tx
           .insert(emails)
-          .values(input.email)
+          .values({ ...input.email, threadId })
           .returning();
 
         if (input.attachments.length > 0) {
@@ -211,6 +222,41 @@ export class NeonEmailRepository implements EmailRepository {
 
     return row ? toAttachment(row) : null;
   }
+}
+
+/**
+ * Resolves the target into a thread id, creating the thread when the message
+ * starts a new conversation.
+ *
+ * Inside the transaction on purpose: the email insert below can still raise a
+ * duplicate-fingerprint violation, and a thread created outside it would
+ * survive that rollback as an empty conversation in the operator's list.
+ */
+async function attachToThread(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  target: InboundThreadTarget,
+  email: CreateEmailData,
+): Promise<string> {
+  const lastMessageAt = email.receivedAt ?? new Date();
+
+  if (target.existingId !== undefined) {
+    await tx
+      .update(threads)
+      .set({
+        lastMessageAt: sql`greatest(${threads.lastMessageAt}, ${lastMessageAt.toISOString()}::timestamptz)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(threads.id, target.existingId));
+
+    return target.existingId;
+  }
+
+  const [row] = await tx
+    .insert(threads)
+    .values({ id: newId('thread'), subject: target.subject, lastMessageAt })
+    .returning({ id: threads.id });
+
+  return row.id;
 }
 
 function toEmail(row: EmailRow): Email {

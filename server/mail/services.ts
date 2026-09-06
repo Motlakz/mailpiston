@@ -8,6 +8,7 @@ import { getStorage } from '@/server/storage';
 import { AddressService } from './addresses/address-service';
 import { DomainService } from './domains/domain-service';
 import { InboundService } from './inbound/inbound-service';
+import { DefaultThreadResolver } from './threads/thread-resolver';
 
 /**
  * Production wiring for the mail services.
@@ -42,6 +43,7 @@ export function getInboundService(): InboundService {
     repositories.emails,
     repositories.addresses,
     repositories.events,
+    new DefaultThreadResolver(repositories.threads),
     // Object storage is only needed when a message has attachments or raw MIME
     // retention is enabled. Resolve it lazily so plain messages can still be
     // captured in production before R2 is configured.
