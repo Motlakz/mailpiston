@@ -34,6 +34,10 @@ export class MockMailProvider implements MailProvider {
   /** Signature checking is a no-op here; flip it to exercise the 401 path. */
   constructor(private readonly acceptWebhooks = true) {}
 
+  async findDomain(name: string): Promise<ProviderDomain | null> {
+    return this.domains.get(name.toLowerCase()) ?? null;
+  }
+
   async createDomain(input: CreateDomainInput): Promise<ProviderDomain> {
     const name = input.name.toLowerCase();
 

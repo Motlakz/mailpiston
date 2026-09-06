@@ -163,6 +163,8 @@ export interface NormalizedMailEvent {
 export interface MailProvider {
   readonly id: string;
 
+  /** Find a provider domain by name so an existing domain can be adopted. */
+  findDomain(name: string): Promise<ProviderDomain | null>;
   createDomain(input: CreateDomainInput): Promise<ProviderDomain>;
   verifyDomain(domainId: string): Promise<DomainVerification>;
   deleteDomain(domainId: string): Promise<void>;

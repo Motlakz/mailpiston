@@ -53,6 +53,11 @@ export class ForwardEmailProvider implements MailProvider {
 
   // --- Domains --------------------------------------------------------------
 
+  async findDomain(name: string): Promise<ProviderDomain | null> {
+    const domain = await this.client.findDomain(name);
+    return domain ? this.toProviderDomain(domain) : null;
+  }
+
   async createDomain(input: CreateDomainInput): Promise<ProviderDomain> {
     const domain = await this.client.createDomain(input.name);
     return this.toProviderDomain(domain);

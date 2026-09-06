@@ -24,7 +24,7 @@ export default async function DomainsPage() {
     <>
       <PageHeader
         title="Domains"
-        description="Add a domain, publish the records it shows you, then verify. Nothing here scales with domain count."
+        description="Add or import a domain, publish the records it shows you, then verify. Existing Forward Email domains are imported automatically."
         actions={<AddDomainForm />}
       />
 

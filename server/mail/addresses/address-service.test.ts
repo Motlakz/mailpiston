@@ -39,6 +39,20 @@ describe('DomainService', () => {
     expect(domain.catchAllAliasId).toBeNull();
   });
 
+  it('adopts a domain that already exists at the provider', async () => {
+    const providerDomain = await provider.createDomain({
+      name: 'existing-domain.test',
+    });
+    await provider.verifyDomain(providerDomain.id);
+
+    const domain = await domains.create({ name: 'Existing-Domain.TEST' });
+
+    expect(domain.name).toBe('existing-domain.test');
+    expect(domain.providerDomainId).toBe(providerDomain.id);
+    expect(domain.status).toBe('verified');
+    expect(domain.dnsRecords.every((record) => record.present)).toBe(true);
+  });
+
   it('rejects a duplicate domain with a ConflictError, not a 500', async () => {
     await domains.create({ name: 'fixture-domain.test' });
 

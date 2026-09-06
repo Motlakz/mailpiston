@@ -55,7 +55,7 @@ export function AddDomainForm() {
 
       <Button type="submit" disabled={pending}>
         <Icon name="add" size={13} />
-        Add domain
+        Add or import
       </Button>
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

@@ -31,7 +31,12 @@ export class DomainService {
     const existing = await this.domains.findByName(name);
     if (existing) throw new ConflictError(`Domain ${name} already exists`);
 
-    const providerDomain = await this.provider.createDomain({ name });
+    // Adopt a domain already present in the connected provider account. This
+    // keeps MailPiston's local state authoritative without making operators
+    // delete and recreate provider configuration during onboarding.
+    const providerDomain =
+      (await this.provider.findDomain(name)) ??
+      (await this.provider.createDomain({ name }));
 
     const domain = await this.domains.create({
       name,

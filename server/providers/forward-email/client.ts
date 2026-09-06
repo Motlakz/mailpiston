@@ -77,6 +77,15 @@ export class ForwardEmailClient {
     return this.request<ForwardEmailDomain>('GET', `/v1/domains/${encode(domain)}`);
   }
 
+  findDomain(domain: string): Promise<ForwardEmailDomain | null> {
+    return this.request<ForwardEmailDomain | null>(
+      'GET',
+      `/v1/domains/${encode(domain)}`,
+      undefined,
+      true,
+    );
+  }
+
   deleteDomain(domain: string): Promise<void> {
     return this.request<void>('DELETE', `/v1/domains/${encode(domain)}`);
   }
@@ -156,6 +165,7 @@ export class ForwardEmailClient {
     method: string,
     path: string,
     body?: unknown,
+    allowNotFound = false,
   ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
@@ -184,6 +194,8 @@ export class ForwardEmailClient {
     } finally {
       clearTimeout(timer);
     }
+
+    if (allowNotFound && response.status === 404) return null as T;
 
     if (!response.ok) {
       throw new ExternalAPIError(
