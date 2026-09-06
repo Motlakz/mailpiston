@@ -124,6 +124,33 @@ describe('AddressService', () => {
     );
   });
 
+  it('adopts an existing alias and preserves its forwarding recipients', async () => {
+    const domain = await verifiedDomain();
+    const existing = await provider.createAlias({
+      domainId: 'fixture-domain.test',
+      localPart: 'support',
+      recipients: ['owner@example.com'],
+      enabled: true,
+    });
+
+    const address = await addresses.create({
+      domainId: domain.id,
+      localPart: 'Support',
+      canSend: true,
+      enabled: true,
+    });
+
+    expect(address.providerAliasId).toBe(existing.id);
+    const aliases = await provider.listAliases('fixture-domain.test');
+    expect(aliases).toHaveLength(1);
+    expect(aliases[0].recipients).toContain('owner@example.com');
+    expect(
+      aliases[0].recipients.some((recipient) =>
+        recipient.endsWith('/api/providers/forward-email/inbound'),
+      ),
+    ).toBe(true);
+  });
+
   it('makes no provider call for an inbound-only address behind a catch-all', async () => {
     const domain = await verifiedDomain('fixture-domain.test', true);
     const before = await provider.listAliases('fixture-domain.test');

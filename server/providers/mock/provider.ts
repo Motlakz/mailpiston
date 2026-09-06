@@ -119,6 +119,20 @@ export class MockMailProvider implements MailProvider {
     return alias;
   }
 
+  async findAlias(
+    domainId: string,
+    localPart: string,
+  ): Promise<ProviderAlias | null> {
+    const domain = this.requireDomain(domainId);
+    return (
+      [...this.aliases.values()].find(
+        (alias) =>
+          alias.domain === domain.name &&
+          alias.localPart.toLowerCase() === localPart.toLowerCase(),
+      ) ?? null
+    );
+  }
+
   async updateAlias(
     aliasId: string,
     input: UpdateAliasInput,

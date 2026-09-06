@@ -52,7 +52,7 @@ The `has_mx_record`, `has_txt_record`, `has_dkim_record`,
 ### Ask Forward Email to re-check DNS
 
 ```bash
-curl -sS -X POST "https://api.forwardemail.net/v1/domains/$DOMAIN/verify-records" \
+curl -sS "https://api.forwardemail.net/v1/domains/$DOMAIN/verify-records" \
   -u "$FE_TOKEN:"
 ```
 

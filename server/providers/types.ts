@@ -169,6 +169,8 @@ export interface MailProvider {
   verifyDomain(domainId: string): Promise<DomainVerification>;
   deleteDomain(domainId: string): Promise<void>;
 
+  /** Find a concrete alias by local part so existing aliases can be adopted. */
+  findAlias(domainId: string, localPart: string): Promise<ProviderAlias | null>;
   createAlias(input: CreateAliasInput): Promise<ProviderAlias>;
   updateAlias(aliasId: string, input: UpdateAliasInput): Promise<ProviderAlias>;
   deleteAlias(aliasId: string, domainId: string): Promise<void>;

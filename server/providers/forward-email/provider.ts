@@ -21,7 +21,6 @@ import {
   ForwardEmailClient,
   type ForwardEmailAlias,
   type ForwardEmailDomain,
-  type ForwardEmailVerifyResponse,
 } from './client';
 import { ForwardEmailNormalizer, PROVIDER_ID } from './normalizer';
 import { ForwardEmailVerifier } from './verifier';
@@ -64,22 +63,19 @@ export class ForwardEmailProvider implements MailProvider {
   }
 
   async verifyDomain(domainId: string): Promise<DomainVerification> {
-    // Two calls, because inbound and outbound have different record sets and a
-    // domain that receives mail may still be unable to send it (spike 0.10).
-    const [records, smtp] = await Promise.all([
+    // The verification endpoints trigger fresh DNS checks but acknowledge
+    // with text/plain. Fetch the domain afterwards for the updated JSON state.
+    await Promise.all([
       this.client.verifyRecords(domainId),
-      this.client.verifySmtp(domainId).catch(() => null),
+      this.client.verifySmtp(domainId).catch(() => undefined),
     ]);
 
-    const merged: ForwardEmailVerifyResponse = { ...records, ...(smtp ?? {}) };
+    const domain = await this.client.getDomain(domainId);
 
     return {
-      verified: Boolean(merged.has_mx_record && merged.has_txt_record),
-      records: dnsRecordsFor(domainId, merged),
-      errors: [
-        ...collectErrors(records),
-        ...(smtp ? collectErrors(smtp) : []),
-      ],
+      verified: Boolean(domain.has_mx_record && domain.has_txt_record),
+      records: dnsRecordsFor(domainId, domain),
+      errors: [],
     };
   }
 
@@ -88,6 +84,14 @@ export class ForwardEmailProvider implements MailProvider {
   }
 
   // --- Aliases --------------------------------------------------------------
+
+  async findAlias(
+    domainId: string,
+    localPart: string,
+  ): Promise<ProviderAlias | null> {
+    const alias = await this.client.findAlias(domainId, localPart);
+    return alias ? this.toProviderAlias(alias, domainId) : null;
+  }
 
   async createAlias(input: CreateAliasInput): Promise<ProviderAlias> {
     const alias = await this.client.createAlias(input.domainId, {
@@ -227,12 +231,6 @@ function bracket(messageId: string): string {
   return messageId.startsWith('<') ? messageId : `<${messageId}>`;
 }
 
-function collectErrors(response: ForwardEmailVerifyResponse): string[] {
-  return (response.errors ?? []).map((error) =>
-    typeof error === 'string' ? error : (error.message ?? 'Unknown error'),
-  );
-}
-
 /**
  * The record set the operator must publish, as the dashboard displays it.
  *
@@ -245,7 +243,7 @@ function collectErrors(response: ForwardEmailVerifyResponse): string[] {
  */
 function dnsRecordsFor(
   domain: string,
-  status: ForwardEmailVerifyResponse & { verification_record?: string },
+  status: ForwardEmailDomain,
 ): DnsRecord[] {
   return [
     {

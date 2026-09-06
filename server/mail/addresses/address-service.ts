@@ -56,21 +56,45 @@ export class AddressService {
     }
 
     let providerAliasId: string | null = null;
+    let rollbackProviderChange: (() => Promise<void>) | null = null;
 
     if (input.canSend) {
       if (!domain.providerDomainId) {
         throw new ConflictError(`Domain ${domain.name} has no provider record`);
       }
 
-      const alias = await this.provider.createAlias({
-        domainId: domain.providerDomainId,
+      const providerDomainId = domain.providerDomainId;
+      const ingressUrl = inboundIngressUrl();
+      const existingAlias = await this.provider.findAlias(
+        providerDomainId,
         localPart,
-        recipients: [inboundIngressUrl()],
-        enabled: input.enabled,
-        description: 'Managed by MailPiston',
-      });
+      );
+
+      const alias = existingAlias
+        ? await this.provider.updateAlias(existingAlias.id, {
+            domainId: providerDomainId,
+            recipients: Array.from(
+              new Set([...existingAlias.recipients, ingressUrl]),
+            ),
+            enabled: input.enabled,
+          })
+        : await this.provider.createAlias({
+            domainId: providerDomainId,
+            localPart,
+            recipients: [ingressUrl],
+            enabled: input.enabled,
+            description: 'Managed by MailPiston',
+          });
 
       providerAliasId = alias.id;
+      rollbackProviderChange = existingAlias
+        ? () =>
+            this.provider.updateAlias(existingAlias.id, {
+              domainId: providerDomainId,
+              recipients: existingAlias.recipients,
+              enabled: existingAlias.enabled,
+            }).then(() => undefined)
+        : () => this.provider.deleteAlias(alias.id, providerDomainId);
     }
 
     try {
@@ -82,17 +106,16 @@ export class AddressService {
         enabled: input.enabled,
       });
     } catch (error) {
-      // The alias exists at the provider but the row does not. Roll it back, or
-      // the next attempt hits a provider-side duplicate it cannot explain.
-      if (providerAliasId && domain.providerDomainId) {
-        await this.provider
-          .deleteAlias(providerAliasId, domain.providerDomainId)
-          .catch((cleanupError: unknown) => {
+      // Restore the provider to its prior state if the local row did not land.
+      // For an adopted alias this preserves its original recipients; for a new
+      // alias it removes the orphan created by this attempt.
+      if (rollbackProviderChange) {
+        await rollbackProviderChange().catch((cleanupError: unknown) => {
             console.error(
-              `Orphaned provider alias ${providerAliasId} on ${domain.name}`,
+              `Could not roll back provider alias ${providerAliasId} on ${domain.name}`,
               cleanupError,
             );
-          });
+        });
       }
 
       throw error;

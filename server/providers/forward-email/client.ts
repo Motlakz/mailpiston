@@ -82,7 +82,7 @@ export class ForwardEmailClient {
       'GET',
       `/v1/domains/${encode(domain)}`,
       undefined,
-      true,
+      { allowNotFound: true },
     );
   }
 
@@ -90,18 +90,22 @@ export class ForwardEmailClient {
     return this.request<void>('DELETE', `/v1/domains/${encode(domain)}`);
   }
 
-  verifyRecords(domain: string): Promise<ForwardEmailVerifyResponse> {
-    return this.request<ForwardEmailVerifyResponse>(
+  verifyRecords(domain: string): Promise<void> {
+    return this.request<void>(
       'GET',
       `/v1/domains/${encode(domain)}/verify-records`,
+      undefined,
+      { responseType: 'none' },
     );
   }
 
   /** Reports the DKIM/SPF/DMARC set required for *sending*, not just receiving. */
-  verifySmtp(domain: string): Promise<ForwardEmailVerifyResponse> {
-    return this.request<ForwardEmailVerifyResponse>(
+  verifySmtp(domain: string): Promise<void> {
+    return this.request<void>(
       'GET',
       `/v1/domains/${encode(domain)}/verify-smtp`,
+      undefined,
+      { responseType: 'none' },
     );
   }
 
@@ -111,6 +115,15 @@ export class ForwardEmailClient {
     return this.request<ForwardEmailAlias[]>(
       'GET',
       `/v1/domains/${encode(domain)}/aliases`,
+    );
+  }
+
+  findAlias(domain: string, localPart: string): Promise<ForwardEmailAlias | null> {
+    return this.request<ForwardEmailAlias | null>(
+      'GET',
+      `/v1/domains/${encode(domain)}/aliases/${encode(localPart)}`,
+      undefined,
+      { allowNotFound: true },
     );
   }
 
@@ -165,7 +178,10 @@ export class ForwardEmailClient {
     method: string,
     path: string,
     body?: unknown,
-    allowNotFound = false,
+    options: {
+      allowNotFound?: boolean;
+      responseType?: 'json' | 'none';
+    } = {},
   ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
@@ -195,7 +211,7 @@ export class ForwardEmailClient {
       clearTimeout(timer);
     }
 
-    if (allowNotFound && response.status === 404) return null as T;
+    if (options.allowNotFound && response.status === 404) return null as T;
 
     if (!response.ok) {
       throw new ExternalAPIError(
@@ -205,6 +221,13 @@ export class ForwardEmailClient {
     }
 
     if (response.status === 204) return undefined as T;
+
+    // Forward Email's verification endpoints acknowledge with text/plain.
+    // Their updated state is retrieved separately from the domain endpoint.
+    if (options.responseType === 'none') {
+      await response.text();
+      return undefined as T;
+    }
 
     const text = await response.text();
     if (!text) return undefined as T;
