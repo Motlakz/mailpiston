@@ -1,10 +1,13 @@
 import 'server-only';
 
+import { env } from '@/server/core/config';
 import { mailProviderRegistry } from '@/server/providers/registry';
 import { repositories } from '@/server/repositories';
+import { getStorage } from '@/server/storage';
 
 import { AddressService } from './addresses/address-service';
 import { DomainService } from './domains/domain-service';
+import { InboundService } from './inbound/inbound-service';
 
 /**
  * Production wiring for the mail services.
@@ -15,6 +18,7 @@ import { DomainService } from './domains/domain-service';
  */
 let domainService: DomainService | undefined;
 let addressService: AddressService | undefined;
+let inboundService: InboundService | undefined;
 
 export function getDomainService(): DomainService {
   domainService ??= new DomainService(
@@ -33,4 +37,15 @@ export function getAddressService(): AddressService {
   return addressService;
 }
 
-export { AddressService, DomainService };
+export function getInboundService(): InboundService {
+  inboundService ??= new InboundService(
+    repositories.emails,
+    repositories.addresses,
+    repositories.events,
+    getStorage(),
+    { storeRawMime: env.STORE_RAW_MIME },
+  );
+  return inboundService;
+}
+
+export { AddressService, DomainService, InboundService };

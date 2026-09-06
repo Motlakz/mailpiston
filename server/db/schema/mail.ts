@@ -180,6 +180,21 @@ export const emails = pgTable(
     providerMessageId: text('provider_message_id'),
     messageId: text('message_id'),
 
+    /**
+     * Inbound idempotency (§10.1), carried on the row it protects rather than
+     * in a separate `idempotency_keys` claim.
+     *
+     * A claim taken before the insert leaves a window: if the process dies
+     * between claiming and writing, the provider's retry sees the key taken
+     * and the message is lost forever. A unique index on the row itself has no
+     * such window — the insert either happens or it does not, and a retry hits
+     * a constraint violation that means exactly "already stored".
+     *
+     * Null for outbound, which has no inbound delivery to deduplicate.
+     * Postgres allows unlimited NULLs in a unique index, so that is free.
+     */
+    fingerprint: text('fingerprint'),
+
     direction: emailDirection('direction').notNull(),
     status: emailStatus('status').notNull(),
 
@@ -217,6 +232,7 @@ export const emails = pgTable(
     index('emails_address_id_idx').on(table.addressId),
     index('emails_message_id_idx').on(table.messageId),
     index('emails_created_at_idx').on(table.createdAt),
+    uniqueIndex('emails_fingerprint_key').on(table.fingerprint),
   ],
 );
 

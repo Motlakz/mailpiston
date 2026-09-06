@@ -3,10 +3,10 @@ import 'server-only';
 import { NeonAddressRepository } from './neon/address-repository';
 import { NeonApiKeyRepository } from './neon/api-key-repository';
 import { NeonDomainRepository } from './neon/domain-repository';
+import { NeonEmailRepository } from './neon/email-repository';
 import { NeonEventRepository } from './neon/event-repository';
 import {
   NeonDeliveryRepository,
-  NeonEmailRepository,
   NeonEndpointRepository,
   NeonReplyRelayRepository,
   NeonThreadRepository,

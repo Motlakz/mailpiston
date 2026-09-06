@@ -8,6 +8,13 @@
       "when": 1788624702686,
       "tag": "0000_curly_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788683816646,
+      "tag": "0001_heavy_mister_sinister",
+      "breakpoints": true
     }
   ]
 }

@@ -1,13 +1,29 @@
 import { ConflictError, NotFoundError } from '@/server/core/errors';
-import type { Address, AddressWithDomain, Domain } from '@/server/core/types';
+import type {
+  Address,
+  AddressWithDomain,
+  Domain,
+  Email,
+  EmailAttachment,
+  EmailListItem,
+  MailEvent,
+  MailEventType,
+  Paginated,
+} from '@/server/core/types';
 import type {
   AddressRepository,
+  CreateAttachmentData,
+  CreateEmailData,
+  EmailRepository,
+  EventRepository,
+  InboundCaptureResult,
   CreateAddressData,
   CreateDomainData,
   DomainRepository,
   UpdateAddressData,
   UpdateDomainData,
 } from '@/server/repositories/types';
+import type { Storage } from '@/server/storage/types';
 
 /**
  * In-memory repositories for service tests.
@@ -174,5 +190,170 @@ export class InMemoryAddressRepository implements AddressRepository {
       domainName,
       email: `${address.localPart}@${domainName}`,
     };
+  }
+}
+
+/**
+ * Email and event repositories for the Phase 4 pipeline tests.
+ *
+ * `createInbound` reproduces the one constraint the real implementation leans
+ * on the database for — the unique index on `fingerprint` — because that index
+ * *is* the idempotency mechanism, and a fake that quietly allowed duplicates
+ * would make the tests pass for the wrong reason.
+ */
+export class InMemoryEmailRepository implements EmailRepository {
+  readonly rows = new Map<string, Email>();
+  readonly attachments = new Map<string, EmailAttachment>();
+  readonly events: MailEvent[] = [];
+
+  async create(data: CreateEmailData): Promise<Email> {
+    const now = new Date();
+    const email: Email = { ...data, id: nextId('em'), createdAt: now, updatedAt: now };
+    this.rows.set(email.id, email);
+    return email;
+  }
+
+  async createInbound(input: {
+    email: CreateEmailData & { id: string; fingerprint: string };
+    attachments: CreateAttachmentData[];
+    eventMetadata: Record<string, unknown>;
+  }): Promise<InboundCaptureResult> {
+    const taken = [...this.rows.values()].some(
+      (row) => row.fingerprint === input.email.fingerprint,
+    );
+
+    if (taken) return { duplicate: true, email: null, event: null };
+
+    const now = new Date();
+    const email: Email = { ...input.email, createdAt: now, updatedAt: now };
+    this.rows.set(email.id, email);
+
+    for (const attachment of input.attachments) {
+      const id = nextId('att');
+      this.attachments.set(id, { ...attachment, id, emailId: email.id, createdAt: now });
+    }
+
+    const event: MailEvent = {
+      id: nextId('evt'),
+      emailId: email.id,
+      type: 'email.received',
+      metadata: input.eventMetadata,
+      occurredAt: now,
+    };
+    this.events.push(event);
+
+    return { duplicate: false, email, event };
+  }
+
+  async findById(id: string): Promise<Email | null> {
+    return this.rows.get(id) ?? null;
+  }
+
+  async findByMessageId(messageId: string): Promise<Email | null> {
+    return [...this.rows.values()].find((row) => row.messageId === messageId) ?? null;
+  }
+
+  async list(filter: {
+    direction?: Email['direction'];
+    addressId?: string;
+    threadId?: string;
+    limit?: number;
+  }): Promise<Paginated<EmailListItem>> {
+    const items = [...this.rows.values()]
+      .filter((row) => !filter.direction || row.direction === filter.direction)
+      .filter((row) => !filter.addressId || row.addressId === filter.addressId)
+      .filter((row) => !filter.threadId || row.threadId === filter.threadId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, filter.limit ?? 50)
+      .map((row) => ({
+        ...row,
+        addressEmail: null,
+        attachmentCount: [...this.attachments.values()].filter(
+          (attachment) => attachment.emailId === row.id,
+        ).length,
+      }));
+
+    return { items, nextCursor: null };
+  }
+
+  async updateStatus(id: string, status: Email['status']): Promise<Email> {
+    const existing = this.rows.get(id);
+    if (!existing) throw new NotFoundError(`Email ${id} not found`);
+
+    const updated = { ...existing, status, updatedAt: new Date() };
+    this.rows.set(id, updated);
+    return updated;
+  }
+
+  async addAttachment(
+    data: Omit<EmailAttachment, 'id' | 'createdAt'>,
+  ): Promise<EmailAttachment> {
+    const attachment: EmailAttachment = {
+      ...data,
+      id: nextId('att'),
+      createdAt: new Date(),
+    };
+    this.attachments.set(attachment.id, attachment);
+    return attachment;
+  }
+
+  async listAttachments(emailId: string): Promise<EmailAttachment[]> {
+    return [...this.attachments.values()].filter((row) => row.emailId === emailId);
+  }
+
+  async findAttachment(id: string): Promise<EmailAttachment | null> {
+    return this.attachments.get(id) ?? null;
+  }
+}
+
+export class InMemoryEventRepository implements EventRepository {
+  readonly rows: MailEvent[] = [];
+
+  async create(data: {
+    emailId: string | null;
+    type: MailEventType;
+    metadata: Record<string, unknown>;
+  }): Promise<MailEvent> {
+    const event: MailEvent = { ...data, id: nextId('evt'), occurredAt: new Date() };
+    this.rows.push(event);
+    return event;
+  }
+
+  async list(filter: {
+    emailId?: string;
+    type?: MailEventType;
+    limit?: number;
+  }): Promise<Paginated<MailEvent>> {
+    const items = this.rows
+      .filter((row) => !filter.emailId || row.emailId === filter.emailId)
+      .filter((row) => !filter.type || row.type === filter.type)
+      .slice(0, filter.limit ?? 50);
+
+    return { items, nextCursor: null };
+  }
+}
+
+/** Storage that keeps bytes in a Map, so a test can assert on what was stored. */
+export class InMemoryStorage implements Storage {
+  readonly id = 'local' as const;
+  readonly objects = new Map<string, Buffer>();
+
+  async put(key: string, body: Buffer): Promise<{ key: string; sizeBytes: number }> {
+    this.objects.set(key, body);
+    return { key, sizeBytes: body.byteLength };
+  }
+
+  async get(key: string): Promise<Buffer> {
+    const value = this.objects.get(key);
+    if (!value) throw new NotFoundError(`No stored object at ${key}`);
+    return value;
+  }
+
+  async delete(key: string): Promise<void> {
+    this.objects.delete(key);
+  }
+
+  async presignedUrl(): Promise<null> {
+    return null;
   }
 }

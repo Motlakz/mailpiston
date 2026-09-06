@@ -1,29 +1,34 @@
 import { NextResponse } from 'next/server';
 
 import { withProvider } from '@/server/core/http';
+import { getInboundService } from '@/server/mail/services';
 import { mailProviderRegistry } from '@/server/providers/registry';
 
 /**
- * Provider ingress.
+ * Provider ingress (roadmap Phase 4).
  *
- * Phase 2 scope: the wrapper does the load-bearing part — raw body first, HMAC
- * verified before any spend, fail-open rate limiting — and this handler proves
- * the payload normalises. Persistence, recipient resolution, the idempotency
- * claim, and endpoint fan-out are Phase 4; until then a verified request is
- * acknowledged and dropped, deliberately and visibly.
+ * The wrapper owns the parts that must happen before anything is spent: raw
+ * body first, HMAC verified, rate limited fail-open. This handler owns
+ * everything after — normalise, then hand the result to `InboundService`,
+ * which resolves the recipient, stores bytes, and writes the message.
+ *
+ * The response body is the operator's only view of what happened when they
+ * replay a request by hand, so it names the outcome rather than just
+ * acknowledging receipt.
  */
 export const POST = withProvider(
   async ({ payload }) => {
     const provider = mailProviderRegistry.active();
     const normalized = await provider.normalizeInbound(payload);
+    const result = await getInboundService().capture(normalized);
 
-    console.info('[forward-email] inbound accepted', {
-      recipient: normalized.recipient,
-      messageId: normalized.messageId,
-      attachments: normalized.attachments.length,
+    return NextResponse.json({
+      received: true,
+      status: result.status,
+      emailId: result.emailId,
+      duplicate: result.status === 'duplicate',
+      ...(result.reason ? { reason: result.reason } : {}),
     });
-
-    return NextResponse.json({ received: true, persisted: false });
   },
   {
     provider: 'forward-email',

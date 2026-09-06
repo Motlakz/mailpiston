@@ -5,6 +5,7 @@ import type {
   Domain,
   DomainDnsRecord,
   Email,
+  EmailListItem,
   EmailAttachment,
   Endpoint,
   EndpointDelivery,
@@ -112,8 +113,43 @@ export interface EndpointRepository {
 
 export type CreateEmailData = Omit<Email, 'id' | 'createdAt' | 'updatedAt'>;
 
+export type CreateAttachmentData = Omit<
+  EmailAttachment,
+  'id' | 'emailId' | 'createdAt'
+>;
+
+/**
+ * Result of an inbound capture. `duplicate` means the provider re-delivered a
+ * message we already hold — not an error, and the caller returns 200.
+ */
+export type InboundCaptureResult =
+  | { duplicate: false; email: Email; event: MailEvent }
+  | { duplicate: true; email: null; event: null };
+
 export interface EmailRepository {
   create(data: CreateEmailData): Promise<Email>;
+
+  /**
+   * Writes an inbound message, its attachment metadata, and its
+   * `email.received` event as one transaction.
+   *
+   * This is one method rather than three calls because the three rows are one
+   * fact. A partially-written message — stored, but with no attachments and no
+   * event — cannot be repaired by the provider's retry, since the retry will
+   * see the fingerprint already present and correctly conclude "already
+   * stored". Either all of it lands or none of it does.
+   */
+  createInbound(input: {
+    /**
+     * The id is supplied by the caller, not minted here: attachment and raw
+     * MIME storage keys embed it, and those bytes are written before this row
+     * exists.
+     */
+    email: CreateEmailData & { id: string; fingerprint: string };
+    attachments: CreateAttachmentData[];
+    eventMetadata: Record<string, unknown>;
+  }): Promise<InboundCaptureResult>;
+
   findById(id: string): Promise<Email | null>;
   findByMessageId(messageId: string): Promise<Email | null>;
   list(filter: {
@@ -122,13 +158,14 @@ export interface EmailRepository {
     threadId?: string;
     limit?: number;
     cursor?: string | null;
-  }): Promise<Paginated<Email>>;
+  }): Promise<Paginated<EmailListItem>>;
   updateStatus(id: string, status: Email['status']): Promise<Email>;
 
   addAttachment(
     data: Omit<EmailAttachment, 'id' | 'createdAt'>,
   ): Promise<EmailAttachment>;
   listAttachments(emailId: string): Promise<EmailAttachment[]>;
+  findAttachment(id: string): Promise<EmailAttachment | null>;
 }
 
 export interface ThreadRepository {

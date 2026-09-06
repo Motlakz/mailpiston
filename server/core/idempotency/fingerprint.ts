@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * Fingerprint for one inbound delivery (execution plan §10.1), extended with
  * the resolved `addressId` per roadmap Phase 4.
@@ -17,12 +19,38 @@ export function createInboundFingerprint(input: {
   messageId?: string | null;
   recipient: string;
   addressId?: string | null;
+  /**
+   * Anything that distinguishes this message from the next one, used only when
+   * the delivery carries no id at all. See `contentDigest` below.
+   */
+  contentFallback?: string | null;
 }): string {
+  const hasId = Boolean(input.providerMessageId || input.messageId);
+
   return [
     input.provider,
     input.providerMessageId ?? '',
     input.messageId ?? '',
     input.recipient.toLowerCase(),
     input.addressId ?? '',
+    // Without this, a delivery with neither a provider id nor a Message-ID
+    // produces a key made entirely of the provider, recipient and address —
+    // identical for *every* message that sender→address pair ever exchanges.
+    // The first one would store and every one after it would be discarded as a
+    // duplicate. Message-ID is mandated by RFC 5322 but is not guaranteed to
+    // survive every relay, so this path is reachable in production.
+    hasId ? '' : contentDigest(input.contentFallback ?? ''),
   ].join(':');
+}
+
+/**
+ * Content hash used in place of a missing id.
+ *
+ * A genuine provider retry re-sends byte-identical content, so it still
+ * deduplicates. Two different messages hash differently, so neither is lost.
+ * The remaining false positive — the same sender sending the same bytes twice
+ * on purpose — is the correct trade against silently dropping mail.
+ */
+function contentDigest(content: string): string {
+  return createHash('sha256').update(content).digest('hex').slice(0, 32);
 }

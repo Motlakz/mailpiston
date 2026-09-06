@@ -3,7 +3,6 @@ import 'server-only';
 import { APIError } from '@/server/core/errors';
 import type {
   DeliveryRepository,
-  EmailRepository,
   EndpointRepository,
   ReplyRelayRepository,
   ThreadRepository,
@@ -26,30 +25,6 @@ function notImplemented(phase: string, method: string): never {
     501,
     'NOT_IMPLEMENTED',
   );
-}
-
-export class NeonEmailRepository implements EmailRepository {
-  create(): never {
-    notImplemented('Phase 4 (inbound)', 'EmailRepository.create');
-  }
-  findById(): never {
-    notImplemented('Phase 4 (inbound)', 'EmailRepository.findById');
-  }
-  findByMessageId(): never {
-    notImplemented('Phase 4 (inbound)', 'EmailRepository.findByMessageId');
-  }
-  list(): never {
-    notImplemented('Phase 4 (inbound)', 'EmailRepository.list');
-  }
-  updateStatus(): never {
-    notImplemented('Phase 4 (inbound)', 'EmailRepository.updateStatus');
-  }
-  addAttachment(): never {
-    notImplemented('Phase 4 (inbound)', 'EmailRepository.addAttachment');
-  }
-  listAttachments(): never {
-    notImplemented('Phase 4 (inbound)', 'EmailRepository.listAttachments');
-  }
 }
 
 export class NeonThreadRepository implements ThreadRepository {

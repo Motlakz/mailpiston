@@ -116,6 +116,8 @@ export interface Email {
 
   providerMessageId: string | null;
   messageId: string | null;
+  /** Inbound dedupe key (§10.1). Null on outbound. */
+  fingerprint: string | null;
 
   direction: EmailDirection;
   status: EmailStatus;
@@ -138,6 +140,18 @@ export interface Email {
 
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * A row in the Inbox list.
+ *
+ * The two extra fields are the ones the list renders and would otherwise cost
+ * one query per row: which managed address received it, and whether there is
+ * anything to download.
+ */
+export interface EmailListItem extends Email {
+  addressEmail: string | null;
+  attachmentCount: number;
 }
 
 /** §18 */
