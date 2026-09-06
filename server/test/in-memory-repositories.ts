@@ -7,8 +7,12 @@ import type {
   EmailAttachment,
   EmailListItem,
   MailEvent,
+  Endpoint,
+  EndpointEmailRecipient,
+  EndpointWebhookConfig,
   MailEventType,
   Paginated,
+  ReplyRelay,
   Thread,
 } from '@/server/core/types';
 import type {
@@ -19,6 +23,8 @@ import type {
   EventRepository,
   InboundCaptureResult,
   InboundThreadTarget,
+  EndpointRepository,
+  ReplyRelayRepository,
   ThreadRepository,
   CreateAddressData,
   CreateDomainData,
@@ -447,6 +453,210 @@ export class InMemoryEventRepository implements EventRepository {
       .slice(0, filter.limit ?? 50);
 
     return { items, nextCursor: null };
+  }
+}
+
+/**
+ * Endpoints, their recipients, and the address bindings between them.
+ *
+ * The verification challenge is reproduced faithfully — hash and expiry are
+ * both part of the match — because "verified" is what stands between a typo and
+ * a stranger receiving a customer's mail.
+ */
+export class InMemoryEndpointRepository implements EndpointRepository {
+  readonly rows = new Map<string, Endpoint>();
+  readonly recipients = new Map<string, EndpointEmailRecipient>();
+  readonly bindings = new Set<string>();
+
+  private readonly challenges = new Map<string, { hash: string; expiresAt: Date }>();
+  private readonly webhookConfigs = new Map<string, EndpointWebhookConfig>();
+
+  async create(data: {
+    name: string;
+    type: Endpoint['type'];
+    enabled: boolean;
+  }): Promise<Endpoint> {
+    const now = new Date();
+    const endpoint: Endpoint = {
+      ...data,
+      id: nextId('ep'),
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.rows.set(endpoint.id, endpoint);
+    return endpoint;
+  }
+
+  async findById(id: string): Promise<Endpoint | null> {
+    return this.rows.get(id) ?? null;
+  }
+
+  async list(): Promise<Endpoint[]> {
+    return [...this.rows.values()];
+  }
+
+  async update(
+    id: string,
+    data: { name?: string; enabled?: boolean },
+  ): Promise<Endpoint> {
+    const existing = this.rows.get(id);
+    if (!existing) throw new NotFoundError(`Endpoint ${id} not found`);
+
+    const updated = { ...existing, ...data, updatedAt: new Date() };
+    this.rows.set(id, updated);
+    return updated;
+  }
+
+  async delete(id: string): Promise<void> {
+    if (!this.rows.delete(id)) throw new NotFoundError(`Endpoint ${id} not found`);
+  }
+
+  async listForAddress(addressId: string): Promise<Endpoint[]> {
+    return [...this.bindings]
+      .filter((key) => key.startsWith(`${addressId}:`))
+      .map((key) => this.rows.get(key.split(':')[1]))
+      .filter((endpoint): endpoint is Endpoint => Boolean(endpoint?.enabled));
+  }
+
+  async bindToAddress(addressId: string, endpointId: string): Promise<void> {
+    this.bindings.add(`${addressId}:${endpointId}`);
+  }
+
+  async unbindFromAddress(addressId: string, endpointId: string): Promise<void> {
+    this.bindings.delete(`${addressId}:${endpointId}`);
+  }
+
+  async getWebhookConfig(
+    endpointId: string,
+  ): Promise<EndpointWebhookConfig | null> {
+    return this.webhookConfigs.get(endpointId) ?? null;
+  }
+
+  async setWebhookConfig(config: EndpointWebhookConfig): Promise<void> {
+    this.webhookConfigs.set(config.endpointId, config);
+  }
+
+  async listRecipients(endpointId: string): Promise<EndpointEmailRecipient[]> {
+    return [...this.recipients.values()].filter(
+      (recipient) => recipient.endpointId === endpointId,
+    );
+  }
+
+  async findRecipient(id: string): Promise<EndpointEmailRecipient | null> {
+    return this.recipients.get(id) ?? null;
+  }
+
+  async addRecipient(
+    endpointId: string,
+    email: string,
+  ): Promise<EndpointEmailRecipient> {
+    const duplicate = (await this.listRecipients(endpointId)).some(
+      (recipient) => recipient.email === email.toLowerCase(),
+    );
+
+    if (duplicate) {
+      throw new ConflictError(`${email} is already a recipient of this endpoint`);
+    }
+
+    const recipient: EndpointEmailRecipient = {
+      id: nextId('rcpt'),
+      endpointId,
+      email: email.toLowerCase(),
+      verifiedAt: null,
+      verificationExpiresAt: null,
+      enabled: true,
+    };
+
+    this.recipients.set(recipient.id, recipient);
+    return recipient;
+  }
+
+  async setRecipientChallenge(
+    recipientId: string,
+    tokenHash: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    this.challenges.set(recipientId, { hash: tokenHash, expiresAt });
+
+    const existing = this.recipients.get(recipientId);
+    if (existing) {
+      this.recipients.set(recipientId, {
+        ...existing,
+        verificationExpiresAt: expiresAt,
+      });
+    }
+  }
+
+  async verifyRecipientWithToken(
+    recipientId: string,
+    tokenHash: string,
+    now: Date,
+  ): Promise<EndpointEmailRecipient | null> {
+    const challenge = this.challenges.get(recipientId);
+    const recipient = this.recipients.get(recipientId);
+
+    if (!challenge || !recipient) return null;
+    if (challenge.hash !== tokenHash) return null;
+    if (challenge.expiresAt.getTime() <= now.getTime()) return null;
+
+    const verified = {
+      ...recipient,
+      verifiedAt: now,
+      verificationExpiresAt: null,
+    };
+
+    this.recipients.set(recipientId, verified);
+    this.challenges.delete(recipientId);
+    return verified;
+  }
+
+  async markRecipientVerified(
+    recipientId: string,
+  ): Promise<EndpointEmailRecipient> {
+    const recipient = this.recipients.get(recipientId);
+    if (!recipient) throw new NotFoundError(`Recipient ${recipientId} not found`);
+
+    const verified = {
+      ...recipient,
+      verifiedAt: new Date(),
+      verificationExpiresAt: null,
+    };
+    this.recipients.set(recipientId, verified);
+    return verified;
+  }
+
+  async removeRecipient(recipientId: string): Promise<void> {
+    if (!this.recipients.delete(recipientId)) {
+      throw new NotFoundError(`Recipient ${recipientId} not found`);
+    }
+  }
+}
+
+export class InMemoryReplyRelayRepository implements ReplyRelayRepository {
+  readonly rows = new Map<string, ReplyRelay>();
+
+  async create(
+    data: Omit<ReplyRelay, 'id' | 'createdAt' | 'revokedAt'>,
+  ): Promise<ReplyRelay> {
+    const relay: ReplyRelay = {
+      ...data,
+      id: nextId('rr'),
+      revokedAt: null,
+      createdAt: new Date(),
+    };
+    this.rows.set(relay.id, relay);
+    return relay;
+  }
+
+  async findByTokenHash(tokenHash: string): Promise<ReplyRelay | null> {
+    return (
+      [...this.rows.values()].find((relay) => relay.tokenHash === tokenHash) ?? null
+    );
+  }
+
+  async revoke(id: string): Promise<void> {
+    const relay = this.rows.get(id);
+    if (relay) this.rows.set(id, { ...relay, revokedAt: new Date() });
   }
 }
 

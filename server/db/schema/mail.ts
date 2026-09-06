@@ -136,6 +136,16 @@ export const endpointEmailRecipients = pgTable(
       .references(() => endpoints.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    /**
+     * Proof of control, not authentication: the operator can type any address
+     * here, and mail must not start flowing to a stranger because of a typo.
+     * Hashed like every other token we issue — a leaked table must not let
+     * anyone complete a verification.
+     */
+    verificationTokenHash: text('verification_token_hash'),
+    verificationExpiresAt: timestamp('verification_expires_at', {
+      withTimezone: true,
+    }),
     enabled: boolean('enabled').notNull().default(true),
     createdAt: createdAt(),
   },

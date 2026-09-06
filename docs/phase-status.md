@@ -227,9 +227,8 @@ Still open, and deliberately so:
   base64 exceeds Vercel's ~4.5 MB body cap, the fix is a Cloudflare Worker that
   streams the body to R2 and POSTs a pointer (§5.1) — the pipeline above does
   not change, only where `NormalizedAttachment.content` comes from.
-- **Threading.** Every message currently gets `threadId: null`. Phase 5.
-- **Endpoint fan-out.** `email.received` is written but delivered nowhere.
-  Phase 6/7.
+- **Endpoint fan-out to webhooks.** `email.received` reaches email endpoints
+  (Phase 6); HTTP endpoints are Phase 7.
 - **Orphaned objects.** Attachment bytes are written before the row, so a
   delivery that then turns out to be a duplicate leaves objects nothing
   references. That is the correct direction to fail — the alternative is a
@@ -238,6 +237,115 @@ Still open, and deliberately so:
 
 ---
 
+## Phase 5 — Threads · **built**
+
+`DefaultThreadResolver` (`server/mail/threads/`), `NeonThreadRepository`,
+`/v1/threads` and `/v1/threads/:id`, the threads list and conversation view.
+
+Resolution is header-only: `In-Reply-To`, then `References`, then stop. The
+plan's fourth step — a conservative subject and participant fallback — is
+deliberately **not** implemented. Two customers who both write "Invoice" would
+be merged into one conversation, and the operator would then reply with the
+wrong person on the thread. An orphan thread is cosmetic by comparison. Ship the
+header steps, measure how many messages land thread-less, then decide.
+
+Two decisions worth keeping:
+
+- **`findByMessageIds` matches the provider's id as well as ours.** The
+  `In-Reply-To` a customer's client sends back is whichever id *their* copy
+  carried, which for a message we sent is the one the provider stamped. That is
+  plan §12's "known provider/message mapping" step, folded into one query.
+- **The thread row is written inside the capture transaction.** Creating it
+  before would leave an empty conversation behind whenever the message turns out
+  to be a duplicate.
+
+Covered by tests: reply stays in the parent's thread; a `References` chain works
+with no `In-Reply-To`; two unrelated messages sharing a subject stay apart; a
+reply quoting the provider id threads; a duplicate leaves no thread.
+
+---
+
+## Phase 6 — Outbound and replies · **built, unverified against live mail**
+
+| Deliverable | Where |
+| --- | --- |
+| `POST /v1/emails/send`, `POST /v1/emails/:id/reply` | `app/api/v1/emails/` |
+| Outbound persistence, queued → sent/failed | `server/mail/emails/outbound-service.ts` |
+| Bounce/delivery events consumed | `app/api/providers/forward-email/events` |
+| Provider send quota, cached | `server/mail/emails/quota.ts` |
+| Endpoint CRUD, bindings, verified recipients | `server/mail/endpoints/` |
+| Personal-inbox notifications | `server/mail/forwarding/forwarding-service.ts` |
+| Opaque reply relay | `server/mail/forwarding/relay-service.ts` |
+| Sent page with compose, reply box, endpoints page | `app/(dashboard)/` |
+
+### The row goes in before the send
+
+Same shape as inbound writing bytes before the row: the step that can succeed
+while its answer is lost must be the one that leaves a trace. A send that only
+becomes visible when the response arrives is invisible if the process dies
+mid-flight — the mail went out and MailPiston has no record. A row stuck in
+`queued` is visible and repairable; a failed send stays as `failed` rather than
+disappearing.
+
+### Notifications are constructed, never redirected
+
+Re-sending the customer's raw MIME to a personal mailbox would carry their
+`Message-ID`, `Received` chain, and authentication results out of the managed
+domain — and a reply would go straight from the operator's personal address to
+the customer. The notification is a fresh message from the managed address, with
+an opaque `reply+<token>@` `Reply-To`; only the token's hash is stored, since the
+relay address is public the moment it is delivered.
+
+A relayed reply is likewise reconstructed, not re-transmitted: only the new text
+survives, and `outbound.reply()` owns the threading headers so a relayed reply
+and a dashboard reply are the same customer-facing thing.
+
+### What a relay refuses, and why each check is load-bearing
+
+Unknown, revoked, or expired token; a sender that is not the verified recipient
+the token was minted for; an autoresponse. Each rejection sends nothing, records
+why, and still answers 200 — retrying would not change the outcome. The
+sender check is the one an attacker who learns a relay address has to beat.
+
+### Recipients are verified by challenge
+
+The operator can type any address, and a typo would start forwarding a
+customer's mail to a stranger. A code is mailed from the managed address that
+will do the forwarding; the hash and expiry are both part of the matching
+`UPDATE`, so there is no branch that can verify on a failed comparison.
+
+Covered by tests (13 in `forwarding.test.ts`, 8 in `outbound-service.test.ts`):
+send persists and emits both events; an inbound-only address is refused before
+the provider is called; a failed send stays visible as `failed`; replies thread
+for the recipient; `Re:` does not stack; a customer follow-up rejoins the
+thread; a bounce flips status; an unmatched delivery event is still recorded;
+notification carries no customer transport headers; only the token hash is
+stored; unverified recipients are never forwarded to; forwarding failure never
+un-captures the message; wrong sender, revoked token, unknown token, and
+autoresponses all send nothing.
+
+Still needs live mail:
+
+- [ ] Send a new message; it arrives and appears in Sent
+- [ ] Reply to an inbound email; **Gmail threads it with the original**
+- [ ] A send to a known-dead address flips to `hard_bounced`
+- [ ] Bind a verified personal inbox; mail reaches both the Inbox and it
+- [ ] Reply from the personal inbox; the customer sees only the managed address
+- [ ] The customer-visible raw message contains no personal address
+
+Deliberately deferred:
+
+- **Webhook endpoints.** The subtype is refused by `EndpointService.create`
+  rather than half-built: an endpoint that accepts a URL and never delivers is
+  worse than one that says "not yet". Phase 7.
+- **Attachments on outbound.** Send and reply carry text and HTML only.
+- **Reply-all.** The relay answers the original external sender, per §19.3.
+- **The relay domain itself.** `RELAY_DOMAIN` must be a domain whose DNS we
+  control, with a catch-all pointed at this deployment. Unset, notifications go
+  out with no `Reply-To` and a reply lands back on the managed address.
+
+---
+
 ## Not started
 
-Phases 5–11 as written in the roadmap.
+Phases 7–11 as written in the roadmap.

@@ -1,11 +1,7 @@
 import 'server-only';
 
 import { APIError } from '@/server/core/errors';
-import type {
-  DeliveryRepository,
-  EndpointRepository,
-  ReplyRelayRepository,
-} from '@/server/repositories/types';
+import type { DeliveryRepository } from '@/server/repositories/types';
 
 /**
  * Repositories whose *shape* is the Phase 1 deliverable and whose bodies land
@@ -24,54 +20,6 @@ function notImplemented(phase: string, method: string): never {
     501,
     'NOT_IMPLEMENTED',
   );
-}
-
-export class NeonEndpointRepository implements EndpointRepository {
-  create(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.create');
-  }
-  findById(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.findById');
-  }
-  list(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.list');
-  }
-  update(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.update');
-  }
-  delete(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.delete');
-  }
-  listForAddress(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.listForAddress');
-  }
-  bindToAddress(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.bindToAddress');
-  }
-  unbindFromAddress(): never {
-    notImplemented('Phase 6/7 (endpoints)', 'EndpointRepository.unbindFromAddress');
-  }
-  getWebhookConfig(): never {
-    notImplemented('Phase 7 (webhooks)', 'EndpointRepository.getWebhookConfig');
-  }
-  setWebhookConfig(): never {
-    notImplemented('Phase 7 (webhooks)', 'EndpointRepository.setWebhookConfig');
-  }
-  listRecipients(): never {
-    notImplemented('Phase 6 (personal forwarding)', 'EndpointRepository.listRecipients');
-  }
-  addRecipient(): never {
-    notImplemented('Phase 6 (personal forwarding)', 'EndpointRepository.addRecipient');
-  }
-  markRecipientVerified(): never {
-    notImplemented(
-      'Phase 6 (personal forwarding)',
-      'EndpointRepository.markRecipientVerified',
-    );
-  }
-  removeRecipient(): never {
-    notImplemented('Phase 6 (personal forwarding)', 'EndpointRepository.removeRecipient');
-  }
 }
 
 export class NeonDeliveryRepository implements DeliveryRepository {
@@ -95,14 +43,3 @@ export class NeonDeliveryRepository implements DeliveryRepository {
   }
 }
 
-export class NeonReplyRelayRepository implements ReplyRelayRepository {
-  create(): never {
-    notImplemented('Phase 6 (private relay)', 'ReplyRelayRepository.create');
-  }
-  findByTokenHash(): never {
-    notImplemented('Phase 6 (private relay)', 'ReplyRelayRepository.findByTokenHash');
-  }
-  revoke(): never {
-    notImplemented('Phase 6 (private relay)', 'ReplyRelayRepository.revoke');
-  }
-}

@@ -5,11 +5,9 @@ import { NeonApiKeyRepository } from './neon/api-key-repository';
 import { NeonDomainRepository } from './neon/domain-repository';
 import { NeonEmailRepository } from './neon/email-repository';
 import { NeonEventRepository } from './neon/event-repository';
-import {
-  NeonDeliveryRepository,
-  NeonEndpointRepository,
-  NeonReplyRelayRepository,
-} from './neon/pending';
+import { NeonEndpointRepository } from './neon/endpoint-repository';
+import { NeonDeliveryRepository } from './neon/pending';
+import { NeonReplyRelayRepository } from './neon/reply-relay-repository';
 import { NeonThreadRepository } from './neon/thread-repository';
 
 export * from './types';

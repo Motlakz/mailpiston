@@ -72,6 +72,8 @@ export interface EndpointEmailRecipient {
   endpointId: string;
   email: string;
   verifiedAt: Date | null;
+  /** Set while a challenge is outstanding; the token itself is never stored. */
+  verificationExpiresAt: Date | null;
   enabled: boolean;
 }
 

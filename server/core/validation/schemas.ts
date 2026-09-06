@@ -92,6 +92,51 @@ export const replyEmailSchema = z
   })
   .refine(hasBody, { message: 'A reply needs a text or HTML body' });
 
+export const createEndpointSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  /**
+   * `webhook` is accepted by the schema and refused by the service until
+   * Phase 7: the shape is public API surface, the behaviour is not built.
+   */
+  type: z.enum(['webhook', 'email', 'email_group']),
+  enabled: z.boolean().default(true),
+});
+
+export const updateEndpointSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one field must be provided',
+  });
+
+export const addRecipientSchema = z.object({
+  email: z.email(),
+});
+
+/**
+ * One route, two steps: issue a challenge, then confirm it.
+ *
+ * They are the same resource transition and share the plan's single
+ * `/verify` path; the discriminant says which half is being asked for.
+ */
+export const verifyRecipientSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('send'),
+    /** The managed address the challenge is sent from — and later forwards from. */
+    fromAddressId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal('confirm'),
+    token: z.string().trim().min(1).max(200),
+  }),
+]);
+
+export const bindEndpointSchema = z.object({
+  endpointId: z.string().min(1),
+});
+
 export const createApiKeySchema = z.object({
   name: z.string().trim().min(1).max(100),
   expiresAt: z.iso.datetime().nullable().default(null),
@@ -101,5 +146,10 @@ export type CreateDomainInput = z.infer<typeof createDomainSchema>;
 export type CreateAddressInput = z.infer<typeof createAddressSchema>;
 export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;
 export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
+export type CreateEndpointInput = z.infer<typeof createEndpointSchema>;
+export type UpdateEndpointInput = z.infer<typeof updateEndpointSchema>;
+export type AddRecipientInput = z.infer<typeof addRecipientSchema>;
+export type VerifyRecipientInput = z.infer<typeof verifyRecipientSchema>;
+export type BindEndpointInput = z.infer<typeof bindEndpointSchema>;
 export type SendEmailInput = z.infer<typeof sendEmailSchema>;
 export type ReplyEmailInput = z.infer<typeof replyEmailSchema>;

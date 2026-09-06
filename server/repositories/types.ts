@@ -106,10 +106,26 @@ export interface EndpointRepository {
   setWebhookConfig(config: EndpointWebhookConfig): Promise<void>;
 
   listRecipients(endpointId: string): Promise<EndpointEmailRecipient[]>;
+  findRecipient(id: string): Promise<EndpointEmailRecipient | null>;
   addRecipient(
     endpointId: string,
     email: string,
   ): Promise<EndpointEmailRecipient>;
+  /** Stores the hash of an outstanding challenge, never the token itself. */
+  setRecipientChallenge(
+    recipientId: string,
+    tokenHash: string,
+    expiresAt: Date,
+  ): Promise<void>;
+  /**
+   * Verifies only if the hash matches an unexpired challenge. Returns null
+   * otherwise, so there is no branch that can verify on a failed comparison.
+   */
+  verifyRecipientWithToken(
+    recipientId: string,
+    tokenHash: string,
+    now: Date,
+  ): Promise<EndpointEmailRecipient | null>;
   markRecipientVerified(recipientId: string): Promise<EndpointEmailRecipient>;
   removeRecipient(recipientId: string): Promise<void>;
 }

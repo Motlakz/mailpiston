@@ -1,8 +1,11 @@
 import 'server-only';
 
+import { isRelayRecipient } from '@/server/core/config';
 import { createInboundFingerprint } from '@/server/core/idempotency';
 import { newId } from '@/server/core/ids';
 import type { AddressWithDomain } from '@/server/core/types';
+import type { ForwardingService } from '@/server/mail/forwarding/forwarding-service';
+import type { RelayService } from '@/server/mail/forwarding/relay-service';
 import type { ThreadResolver } from '@/server/mail/threads/thread-resolver';
 import type { NormalizedInboundEmail } from '@/server/providers/types';
 import type {
@@ -42,9 +45,17 @@ import { attachmentKey, rawMimeKey } from '@/server/storage';
  * exist, which is indistinguishable from data loss at read time.
  */
 export interface InboundResult {
-  status: 'captured' | 'duplicate' | 'rejected';
+  status: 'captured' | 'duplicate' | 'rejected' | 'relayed';
   emailId: string | null;
   reason?: string;
+}
+
+/** The two fan-outs that run after capture. Both are optional wiring. */
+export interface InboundHandlers {
+  /** Replies arriving from a verified personal inbox (plan §19.2). */
+  relay?: RelayService;
+  /** Notifications out to verified personal inboxes (plan §19.1). */
+  forwarding?: ForwardingService;
 }
 
 export class InboundService {
@@ -57,11 +68,22 @@ export class InboundService {
     private readonly threads: ThreadResolver,
     storage: Storage | (() => Storage),
     private readonly options: { storeRawMime: boolean },
+    private readonly handlers: InboundHandlers = {},
   ) {
     this.resolveStorage = typeof storage === 'function' ? storage : () => storage;
   }
 
   async capture(normalized: NormalizedInboundEmail): Promise<InboundResult> {
+    // Relay mail is an instruction, not a message: it is a reply from a
+    // verified personal inbox, and it is never stored as inbound customer mail.
+    if (this.handlers.relay && isRelayRecipient(normalized.recipient)) {
+      const relayed = await this.handlers.relay.handle(normalized);
+
+      return relayed.status === 'relayed'
+        ? { status: 'relayed', emailId: relayed.emailId }
+        : { status: 'rejected', emailId: null, reason: relayed.reason };
+    }
+
     const address = await this.addresses.findByEmail(normalized.recipient);
 
     if (!address || !address.enabled) {
@@ -116,6 +138,20 @@ export class InboundService {
 
     if (result.duplicate) {
       return { status: 'duplicate', emailId: null };
+    }
+
+    // Fan-out runs after the message is durable and can never undo it: a
+    // personal mailbox being unreachable must not turn into a provider retry
+    // that then deduplicates, leaving the operator with no mail at all.
+    if (this.handlers.forwarding) {
+      try {
+        await this.handlers.forwarding.forward({
+          email: result.email,
+          address,
+        });
+      } catch (error) {
+        console.error('Personal forwarding failed', error);
+      }
     }
 
     return { status: 'captured', emailId: result.email.id };

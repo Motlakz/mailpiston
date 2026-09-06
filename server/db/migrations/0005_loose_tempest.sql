@@ -1,0 +1,2 @@
+ALTER TABLE "endpoint_email_recipients" ADD COLUMN "verification_token_hash" text;--> statement-breakpoint
+ALTER TABLE "endpoint_email_recipients" ADD COLUMN "verification_expires_at" timestamp with time zone;

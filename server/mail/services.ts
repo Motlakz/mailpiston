@@ -8,6 +8,9 @@ import { getStorage } from '@/server/storage';
 import { AddressService } from './addresses/address-service';
 import { DomainService } from './domains/domain-service';
 import { OutboundService } from './emails/outbound-service';
+import { EndpointService } from './endpoints/endpoint-service';
+import { ForwardingService } from './forwarding/forwarding-service';
+import { RelayService } from './forwarding/relay-service';
 import { InboundService } from './inbound/inbound-service';
 import { DefaultThreadResolver } from './threads/thread-resolver';
 
@@ -22,6 +25,9 @@ let domainService: DomainService | undefined;
 let addressService: AddressService | undefined;
 let inboundService: InboundService | undefined;
 let outboundService: OutboundService | undefined;
+let endpointService: EndpointService | undefined;
+let forwardingService: ForwardingService | undefined;
+let relayService: RelayService | undefined;
 
 export function getDomainService(): DomainService {
   domainService ??= new DomainService(
@@ -51,6 +57,7 @@ export function getInboundService(): InboundService {
     // captured in production before R2 is configured.
     getStorage,
     { storeRawMime: env.STORE_RAW_MIME },
+    { relay: getRelayService(), forwarding: getForwardingService() },
   );
   return inboundService;
 }
@@ -66,4 +73,43 @@ export function getOutboundService(): OutboundService {
   return outboundService;
 }
 
-export { AddressService, DomainService, InboundService, OutboundService };
+export function getForwardingService(): ForwardingService {
+  forwardingService ??= new ForwardingService(
+    repositories.endpoints,
+    repositories.replyRelays,
+    repositories.events,
+    mailProviderRegistry.active(),
+    env.RELAY_TOKEN_TTL_DAYS,
+  );
+  return forwardingService;
+}
+
+export function getRelayService(): RelayService {
+  relayService ??= new RelayService(
+    repositories.replyRelays,
+    repositories.endpoints,
+    repositories.emails,
+    repositories.events,
+    getOutboundService(),
+  );
+  return relayService;
+}
+
+export function getEndpointService(): EndpointService {
+  endpointService ??= new EndpointService(
+    repositories.endpoints,
+    repositories.addresses,
+    getOutboundService(),
+  );
+  return endpointService;
+}
+
+export {
+  AddressService,
+  DomainService,
+  EndpointService,
+  ForwardingService,
+  InboundService,
+  OutboundService,
+  RelayService,
+};

@@ -15,3 +15,5 @@ process.env.GITHUB_CLIENT_SECRET ??= 'test-client-secret';
 process.env.ALLOWED_OPERATOR_EMAILS ??= 'operator@mailpiston.test';
 process.env.MAIL_PROVIDER ??= 'mock';
 process.env.SECRET_ENCRYPTION_KEY ??= '0'.repeat(64);
+// Personal-inbox forwarding is only exercised when a relay domain exists.
+process.env.RELAY_DOMAIN ??= 'reply.mailpiston.test';

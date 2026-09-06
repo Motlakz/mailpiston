@@ -89,6 +89,11 @@ const envSchema = z.object({
     .string()
     .transform((value) => value.toLowerCase())
     .optional(),
+  /**
+   * How long a relay address stays usable. Unbounded tokens are a standing
+   * invitation: the address is public the moment a notification is delivered.
+   */
+  RELAY_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -142,6 +147,17 @@ export const env: Env = loadEnv();
 /** Absolute URL of the provider ingress every alias points at. */
 export function inboundIngressUrl(): string {
   return new URL('/api/providers/forward-email/inbound', env.APP_URL).toString();
+}
+
+/** The relay address a reply to this token should be sent to. */
+export function relayAddressFor(token: string): string | null {
+  return env.RELAY_DOMAIN ? `reply+${token}@${env.RELAY_DOMAIN}` : null;
+}
+
+/** Whether an inbound recipient belongs to the relay domain rather than a managed address. */
+export function isRelayRecipient(recipient: string): boolean {
+  if (!env.RELAY_DOMAIN) return false;
+  return recipient.toLowerCase().endsWith(`@${env.RELAY_DOMAIN}`);
 }
 
 export function isOperatorEmail(email: string | null | undefined): boolean {
