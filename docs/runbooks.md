@@ -171,6 +171,39 @@ There is no undo.
 
 ---
 
+## 6a. Deploying a schema change
+
+**Migrate before, or immediately after, the deploy that needs it.** Vercel does
+not run migrations, and nothing enforces the order.
+
+A deployment running ahead of its database half-works, which is worse than
+failing outright: queries that name a new column throw while every other query
+carries on. The page that breaks is whichever one happens to `select *`, and in
+a production build the browser shows a numbered React error with the details
+stripped. The real message is in the platform logs —
+`column "…" does not exist`, SQLSTATE `42703`.
+
+```bash
+DATABASE_URL='<production url>' bun run db:migrate
+```
+
+`/api/v1/health` reports this state so it does not have to be guessed at:
+
+```json
+{ "status": "degraded", "database": "ok", "schema": "behind" }
+```
+
+It answers **503** while the schema is behind, which is deliberate — during a
+deploy-then-migrate window the deployment genuinely is degraded. If an uptime
+monitor watches this endpoint, migrate first or expect it to fire for the length
+of that window.
+
+`"schema": "unknown"` means the migration table could not be read at all — a
+database that has never been migrated. It is reported separately from `ok`,
+because "we could not tell" is not "fine".
+
+---
+
 ## 7. Backup and restore
 
 > ⚠️ **This drill has not been performed.** Phase 11's acceptance criterion is

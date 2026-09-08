@@ -14,6 +14,28 @@ import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Domains · MailPiston' };
 
+/**
+ * `fallback` — no key stored; inbound is verified against the env variable.
+ * `stored` — a key is stored and readable.
+ * `unreadable` — a key is stored and will not decrypt, so the resolver skips
+ * it and every inbound delivery for this domain fails verification. That is
+ * what an encryption-key rotation leaves behind if the re-encryption pass is
+ * skipped, and it is otherwise completely silent.
+ */
+type WebhookKeyState = 'fallback' | 'stored' | 'unreadable';
+
+const KEY_LABEL: Record<WebhookKeyState, string> = {
+  fallback: 'using env fallback',
+  stored: 'stored',
+  unreadable: 'unreadable',
+};
+
+const KEY_TONE: Record<WebhookKeyState, string> = {
+  fallback: 'border-border text-muted-foreground',
+  stored: 'border-success/40 text-success',
+  unreadable: 'border-destructive/40 text-destructive',
+};
+
 export default async function DomainsPage() {
   const [domains, withKeys, latestRun] = await Promise.all([
     repositories.domains.list(),
@@ -21,7 +43,12 @@ export default async function DomainsPage() {
     repositories.reconciliation.latestRun(),
   ]);
 
-  const configuredKeys = new Set(withKeys.map((row) => row.domainId));
+  // Three states, not two. A key that is stored but no longer decrypts is the
+  // silent failure an encryption-key rotation leaves behind, and this is the
+  // screen where it has to be visible.
+  const keyState = new Map(
+    withKeys.map((row) => [row.domainId, row.readable ? 'stored' : 'unreadable'] as const),
+  );
 
   // Findings only. An `ok` item means the sweep looked and was satisfied, which
   // belongs in the run summary rather than in a banner about problems.
@@ -74,7 +101,7 @@ export default async function DomainsPage() {
             <DomainCard
               key={domain.id}
               domain={domain}
-              webhookKeyConfigured={configuredKeys.has(domain.id)}
+              webhookKey={keyState.get(domain.id) ?? 'fallback'}
             />
           ))}
         </div>
@@ -85,10 +112,10 @@ export default async function DomainsPage() {
 
 function DomainCard({
   domain,
-  webhookKeyConfigured,
+  webhookKey,
 }: {
   domain: Domain;
-  webhookKeyConfigured: boolean;
+  webhookKey: WebhookKeyState;
 }) {
   return (
     <section className="rounded-lg border border-border bg-card">
@@ -111,18 +138,24 @@ function DomainCard({
         <span className="text-xs text-muted-foreground">
           Inbound webhook key
         </span>
+
         <span
-          className={
-            webhookKeyConfigured
-              ? 'rounded-full border border-border px-2 py-0.5 text-[11px] text-success'
-              : 'rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground'
-          }
+          className={`rounded-full border px-2 py-0.5 text-[11px] ${KEY_TONE[webhookKey]}`}
         >
-          {webhookKeyConfigured ? 'stored' : 'using env fallback'}
+          {KEY_LABEL[webhookKey]}
         </span>
+
+        {webhookKey === 'unreadable' ? (
+          <span className="text-xs text-destructive">
+            Stored under a different encryption key, so it is being skipped —
+            inbound mail for this domain is failing verification. Paste the key
+            from Forward Email again to fix it.
+          </span>
+        ) : null}
+
         <WebhookKeyForm
           domainId={domain.id}
-          configured={webhookKeyConfigured}
+          configured={webhookKey !== 'fallback'}
         />
       </div>
 

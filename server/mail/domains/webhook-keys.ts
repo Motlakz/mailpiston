@@ -92,21 +92,52 @@ export async function deleteDomainWebhookKey(domainId: string): Promise<void> {
 }
 
 /**
- * Which domains have a key stored — never the keys themselves.
+ * Which domains have a key stored, and whether it can still be read — never
+ * the keys themselves.
  *
- * The dashboard needs to show "configured" or "not configured" beside each
- * domain, and nothing in the UI ever needs the plaintext back. A getter that
- * returned it would exist only to be misused.
+ * `readable` is the reason this decrypts at all. A stored key that no longer
+ * decrypts is skipped by the resolver so that one bad key cannot take ingress
+ * down for every other domain, which is correct — but it means the failure is
+ * otherwise completely silent: the row still exists, the page would still say
+ * "stored", and the only symptom is that mail for that domain stops arriving
+ * with a 401 the operator never sees.
+ *
+ * That is exactly what an encryption-key rotation produces if the re-encryption
+ * pass is skipped, so the one screen an operator checks after rotating has to
+ * be able to say so.
+ *
+ * The plaintext is discarded immediately. Nothing in the UI ever needs it back;
+ * a getter that returned it would exist only to be misused.
  */
 export async function listDomainsWithWebhookKeys(): Promise<
-  Array<{ domainId: string; domainName: string; updatedAt: Date }>
+  Array<{
+    domainId: string;
+    domainName: string;
+    updatedAt: Date;
+    readable: boolean;
+  }>
 > {
-  return db
+  const rows = await db
     .select({
       domainId: domainWebhookKeys.domainId,
       domainName: domains.name,
       updatedAt: domainWebhookKeys.updatedAt,
+      keyCiphertext: domainWebhookKeys.keyCiphertext,
     })
     .from(domainWebhookKeys)
     .innerJoin(domains, eq(domainWebhookKeys.domainId, domains.id));
+
+  return rows.map(({ keyCiphertext, ...row }) => ({
+    ...row,
+    readable: isReadable(keyCiphertext),
+  }));
+}
+
+function isReadable(ciphertext: string): boolean {
+  try {
+    decryptSecret(ciphertext);
+    return true;
+  } catch {
+    return false;
+  }
 }
