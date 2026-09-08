@@ -24,6 +24,7 @@ import type {
   CreateAttachmentData,
   CreateEmailData,
   DeliveryRepository,
+  EmailFilter,
   EmailRepository,
   EnqueueResult,
   EventFilter,
@@ -321,14 +322,12 @@ export class InMemoryEmailRepository implements EmailRepository {
     );
   }
 
-  async list(filter: {
-    direction?: Email['direction'];
-    addressId?: string;
-    threadId?: string;
-    limit?: number;
-  }): Promise<Paginated<EmailListItem>> {
+  async list(filter: EmailFilter): Promise<Paginated<EmailListItem>> {
     const items = [...this.rows.values()]
       .filter((row) => !filter.direction || row.direction === filter.direction)
+      .filter(
+        (row) => !filter.statuses?.length || filter.statuses.includes(row.status),
+      )
       .filter((row) => !filter.addressId || row.addressId === filter.addressId)
       .filter((row) => !filter.threadId || row.threadId === filter.threadId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())

@@ -74,7 +74,7 @@ export default async function ThreadPage({
                 UTC
               </time>
               <Link
-                href={`/inbox/${message.id}`}
+                href={`/mail/${message.id}`}
                 className="text-xs text-primary hover:underline"
               >
                 Open

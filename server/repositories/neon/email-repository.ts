@@ -1,6 +1,16 @@
 import 'server-only';
 
-import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  sql,
+} from 'drizzle-orm';
 
 import { NotFoundError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -23,6 +33,7 @@ import {
 import type {
   CreateAttachmentData,
   CreateEmailData,
+  EmailFilter,
   EmailRepository,
   InboundCaptureResult,
   InboundThreadTarget,
@@ -137,13 +148,7 @@ export class NeonEmailRepository implements EmailRepository {
     return row ? toEmail(row) : null;
   }
 
-  async list(filter: {
-    direction?: Email['direction'];
-    addressId?: string;
-    threadId?: string;
-    limit?: number;
-    cursor?: string | null;
-  }): Promise<Paginated<EmailListItem>> {
+  async list(filter: EmailFilter): Promise<Paginated<EmailListItem>> {
     const limit = Math.min(filter.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
     // Cursor is the ISO `created_at` of the last row seen, matching the event
@@ -166,6 +171,9 @@ export class NeonEmailRepository implements EmailRepository {
       .where(
         and(
           filter.direction ? eq(emails.direction, filter.direction) : undefined,
+          filter.statuses?.length
+            ? inArray(emails.status, filter.statuses)
+            : undefined,
           filter.addressId ? eq(emails.addressId, filter.addressId) : undefined,
           filter.threadId ? eq(emails.threadId, filter.threadId) : undefined,
           cursorDate ? lt(emails.createdAt, cursorDate) : undefined,

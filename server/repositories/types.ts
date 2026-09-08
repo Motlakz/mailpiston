@@ -136,6 +136,22 @@ export interface EndpointRepository {
 
 export type CreateEmailData = Omit<Email, 'id' | 'createdAt' | 'updatedAt'>;
 
+/**
+ * The message list, as the unified Mail view queries it.
+ *
+ * `statuses` is a set rather than a single value because the states an operator
+ * actually asks about are groups: "bounced" means soft *or* hard, since which
+ * one it was is our retry decision and not the question being asked.
+ */
+export interface EmailFilter {
+  direction?: Email['direction'];
+  statuses?: Email['status'][];
+  addressId?: string;
+  threadId?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
 /** `prunedAt` is set by retention, never at capture. */
 export type CreateAttachmentData = Omit<
   EmailAttachment,
@@ -192,13 +208,7 @@ export interface EmailRepository {
   findByMessageId(messageId: string): Promise<Email | null>;
   /** Bounce mapping: provider events name their own id, not ours. */
   findByProviderMessageId(providerMessageId: string): Promise<Email | null>;
-  list(filter: {
-    direction?: Email['direction'];
-    addressId?: string;
-    threadId?: string;
-    limit?: number;
-    cursor?: string | null;
-  }): Promise<Paginated<EmailListItem>>;
+  list(filter: EmailFilter): Promise<Paginated<EmailListItem>>;
   updateStatus(id: string, status: Email['status']): Promise<Email>;
   /**
    * The outbound acknowledgement: the ids the provider assigned, plus the

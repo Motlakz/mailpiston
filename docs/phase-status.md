@@ -140,7 +140,7 @@ opens them.
 | Atomic message + attachments + event write | `NeonEmailRepository.createInbound` |
 | Object storage, two drivers | `server/storage/` |
 | Read API + authenticated attachment download | `app/api/v1/emails`, `app/api/v1/attachments/[id]/download` |
-| Inbox list and message viewer | `app/(dashboard)/inbox/` |
+| Message list and viewer | `app/(dashboard)/mail/` |
 
 Five decisions were made here that the roadmap left implicit. Each one is a
 place where the obvious implementation is wrong.

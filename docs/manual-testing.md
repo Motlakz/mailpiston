@@ -129,7 +129,7 @@ changes the bytes and therefore the signature.
 
 | Test | Command | Expected |
 | --- | --- | --- |
-| Capture | `bun run post:inbound plain-text "support@$DOMAIN"` | `{"status":"captured","emailId":"em_…"}`, appears in Inbox |
+| Capture | `bun run post:inbound plain-text "support@$DOMAIN"` | `{"status":"captured","emailId":"em_…"}`, appears in Mail |
 | Duplicate | run the same command twice with `PIN_MESSAGE_ID=1` | second is `{"status":"duplicate"}`, no second row |
 | Unknown recipient | `bun run post:inbound plain-text "nobody@$DOMAIN"` | `{"status":"rejected","reason":"unknown_recipient"}`, nothing stored |
 | Tampered body | send the curl above with one character changed after signing | `401`, nothing written |
@@ -144,7 +144,7 @@ stops retrying something that will keep failing the same way.
 bun run post:inbound with-attachment "support@$DOMAIN"
 ```
 
-Open the message in the Inbox and download the attachment. Locally the bytes
+Open the message in Mail and download the attachment. Locally the bytes
 stream from `.mailpiston-storage/`; with R2 configured the route redirects to a
 5-minute presigned URL. Either way the caller is authenticated first.
 
@@ -549,7 +549,7 @@ RETENTION_RAW_MIME_DAYS=1
 Then trigger `prune-retained-objects` from the Inngest dev dashboard rather
 than waiting for 03:00 UTC. Expect the raw MIME objects to be gone from
 `.mailpiston-storage/raw/` and `raw_storage_key` to be null — while the message
-itself still opens in the Inbox with its subject and body intact.
+itself still opens in Mail with its subject and body intact.
 
 For attachments, confirm the metadata survives its content: the attachment is
 still listed with its filename and size, and downloading it returns **410
@@ -571,3 +571,22 @@ See [`runbooks.md`](./runbooks.md) §1. The short version: set
 the new one, re-save every domain webhook key and rotate every endpoint secret,
 then drop `_PREVIOUS`. Verify with one signed inbound delivery and one webhook
 test delivery — both exercise a decrypt.
+
+---
+
+## 10. Where things are in the dashboard
+
+`/mail` is one list over both directions, with `?show=received`, `?show=sent`,
+and `?show=bounced` as filters. Inbox and Sent used to be two pages over one
+table, which meant a conversation was never visible in one place and you had to
+know which half of it you were looking for.
+
+`/inbox`, `/inbox/:id`, and `/sent` redirect rather than 404 — those paths are
+in browser history and bookmarks.
+
+`/threads` is still separate, and stays separate. A filter answers "what
+happened"; a thread answers "what is going on with this person". Threading is
+header-only by design (Phase 5 refuses a subject fallback, because two customers
+both writing "Invoice" would merge into one conversation), so the flat list is
+the view that never depends on a customer's mail client having sent
+`References`.

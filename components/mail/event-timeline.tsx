@@ -111,7 +111,7 @@ export function EventTimeline({
 
             {showMessageLink && event.emailId ? (
               <Link
-                href={`/inbox/${event.emailId}`}
+                href={`/mail/${event.emailId}`}
                 className="shrink-0 font-mono text-[11px] text-primary hover:underline"
               >
                 {event.emailId}

@@ -17,8 +17,9 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: '/overview', label: 'Overview', icon: 'overview', group: 'mail' },
-  { href: '/inbox', label: 'Inbox', icon: 'inbox', group: 'mail' },
-  { href: '/sent', label: 'Sent', icon: 'sent', group: 'mail' },
+  // Inbox and Sent were two pages over one table, which meant a conversation
+  // was never visible in one place. Direction is a filter on `/mail` now.
+  { href: '/mail', label: 'Mail', icon: 'inbox', group: 'mail' },
   { href: '/threads', label: 'Threads', icon: 'threads', group: 'mail' },
   { href: '/logs', label: 'Logs', icon: 'logs', group: 'mail' },
 
