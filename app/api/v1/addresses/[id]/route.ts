@@ -17,7 +17,11 @@ export const PATCH = withApi(
     const address = await getAddressService().update(params.id, body);
     return NextResponse.json({ data: address });
   },
-  { endpoint: '/v1/addresses', schema: updateAddressSchema },
+  {
+    endpoint: '/v1/addresses',
+    schema: updateAddressSchema,
+    audit: { action: 'address.update', resourceType: 'address' },
+  },
 );
 
 export const DELETE = withApi(
@@ -25,5 +29,8 @@ export const DELETE = withApi(
     await getAddressService().delete(params.id);
     return NextResponse.json({ data: { id: params.id, deleted: true } });
   },
-  { endpoint: '/v1/addresses' },
+  {
+    endpoint: '/v1/addresses',
+    audit: { action: 'address.delete', resourceType: 'address' },
+  },
 );

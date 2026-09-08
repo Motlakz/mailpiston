@@ -2,6 +2,7 @@ import { serve } from 'inngest/next';
 
 import { env } from '@/server/core/config';
 import { inngest } from '@/server/jobs/inngest';
+import { pruneRetainedObjects } from '@/server/jobs/prune-retained-objects';
 import { reconcileProvider } from '@/server/jobs/reconcile-provider';
 import { retryWebhookDelivery } from '@/server/jobs/retry-webhook-delivery';
 
@@ -18,6 +19,6 @@ import { retryWebhookDelivery } from '@/server/jobs/retry-webhook-delivery';
  */
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [retryWebhookDelivery, reconcileProvider],
+  functions: [retryWebhookDelivery, reconcileProvider, pruneRetainedObjects],
   ...(env.INNGEST_SIGNING_KEY ? { signingKey: env.INNGEST_SIGNING_KEY } : {}),
 });

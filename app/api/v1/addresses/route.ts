@@ -18,5 +18,9 @@ export const POST = withApi(
     const address = await getAddressService().create(body);
     return NextResponse.json({ data: address }, { status: 201 });
   },
-  { endpoint: '/v1/addresses', schema: createAddressSchema },
+  {
+    endpoint: '/v1/addresses',
+    schema: createAddressSchema,
+    audit: { action: 'address.create', resourceType: 'address' },
+  },
 );

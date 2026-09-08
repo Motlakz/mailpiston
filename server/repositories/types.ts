@@ -2,6 +2,7 @@ import type {
   Address,
   AddressWithDomain,
   ApiKey,
+  AuditEntry,
   Domain,
   DomainDnsRecord,
   Email,
@@ -135,9 +136,10 @@ export interface EndpointRepository {
 
 export type CreateEmailData = Omit<Email, 'id' | 'createdAt' | 'updatedAt'>;
 
+/** `prunedAt` is set by retention, never at capture. */
 export type CreateAttachmentData = Omit<
   EmailAttachment,
-  'id' | 'emailId' | 'createdAt'
+  'id' | 'emailId' | 'createdAt' | 'prunedAt'
 >;
 
 /**
@@ -219,6 +221,22 @@ export interface EmailRepository {
   ): Promise<EmailAttachment>;
   listAttachments(emailId: string): Promise<EmailAttachment[]>;
   findAttachment(id: string): Promise<EmailAttachment | null>;
+
+  /**
+   * Retention (Phase 11). Both list methods return the oldest first and only
+   * rows whose bytes are still present, so a sweep that is interrupted resumes
+   * exactly where it stopped and re-running one costs nothing.
+   */
+  listPrunableRawMime(
+    before: Date,
+    limit: number,
+  ): Promise<Array<{ id: string; rawStorageKey: string }>>;
+  clearRawStorageKey(id: string): Promise<void>;
+  listPrunableAttachments(
+    before: Date,
+    limit: number,
+  ): Promise<EmailAttachment[]>;
+  markAttachmentPruned(id: string): Promise<void>;
 }
 
 export interface ThreadRepository {
@@ -361,6 +379,27 @@ export interface ReconciliationRepository {
   latestRun(): Promise<ReconciliationRun | null>;
   listRuns(limit?: number): Promise<ReconciliationRun[]>;
   listItems(runId: string): Promise<ReconciliationItem[]>;
+}
+
+/**
+ * §24 — privileged mutations, recorded.
+ *
+ * Append-only by construction: there is no update and no delete. A log that can
+ * be edited answers a different question from the one it was built for.
+ */
+export interface AuditRepository {
+  record(data: {
+    actor: string;
+    action: string;
+    resourceType: string;
+    resourceId: string | null;
+    metadata: Record<string, unknown>;
+  }): Promise<AuditEntry>;
+  list(filter: {
+    action?: string;
+    limit?: number;
+    cursor?: string | null;
+  }): Promise<Paginated<AuditEntry>>;
 }
 
 export interface ApiKeyRepository {

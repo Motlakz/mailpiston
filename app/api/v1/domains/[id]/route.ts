@@ -16,5 +16,8 @@ export const DELETE = withApi(
     await getDomainService().delete(params.id);
     return NextResponse.json({ data: { id: params.id, deleted: true } });
   },
-  { endpoint: '/v1/domains' },
+  {
+    endpoint: '/v1/domains',
+    audit: { action: 'domain.delete', resourceType: 'domain' },
+  },
 );

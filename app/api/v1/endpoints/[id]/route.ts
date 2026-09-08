@@ -31,7 +31,11 @@ export const PATCH = withApi<UpdateEndpointInput>(
     const endpoint = await getEndpointService().update(params.id, body);
     return NextResponse.json({ data: endpoint });
   },
-  { endpoint: '/v1/endpoints', schema: updateEndpointSchema },
+  {
+    endpoint: '/v1/endpoints',
+    schema: updateEndpointSchema,
+    audit: { action: 'endpoint.update', resourceType: 'endpoint' },
+  },
 );
 
 export const DELETE = withApi(
@@ -39,5 +43,8 @@ export const DELETE = withApi(
     await getEndpointService().delete(params.id);
     return new Response(null, { status: 204 });
   },
-  { endpoint: '/v1/endpoints' },
+  {
+    endpoint: '/v1/endpoints',
+    audit: { action: 'endpoint.delete', resourceType: 'endpoint' },
+  },
 );

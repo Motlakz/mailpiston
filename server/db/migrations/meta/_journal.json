@@ -43,6 +43,13 @@
       "when": 1788711719755,
       "tag": "0005_loose_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788893268807,
+      "tag": "0006_odd_juggernaut",
+      "breakpoints": true
     }
   ]
 }

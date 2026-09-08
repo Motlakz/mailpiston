@@ -25,5 +25,9 @@ export const POST = withApi<CreateEndpointInput>(
     const { endpoint, secret } = await getEndpointService().create(body);
     return NextResponse.json({ data: { ...endpoint, secret } }, { status: 201 });
   },
-  { endpoint: '/v1/endpoints', schema: createEndpointSchema },
+  {
+    endpoint: '/v1/endpoints',
+    schema: createEndpointSchema,
+    audit: { action: 'endpoint.create', resourceType: 'endpoint' },
+  },
 );

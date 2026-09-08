@@ -1,0 +1,2 @@
+ALTER TABLE "email_attachments" ADD COLUMN "pruned_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "email_attachments_pruned_at_idx" ON "email_attachments" USING btree ("pruned_at","created_at");

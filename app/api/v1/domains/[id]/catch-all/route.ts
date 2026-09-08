@@ -12,7 +12,10 @@ export const POST = withApi(
     const domain = await getDomainService().createCatchAll(params.id);
     return NextResponse.json({ data: domain }, { status: 201 });
   },
-  { endpoint: '/v1/domains' },
+  {
+    endpoint: '/v1/domains',
+    audit: { action: 'domain.catch_all.create', resourceType: 'domain' },
+  },
 );
 
 /**
@@ -29,7 +32,10 @@ export const PUT = withApi(
     const domain = await getDomainService().repairCatchAll(params.id);
     return NextResponse.json({ data: domain });
   },
-  { endpoint: '/v1/domains' },
+  {
+    endpoint: '/v1/domains',
+    audit: { action: 'domain.catch_all.repair', resourceType: 'domain' },
+  },
 );
 
 export const DELETE = withApi(
@@ -37,5 +43,8 @@ export const DELETE = withApi(
     const domain = await getDomainService().removeCatchAll(params.id);
     return NextResponse.json({ data: domain });
   },
-  { endpoint: '/v1/domains' },
+  {
+    endpoint: '/v1/domains',
+    audit: { action: 'domain.catch_all.remove', resourceType: 'domain' },
+  },
 );

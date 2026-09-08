@@ -30,7 +30,11 @@ export const PUT = withApi(
 
     return NextResponse.json({ data: { domainId: domain.id, configured: true } });
   },
-  { endpoint: '/v1/domains', schema: setWebhookKeySchema },
+  {
+    endpoint: '/v1/domains',
+    schema: setWebhookKeySchema,
+    audit: { action: 'domain.webhook_key.set', resourceType: 'domain' },
+  },
 );
 
 export const DELETE = withApi(
@@ -45,5 +49,8 @@ export const DELETE = withApi(
     // before any per-domain key was stored.
     return NextResponse.json({ data: { domainId: domain.id, configured: false } });
   },
-  { endpoint: '/v1/domains' },
+  {
+    endpoint: '/v1/domains',
+    audit: { action: 'domain.webhook_key.remove', resourceType: 'domain' },
+  },
 );

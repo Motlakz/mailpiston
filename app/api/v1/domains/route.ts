@@ -17,5 +17,9 @@ export const POST = withApi(
     const domain = await getDomainService().create(body);
     return NextResponse.json({ data: domain }, { status: 201 });
   },
-  { endpoint: '/v1/domains', schema: createDomainSchema },
+  {
+    endpoint: '/v1/domains',
+    schema: createDomainSchema,
+    audit: { action: 'domain.create', resourceType: 'domain' },
+  },
 );

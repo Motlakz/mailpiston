@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { NotFoundError } from '@/server/core/errors';
+import { GoneError, NotFoundError } from '@/server/core/errors';
 import { withApi } from '@/server/core/http';
 import { repositories } from '@/server/repositories';
 import { getStorage } from '@/server/storage';
@@ -24,6 +24,15 @@ export const GET = withApi(
   async ({ params }) => {
     const attachment = await repositories.emails.findAttachment(params.id);
     if (!attachment) throw new NotFoundError(`Attachment ${params.id} not found`);
+
+    // The row outlives its bytes (Phase 11 retention). A 404 here would say
+    // "there is no such attachment", which is false and sends the operator
+    // looking for a bug; 410 says it was real and we removed it on purpose.
+    if (attachment.prunedAt) {
+      throw new GoneError(
+        `${attachment.filename} was removed by retention on ${attachment.prunedAt.toISOString().slice(0, 10)}`,
+      );
+    }
 
     const storage = getStorage();
     const url = await storage.presignedUrl(

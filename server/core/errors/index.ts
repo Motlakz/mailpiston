@@ -79,6 +79,20 @@ export class ProviderTimeoutError extends APIError {
   }
 }
 
+/**
+ * The resource existed and is deliberately gone (Phase 11 retention).
+ *
+ * A 404 would say "there is no such attachment", which is false and sends the
+ * operator looking for a bug. 410 says the row is real and its bytes were
+ * removed on purpose.
+ */
+export class GoneError extends APIError {
+  constructor(message = 'No longer available') {
+    super(message, 410, 'GONE');
+    this.name = 'GoneError';
+  }
+}
+
 export class WebhookVerificationError extends APIError {
   constructor(message = 'Webhook verification failed') {
     super(message, 401, 'WEBHOOK_VERIFICATION_FAILED');

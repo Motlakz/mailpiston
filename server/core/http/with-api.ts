@@ -38,6 +38,20 @@ export interface ApiContext<TBody = unknown> {
   params: Record<string, string>;
 }
 
+/**
+ * What to write to the audit log when this route succeeds (§24).
+ *
+ * Declared here rather than called from inside a handler so that "is this a
+ * privileged mutation?" is answered next to the route's other cross-cutting
+ * concerns. A handler that has to remember to log is a handler that eventually
+ * does not.
+ */
+export interface AuditOptions {
+  /** e.g. `domain.create`. Dot-separated resource and verb. */
+  action: string;
+  resourceType: string;
+}
+
 export interface WithApiOptions<TBody> {
   /** Rate-limit bucket key. Matches the paths in §9.3, not the concrete URL. */
   endpoint: string;
@@ -48,6 +62,8 @@ export interface WithApiOptions<TBody> {
    * Default true — the dashboard calls the same routes the SDK does.
    */
   allowSession?: boolean;
+  /** Set on privileged mutations. Omitted on reads. */
+  audit?: AuditOptions;
 }
 
 type RouteContext = { params: Promise<Record<string, string>> };
@@ -104,6 +120,12 @@ export function withApi<TBody = undefined>(
       const params = routeContext ? await routeContext.params : {};
       const response = await handler({ request, body, actor, apiKey, params });
 
+      // 5. Record, on success only. A failed mutation changed nothing, and an
+      //    audit trail full of attempts is one nobody reads.
+      if (options.audit && response.status < 400) {
+        await recordAudit(options.audit, actor, params, body);
+      }
+
       for (const [key, value] of Object.entries(rateLimitInfo)) {
         response.headers.set(key, value);
       }
@@ -113,6 +135,64 @@ export function withApi<TBody = undefined>(
       return errorResponse(error, rateLimitInfo);
     }
   };
+}
+
+/**
+ * Writes the audit entry, and never fails the request if it cannot.
+ *
+ * The mutation already happened by this point. Throwing here would return an
+ * error for work that succeeded, and the caller would retry it — turning a
+ * logging outage into duplicate domains and duplicate keys. A missing audit
+ * entry is a gap in a record; a retried mutation is a change to the system.
+ *
+ * The repository is imported lazily so that `withApi` — which every route
+ * imports — does not pull the database client into routes that never touch it.
+ */
+async function recordAudit(
+  audit: AuditOptions,
+  actor: RateLimitActor,
+  params: Record<string, string>,
+  body: unknown,
+): Promise<void> {
+  try {
+    const { repositories } = await import('@/server/repositories');
+
+    await repositories.audit.record({
+      actor,
+      action: audit.action,
+      resourceType: audit.resourceType,
+      resourceId: params.id ?? null,
+      metadata: auditMetadata(body),
+    });
+  } catch (error) {
+    console.error('Failed to write audit entry', audit.action, error);
+  }
+}
+
+/**
+ * The request body, minus anything that must not be written down.
+ *
+ * A webhook key arrives in the body of the very route whose mutation is worth
+ * auditing, and an audit log is a plaintext table read by more people than the
+ * encrypted column it was meant to protect.
+ */
+const REDACTED_FIELDS = new Set([
+  'webhookKey',
+  'secret',
+  'token',
+  'password',
+  'text',
+  'html',
+]);
+
+function auditMetadata(body: unknown): Record<string, unknown> {
+  if (typeof body !== 'object' || body === null) return {};
+
+  return Object.fromEntries(
+    Object.entries(body as Record<string, unknown>).map(([key, value]) =>
+      REDACTED_FIELDS.has(key) ? [key, '[redacted]'] : [key, value],
+    ),
+  );
 }
 
 async function readJson(request: Request): Promise<unknown> {

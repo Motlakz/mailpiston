@@ -780,6 +780,125 @@ Deliberately deferred:
 
 ---
 
-## Not started
+## Phase 11 — Hardening · **built, except what needs a deployment**
 
-Phase 11 as written in the roadmap.
+| Deliverable | Where |
+| --- | --- |
+| §24 security pass, item by item | [`security-review.md`](./security-review.md) |
+| Rotation runbooks | [`runbooks.md`](./runbooks.md) |
+| API key management | `/v1/api-keys`, `app/(dashboard)/api-keys/` |
+| Audit log for privileged mutations | `withApi`'s `audit` option, `audit_logs`, Settings page |
+| Encryption-key rotation | `SECRET_ENCRYPTION_KEY_PREVIOUS` fallback in `decryptSecret` |
+| Retention and the pruning job | `server/mail/retention/`, `server/jobs/prune-retained-objects.ts` |
+| Backup/restore procedure | [`runbooks.md`](./runbooks.md) §7 — **written, not performed** |
+| Migration batches and per-batch checklist | [`runbooks.md`](./runbooks.md) §8 |
+
+Migration `0006_odd_juggernaut.sql` adds `email_attachments.pruned_at` and its
+index.
+
+### The security pass found two things missing, not zero
+
+A checklist that comes back all-green on first reading was not a review. Two
+§24 items had no implementation at all:
+
+- **API keys could not be created.** `generateApiKey` and the repository had
+  existed since Phase 1, the auth path read them on every request, and every
+  documented `curl` in this repo used one — but there was no route and no UI.
+  Now `POST /v1/api-keys` returns the plaintext exactly once, and the first key
+  is minted from the dashboard. That bootstrap is intentional: GitHub OAuth
+  behind an allow-list is a stronger front door than any key-issuing endpoint
+  we could leave open.
+- **Nothing wrote to `audit_logs`.** The table had been in the schema since
+  `0000` and was empty by construction.
+
+### The audit log is a route option, not a call
+
+`withApi` takes `audit: { action, resourceType }` and writes the entry after a
+successful handler. Sixteen mutations are marked. Declaring it beside the
+route's other cross-cutting concerns is the point — a handler that has to
+remember to log is a handler that eventually does not, and the ones that forget
+are the ones nobody notices.
+
+Two details that would be bugs the other way round:
+
+- **The body is redacted before it is written.** A webhook key arrives in the
+  body of the very route whose mutation is worth auditing, and an audit log is
+  a plaintext table read by more people than the encrypted column it was meant
+  to protect. Message bodies are redacted too — the audit trail records that a
+  message was sent, not what it said.
+- **A failed audit write never fails the request.** The mutation already
+  happened. Returning an error for work that succeeded makes the caller retry
+  it, turning a logging outage into duplicate domains. A missing entry is a gap
+  in a record; a retried mutation is a change to the system.
+
+### Encryption-key rotation was impossible; now it is a migration
+
+`SECRET_ENCRYPTION_KEY` encrypts every stored webhook key and endpoint signing
+secret. Changing it made all of them undecryptable at once — inbound
+verification and outbound signing both stop, and neither failure looks like a
+key problem.
+
+`decryptSecret` now tries the current key and then
+`SECRET_ENCRYPTION_KEY_PREVIOUS`. GCM authenticates, so a wrong key fails loudly
+rather than returning plausible garbage, which is what makes trying keys in
+order safe. Rotation becomes: set both, re-encrypt, drop the previous one.
+
+### Retention keeps the metadata and deletes the bytes
+
+A pruned attachment keeps its row. "This message had a 4 MB PDF called
+invoice.pdf, and we deleted it on the 3rd" is a complete answer; deleting the
+row instead leaves the operator looking at a message that appears never to have
+had an attachment. The download route answers `410 Gone` with the prune date —
+a `404` would say "there is no such attachment", which is false and sends
+someone looking for a bug.
+
+**Bytes go before the row is marked**, the opposite of the inbound pipeline's
+order and correct for the same reason. Crash after the delete and the row is
+still unmarked, so the next sweep retries — and deleting an object that is
+already gone is a no-op in both drivers, so the retry converges. Marking first
+would leak an object that nothing references and nothing can find.
+
+Both windows default to unset, meaning keep forever. The safe failure for a mail
+archive is keeping too much, and an operator who has not chosen a policy has not
+consented to one.
+
+### Two §24 items are met differently, and say so
+
+- **Internal cron secret** — not implemented as written. Scheduled work runs
+  through Inngest, which signs its invocations, and `/api/inngest` verifies that
+  signature. Strictly stronger than a static bearer token, which is replayable
+  from a log line. A cron secret on top would be a second credential on the
+  same door.
+- **Encrypted environment secrets** — delegated to the platform. What this
+  codebase adds is failing at boot rather than at first use.
+
+Covered by tests (9 in `retention-service.test.ts`): no policy prunes nothing;
+raw MIME pruned past its window and left alone inside it; the parsed message
+surviving a raw-MIME prune; attachment bytes deleted with the metadata row
+kept; an already-pruned attachment skipped; the two policies applied
+independently; a storage failure counted without stopping the sweep and without
+marking the row; and the next sweep recovering it.
+
+Still needs a deployment:
+
+- [ ] A restore from backup has actually been performed, not just documented
+- [ ] Batch 1 runs a week with zero lost messages before Batch 2 starts
+
+Still open, dated, in [`security-review.md`](./security-review.md):
+
+- Spike 0.4, the attachment payload ceiling — unmeasured since 2026-09-05.
+- DNS rebinding between our lookup and `fetch`'s — accepted 2026-09-08.
+- Orphaned storage objects — accepted 2026-09-06; retention now bounds them
+  whenever a policy is set, but a dedicated sweep is still owed.
+
+Deliberately deferred:
+
+- **An orphan sweep.** Retention prunes by age; objects with no row are only
+  collected once they fall outside the window, and never at all if no policy is
+  set.
+- **Re-encrypting stored secrets in place.** Rotation goes through the existing
+  rotate and re-save actions, which is a handful of clicks at this scale. A
+  bulk pass is worth writing when there are enough endpoints to make it tedious.
+- **Audit log pagination in the UI.** The Settings page shows the most recent
+  50; the repository pages properly.
+

@@ -2,6 +2,7 @@ import 'server-only';
 
 import { NeonAddressRepository } from './neon/address-repository';
 import { NeonApiKeyRepository } from './neon/api-key-repository';
+import { NeonAuditRepository } from './neon/audit-repository';
 import { NeonDomainRepository } from './neon/domain-repository';
 import { NeonEmailRepository } from './neon/email-repository';
 import { NeonEventRepository } from './neon/event-repository';
@@ -23,6 +24,7 @@ export const repositories = {
   domains: new NeonDomainRepository(),
   addresses: new NeonAddressRepository(),
   apiKeys: new NeonApiKeyRepository(),
+  audit: new NeonAuditRepository(),
   events: new NeonEventRepository(),
   emails: new NeonEmailRepository(),
   threads: new NeonThreadRepository(),

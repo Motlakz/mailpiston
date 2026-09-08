@@ -36,5 +36,8 @@ export const POST = withApi(
     const summary = await getReconciliationService().run();
     return NextResponse.json({ data: summary }, { status: 201 });
   },
-  { endpoint: '/v1/reconciliation' },
+  {
+    endpoint: '/v1/reconciliation',
+    audit: { action: 'reconciliation.run', resourceType: 'reconciliation' },
+  },
 );

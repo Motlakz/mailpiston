@@ -14,6 +14,7 @@ import { ForwardingService } from './forwarding/forwarding-service';
 import { RelayService } from './forwarding/relay-service';
 import { InboundService } from './inbound/inbound-service';
 import { ReconciliationService } from './reconciliation/reconciliation-service';
+import { RetentionService } from './retention/retention-service';
 import { DefaultThreadResolver } from './threads/thread-resolver';
 import { WebhookService } from './webhooks/webhook-service';
 
@@ -33,6 +34,7 @@ let forwardingService: ForwardingService | undefined;
 let relayService: RelayService | undefined;
 let webhookService: WebhookService | undefined;
 let reconciliationService: ReconciliationService | undefined;
+let retentionService: RetentionService | undefined;
 
 export function getDomainService(): DomainService {
   domainService ??= new DomainService(
@@ -128,6 +130,14 @@ export function getReconciliationService(): ReconciliationService {
   return reconciliationService;
 }
 
+export function getRetentionService(): RetentionService {
+  retentionService ??= new RetentionService(repositories.emails, getStorage, {
+    rawMimeDays: env.RETENTION_RAW_MIME_DAYS,
+    attachmentDays: env.RETENTION_ATTACHMENT_DAYS,
+  });
+  return retentionService;
+}
+
 export function getEndpointService(): EndpointService {
   endpointService ??= new EndpointService(
     repositories.endpoints,
@@ -146,5 +156,6 @@ export {
   OutboundService,
   ReconciliationService,
   RelayService,
+  RetentionService,
   WebhookService,
 };

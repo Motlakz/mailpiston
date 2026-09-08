@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 
 import { NotFoundError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -252,6 +252,60 @@ export class NeonEmailRepository implements EmailRepository {
 
     return row ? toAttachment(row) : null;
   }
+
+  // --- Retention (Phase 11) -------------------------------------------------
+
+  async listPrunableRawMime(
+    before: Date,
+    limit: number,
+  ): Promise<Array<{ id: string; rawStorageKey: string }>> {
+    const rows = await db
+      .select({ id: emails.id, rawStorageKey: emails.rawStorageKey })
+      .from(emails)
+      .where(
+        and(isNotNull(emails.rawStorageKey), lt(emails.createdAt, before)),
+      )
+      .orderBy(asc(emails.createdAt))
+      .limit(limit);
+
+    return rows.filter(
+      (row): row is { id: string; rawStorageKey: string } =>
+        row.rawStorageKey !== null,
+    );
+  }
+
+  async clearRawStorageKey(id: string): Promise<void> {
+    await db
+      .update(emails)
+      .set({ rawStorageKey: null, updatedAt: new Date() })
+      .where(eq(emails.id, id));
+  }
+
+  async listPrunableAttachments(
+    before: Date,
+    limit: number,
+  ): Promise<EmailAttachment[]> {
+    const rows = await db
+      .select()
+      .from(emailAttachments)
+      .where(
+        and(
+          isNull(emailAttachments.prunedAt),
+          lt(emailAttachments.createdAt, before),
+        ),
+      )
+      .orderBy(asc(emailAttachments.createdAt))
+      .limit(limit);
+
+    return rows.map(toAttachment);
+  }
+
+  async markAttachmentPruned(id: string): Promise<void> {
+    await db
+      .update(emailAttachments)
+      .set({ prunedAt: new Date() })
+      .where(eq(emailAttachments.id, id));
+  }
 }
 
 /**
@@ -323,6 +377,7 @@ function toAttachment(row: AttachmentRow): EmailAttachment {
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,
     storageKey: row.storageKey,
+    prunedAt: row.prunedAt,
     createdAt: row.createdAt,
   };
 }

@@ -169,6 +169,8 @@ export interface EmailAttachment {
   contentType: string;
   sizeBytes: number;
   storageKey: string;
+  /** Set once retention removed the bytes; the metadata row stays (Phase 11). */
+  prunedAt: Date | null;
   createdAt: Date;
 }
 
@@ -266,6 +268,18 @@ export interface ReconciliationItem {
   status: ReconciliationItemStatus;
   detail: Record<string, unknown>;
   createdAt: Date;
+}
+
+/** §24 — the audit trail for privileged mutations. */
+export interface AuditEntry {
+  id: string;
+  /** `user:<id>` or `apiKey:<id>` — the same actor identity the limiter uses. */
+  actor: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  metadata: Record<string, unknown>;
+  occurredAt: Date;
 }
 
 export interface ApiKey {

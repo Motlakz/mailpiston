@@ -133,6 +133,34 @@ const envSchema = z.object({
    */
   INNGEST_EVENT_KEY: z.string().min(1).optional(),
   INNGEST_SIGNING_KEY: z.string().min(1).optional(),
+
+  // --- Retention (Phase 11) -------------------------------------------------
+  /**
+   * How long stored bytes live, in days. Unset means forever.
+   *
+   * Unset is the default deliberately: the safe failure for a mail archive is
+   * keeping too much, and an operator who has not decided a retention policy
+   * has not consented to one either. Raw MIME is the larger of the two and the
+   * one worth pruning first — it is a debugging artifact, and the parsed
+   * message stays in Postgres regardless.
+   *
+   * Metadata is never pruned. "This message had a 4 MB PDF called invoice.pdf,
+   * and we deleted it on the 3rd" is a complete answer; a message that appears
+   * never to have had an attachment is not.
+   */
+  RETENTION_RAW_MIME_DAYS: z.coerce.number().int().positive().optional(),
+  RETENTION_ATTACHMENT_DAYS: z.coerce.number().int().positive().optional(),
+
+  // --- Secret rotation (Phase 11) ------------------------------------------
+  /**
+   * The key that was current before the last rotation.
+   *
+   * Set it during a rotation and `decryptSecret` falls back to it, so every
+   * ciphertext written under the old key keeps working while the re-encryption
+   * pass runs. Remove it afterwards — a retired key that stays configured is a
+   * second live key.
+   */
+  SECRET_ENCRYPTION_KEY_PREVIOUS: z.string().min(32).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

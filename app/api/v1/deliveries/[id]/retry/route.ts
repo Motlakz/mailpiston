@@ -20,5 +20,8 @@ export const POST = withApi(
     const result = await getWebhookService().retry(params.id);
     return NextResponse.json({ data: result });
   },
-  { endpoint: '/v1/deliveries' },
+  {
+    endpoint: '/v1/deliveries',
+    audit: { action: 'delivery.retry', resourceType: 'delivery' },
+  },
 );

@@ -16,5 +16,8 @@ export const POST = withApi(
     const secret = await getEndpointService().rotateSecret(params.id);
     return NextResponse.json({ data: { secret } });
   },
-  { endpoint: '/v1/endpoints' },
+  {
+    endpoint: '/v1/endpoints',
+    audit: { action: 'endpoint.secret.rotate', resourceType: 'endpoint' },
+  },
 );

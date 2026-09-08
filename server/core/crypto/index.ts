@@ -42,20 +42,47 @@ export function randomToken(bytes = 32): string {
 
 const ENCRYPTION_VERSION = 'v1';
 
-function encryptionKey(): Buffer {
-  const raw = env.SECRET_ENCRYPTION_KEY;
+function decodeKey(raw: string, name: string): Buffer {
   // Accept hex or base64 so key material can come from either generator.
   const key = /^[0-9a-fA-F]{64}$/.test(raw)
     ? Buffer.from(raw, 'hex')
     : Buffer.from(raw, 'base64');
 
   if (key.length !== 32) {
-    throw new Error(
-      'SECRET_ENCRYPTION_KEY must decode to exactly 32 bytes (hex or base64)',
-    );
+    throw new Error(`${name} must decode to exactly 32 bytes (hex or base64)`);
   }
 
   return key;
+}
+
+function encryptionKey(): Buffer {
+  return decodeKey(env.SECRET_ENCRYPTION_KEY, 'SECRET_ENCRYPTION_KEY');
+}
+
+/**
+ * Every key a ciphertext might have been written under: the current one, then
+ * the previous one if a rotation is in progress.
+ *
+ * Without this, rotating the encryption key is not a migration but an outage —
+ * every stored webhook key and endpoint secret becomes undecryptable the moment
+ * the variable changes, and inbound verification and webhook signing both stop
+ * at once. With it, rotation is: add the old key as `_PREVIOUS`, set the new
+ * one as current, re-encrypt everything, then drop `_PREVIOUS`.
+ */
+function decryptionKeys(): Array<{ key: Buffer; name: string }> {
+  const keys = [{ key: encryptionKey(), name: 'SECRET_ENCRYPTION_KEY' }];
+
+  if (env.SECRET_ENCRYPTION_KEY_PREVIOUS) {
+    keys.push({
+      key: decodeKey(
+        env.SECRET_ENCRYPTION_KEY_PREVIOUS,
+        'SECRET_ENCRYPTION_KEY_PREVIOUS',
+      ),
+      name: 'SECRET_ENCRYPTION_KEY_PREVIOUS',
+    });
+  }
+
+  return keys;
 }
 
 /**
@@ -82,6 +109,14 @@ export function encryptSecret(plaintext: string): string {
   ].join(':');
 }
 
+/**
+ * Decrypts under the current key, falling back to the previous one during a
+ * rotation.
+ *
+ * GCM authenticates, so a wrong key fails loudly rather than returning
+ * plausible garbage — trying keys in order is safe, and the failure of the last
+ * one is the failure reported.
+ */
 export function decryptSecret(value: string): string {
   const [version, ivPart, tagPart, ciphertextPart] = value.split(':');
 
@@ -89,15 +124,55 @@ export function decryptSecret(value: string): string {
     throw new Error('Unrecognised secret ciphertext format');
   }
 
-  const decipher = createDecipheriv(
-    'aes-256-gcm',
-    encryptionKey(),
-    Buffer.from(ivPart, 'base64url'),
-  );
-  decipher.setAuthTag(Buffer.from(tagPart, 'base64url'));
+  const iv = Buffer.from(ivPart, 'base64url');
+  const tag = Buffer.from(tagPart, 'base64url');
+  const ciphertext = Buffer.from(ciphertextPart, 'base64url');
 
-  return Buffer.concat([
-    decipher.update(Buffer.from(ciphertextPart, 'base64url')),
-    decipher.final(),
-  ]).toString('utf8');
+  let lastError: unknown;
+
+  for (const { key } of decryptionKeys()) {
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(tag);
+
+      return Buffer.concat([
+        decipher.update(ciphertext),
+        decipher.final(),
+      ]).toString('utf8');
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(
+    `Could not decrypt with any configured key: ${(lastError as Error)?.message ?? 'unknown error'}`,
+  );
+}
+
+/**
+ * Whether a ciphertext is already under the current key.
+ *
+ * Used by the re-encryption pass so it can be re-run safely: a row already
+ * migrated is skipped rather than decrypted and rewritten, which keeps the pass
+ * idempotent and its progress meaningful.
+ */
+export function isUnderCurrentKey(value: string): boolean {
+  const [version, ivPart, tagPart, ciphertextPart] = value.split(':');
+  if (version !== ENCRYPTION_VERSION || !ivPart || !tagPart || !ciphertextPart) {
+    return false;
+  }
+
+  try {
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      encryptionKey(),
+      Buffer.from(ivPart, 'base64url'),
+    );
+    decipher.setAuthTag(Buffer.from(tagPart, 'base64url'));
+    decipher.update(Buffer.from(ciphertextPart, 'base64url'));
+    decipher.final();
+    return true;
+  } catch {
+    return false;
+  }
 }

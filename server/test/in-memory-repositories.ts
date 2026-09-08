@@ -283,7 +283,13 @@ export class InMemoryEmailRepository implements EmailRepository {
 
     for (const attachment of input.attachments) {
       const id = nextId('att');
-      this.attachments.set(id, { ...attachment, id, emailId: email.id, createdAt: now });
+      this.attachments.set(id, {
+        ...attachment,
+        id,
+        emailId: email.id,
+        prunedAt: null,
+        createdAt: now,
+      });
     }
 
     const event: MailEvent = {
@@ -385,6 +391,43 @@ export class InMemoryEmailRepository implements EmailRepository {
 
   async findAttachment(id: string): Promise<EmailAttachment | null> {
     return this.attachments.get(id) ?? null;
+  }
+
+  // --- Retention ------------------------------------------------------------
+
+  async listPrunableRawMime(
+    before: Date,
+    limit: number,
+  ): Promise<Array<{ id: string; rawStorageKey: string }>> {
+    return [...this.rows.values()]
+      .filter((row) => row.rawStorageKey && row.createdAt < before)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .slice(0, limit)
+      .map((row) => ({ id: row.id, rawStorageKey: row.rawStorageKey! }));
+  }
+
+  async clearRawStorageKey(id: string): Promise<void> {
+    const existing = this.rows.get(id);
+    if (existing) {
+      this.rows.set(id, { ...existing, rawStorageKey: null, updatedAt: new Date() });
+    }
+  }
+
+  async listPrunableAttachments(
+    before: Date,
+    limit: number,
+  ): Promise<EmailAttachment[]> {
+    return [...this.attachments.values()]
+      .filter((row) => !row.prunedAt && row.createdAt < before)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .slice(0, limit);
+  }
+
+  async markAttachmentPruned(id: string): Promise<void> {
+    const existing = this.attachments.get(id);
+    if (existing) {
+      this.attachments.set(id, { ...existing, prunedAt: new Date() });
+    }
   }
 }
 

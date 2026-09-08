@@ -286,9 +286,22 @@ export const emailAttachments = pgTable(
     contentType: text('content_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     storageKey: text('storage_key').notNull(),
+    /**
+     * When retention removed the bytes (Phase 11).
+     *
+     * The row survives its content on purpose: "this message had a 4 MB PDF
+     * called invoice.pdf, and we deleted it on the 3rd" is a complete answer,
+     * and deleting the row instead would leave the operator looking at a
+     * message that appears never to have had an attachment at all.
+     */
+    prunedAt: timestamp('pruned_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (table) => [index('email_attachments_email_id_idx').on(table.emailId)],
+  (table) => [
+    index('email_attachments_email_id_idx').on(table.emailId),
+    // The retention sweep scans oldest-first for rows not yet pruned.
+    index('email_attachments_pruned_at_idx').on(table.prunedAt, table.createdAt),
+  ],
 );
 
 /** §4.7 */

@@ -491,3 +491,83 @@ still works after a domain has been recreated at the provider.
 
 In the Inngest dev dashboard, `reconcile-provider` appears with its `0 */6 * * *`
 schedule and can be triggered by hand from the Functions tab.
+
+---
+
+## 9. Keys, audit, and retention (Phase 11)
+
+### Mint the first API key
+
+Everything above that says `Authorization: Bearer $MAILPISTON_API_KEY` needs
+one, and the first has to come from the dashboard — `/api-keys`, "Create key".
+That bootstrap is intentional: operator sign-in is GitHub OAuth behind an
+allow-list, which is a stronger front door than any key-issuing endpoint we
+could leave open.
+
+After that, over the API:
+
+```bash
+curl -sS -X POST "$APP/api/v1/api-keys" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY" \
+  -d '{"name":"deploy script"}'
+```
+
+The `key` in that response is the only time it exists in readable form. Revoke:
+
+```bash
+curl -sS -X DELETE "$APP/api/v1/api-keys/$KEY_ID" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+Revocation takes effect on the very next request — nothing about a key is
+cached. Verify by re-running any authenticated call with the revoked key and
+confirming a 401.
+
+### Check the audit trail
+
+Create a domain, rotate an endpoint secret, then open `/settings`. Both appear
+with the actor, the action, and the resource id.
+
+Two things worth confirming by eye:
+
+- **Secrets are redacted.** Set a domain webhook key and check the entry says
+  `"webhookKey": "[redacted]"`. Send an email and confirm no message body was
+  written down.
+- **A failed audit write does not fail the mutation.** The write is
+  fire-and-forget by design; a logging outage must not turn into duplicate
+  domains when the caller retries.
+
+### Retention
+
+Set a short window locally to watch it work:
+
+```text
+RETENTION_RAW_MIME_DAYS=1
+```
+
+Then trigger `prune-retained-objects` from the Inngest dev dashboard rather
+than waiting for 03:00 UTC. Expect the raw MIME objects to be gone from
+`.mailpiston-storage/raw/` and `raw_storage_key` to be null — while the message
+itself still opens in the Inbox with its subject and body intact.
+
+For attachments, confirm the metadata survives its content: the attachment is
+still listed with its filename and size, and downloading it returns **410
+Gone** with the prune date rather than a 404.
+
+Before setting a policy against real data, check what it will remove — there is
+no undo:
+
+```sql
+SELECT count(*), pg_size_pretty(sum(size_bytes))
+FROM email_attachments
+WHERE pruned_at IS NULL AND created_at < now() - interval '365 days';
+```
+
+### Rotating the encryption key
+
+See [`runbooks.md`](./runbooks.md) §1. The short version: set
+`SECRET_ENCRYPTION_KEY_PREVIOUS` to the old key and `SECRET_ENCRYPTION_KEY` to
+the new one, re-save every domain webhook key and rotate every endpoint secret,
+then drop `_PREVIOUS`. Verify with one signed inbound delivery and one webhook
+test delivery — both exercise a decrypt.
