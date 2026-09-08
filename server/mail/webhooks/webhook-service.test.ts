@@ -14,6 +14,8 @@ import {
 import { MAILPISTON_HEADERS, verifyWebhook } from '@/sdk/src/signing';
 import type { MailpistonWebhookEvent } from '@/sdk/src/payload';
 
+import { MAX_ATTEMPTS, RETRY_DELAYS_MS } from './retry-schedule';
+import { noRetryScheduler, type RetryScheduler } from './retry-scheduler';
 import { WebhookService } from './webhook-service';
 
 const DOMAIN = 'fixture-domain.test';
@@ -52,13 +54,35 @@ function recordingFetch(
   return { impl, calls };
 }
 
-function serviceWith(fetchImpl: typeof fetch): WebhookService {
+/** Records what the retry engine was asked to schedule, without running one. */
+function recordingScheduler() {
+  const scheduled: Array<{ deliveryId: string; attempt: number; delayMs: number }> =
+    [];
+
+  return {
+    scheduled,
+    scheduler: {
+      async scheduleRetry(input: {
+        deliveryId: string;
+        attempt: number;
+        delayMs: number;
+      }) {
+        scheduled.push(input);
+      },
+    } satisfies RetryScheduler,
+  };
+}
+
+function serviceWith(
+  fetchImpl: typeof fetch,
+  scheduler: RetryScheduler = noRetryScheduler,
+): WebhookService {
   return new WebhookService(
     endpoints,
     deliveries,
     emails,
     events,
-    { timeoutMs: 500 },
+    { timeoutMs: 500, scheduler },
     fetchImpl,
   );
 }
@@ -433,11 +457,10 @@ describe('test delivery', () => {
   });
 });
 
-describe('retry surface', () => {
+describe('retries', () => {
   it('re-attempts a pending delivery and can succeed the second time', async () => {
-    // Phase 8 drives this behind an atomic claim. What matters here is that the
-    // payload is rebuilt from the event, so the event id a receiver dedupes on
-    // survives the retry unchanged.
+    // The payload is rebuilt from the event rather than replayed, so the event
+    // id a receiver deduplicates on survives the retry unchanged.
     const failing = recordingFetch(() => new Response('down', { status: 502 }));
     await serviceWith(failing.impl).dispatch({ email, address, event });
 
@@ -447,7 +470,7 @@ describe('retry surface', () => {
     const succeeding = recordingFetch(() => new Response('ok', { status: 200 }));
     const outcome = await serviceWith(succeeding.impl).attempt(pending.id);
 
-    expect(outcome.ok).toBe(true);
+    expect(outcome.skipped).toBe(false);
 
     const payload = JSON.parse(
       succeeding.calls[0].init.body as string,
@@ -457,5 +480,156 @@ describe('retry surface', () => {
     const [row] = await deliveries.listForEndpoint(endpointId);
     expect(row.status).toBe('delivered');
     expect(row.attempt).toBe(2);
+  });
+
+  it('schedules the next attempt on the documented curve', async () => {
+    const { impl } = recordingFetch(() => new Response('down', { status: 502 }));
+    const retry = recordingScheduler();
+
+    await serviceWith(impl, retry.scheduler).dispatch({ email, address, event });
+
+    expect(retry.scheduled).toHaveLength(1);
+    expect(retry.scheduled[0].attempt).toBe(2);
+    // 30s, ±15% jitter.
+    expect(retry.scheduled[0].delayMs).toBeGreaterThan(RETRY_DELAYS_MS[1] * 0.8);
+    expect(retry.scheduled[0].delayMs).toBeLessThan(RETRY_DELAYS_MS[1] * 1.2);
+  });
+
+  it('schedules nothing when the delivery succeeds', async () => {
+    const { impl } = recordingFetch(() => new Response('ok', { status: 200 }));
+    const retry = recordingScheduler();
+
+    await serviceWith(impl, retry.scheduler).dispatch({ email, address, event });
+
+    expect(retry.scheduled).toEqual([]);
+  });
+
+  it('stops after the last attempt and marks the delivery failed', async () => {
+    // The chain has to end by itself. A schedule that kept emitting events
+    // would retry a dead endpoint forever, and the delivery log would never
+    // show anyone a final answer.
+    const { impl, calls } = recordingFetch(() => new Response('down', { status: 502 }));
+    const retry = recordingScheduler();
+    const service = serviceWith(impl, retry.scheduler);
+
+    await service.dispatch({ email, address, event });
+    const [delivery] = await deliveries.listForEndpoint(endpointId);
+
+    for (let n = 2; n <= MAX_ATTEMPTS; n += 1) {
+      await service.attempt(delivery.id);
+    }
+
+    expect(calls).toHaveLength(MAX_ATTEMPTS);
+    // One schedule per failure except the last, which has nothing left to book.
+    expect(retry.scheduled).toHaveLength(MAX_ATTEMPTS - 1);
+
+    const [row] = await deliveries.listForEndpoint(endpointId);
+    expect(row.status).toBe('failed');
+    expect(row.attempt).toBe(MAX_ATTEMPTS);
+
+    const final = events.rows.filter((e) => e.type === 'webhook.failed').at(-1);
+    expect(final?.metadata.final).toBe(true);
+  });
+
+  it('refuses to attempt a delivery that has finally failed', async () => {
+    const { impl } = recordingFetch(() => new Response('down', { status: 502 }));
+    const service = serviceWith(impl);
+
+    await service.dispatch({ email, address, event });
+    const [delivery] = await deliveries.listForEndpoint(endpointId);
+
+    for (let n = 2; n <= MAX_ATTEMPTS; n += 1) {
+      await service.attempt(delivery.id);
+    }
+
+    // A stray duplicate event arriving after the schedule gave up must not
+    // resurrect the delivery.
+    const late = await service.attempt(delivery.id);
+
+    expect(late).toEqual({
+      skipped: true,
+      reason: 'already-claimed-or-complete',
+    });
+  });
+
+  it('refuses a second attempt while one is in flight', async () => {
+    // Two Inngest executions of the same event. Whoever claims the row
+    // delivers; the other must stop, and must not send.
+    const { impl, calls } = recordingFetch(() => new Response('ok', { status: 200 }));
+    const service = serviceWith(impl);
+
+    await service.dispatch({ email, address, event });
+    const [delivered] = await deliveries.listForEndpoint(endpointId);
+    expect(delivered.status).toBe('delivered');
+
+    const again = await service.attempt(delivered.id);
+
+    expect(again).toEqual({
+      skipped: true,
+      reason: 'already-claimed-or-complete',
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reclaims a delivery whose lease expired mid-attempt', async () => {
+    // A function that died holding a claim would otherwise strand the row in
+    // `delivering` forever — no retry could touch it, and the log would show it
+    // perpetually in flight.
+    const { impl } = recordingFetch(() => new Response('ok', { status: 200 }));
+
+    const { delivery } = await deliveries.enqueue({
+      endpointId,
+      eventId: event.id,
+      recipientId: null,
+    });
+
+    await deliveries.claim(delivery.id, 'run_dead', -1_000);
+    expect((await deliveries.findById(delivery.id))?.status).toBe('delivering');
+
+    const outcome = await serviceWith(impl).attempt(delivery.id);
+
+    expect(outcome.skipped).toBe(false);
+    expect((await deliveries.findById(delivery.id))?.status).toBe('delivered');
+  });
+});
+
+describe('manual retry', () => {
+  it('requeues a finally-failed delivery and delivers it', async () => {
+    const failing = recordingFetch(() => new Response('down', { status: 502 }));
+    const service = serviceWith(failing.impl);
+
+    await service.dispatch({ email, address, event });
+    const [delivery] = await deliveries.listForEndpoint(endpointId);
+
+    for (let n = 2; n <= MAX_ATTEMPTS; n += 1) {
+      await service.attempt(delivery.id);
+    }
+    expect((await deliveries.findById(delivery.id))?.status).toBe('failed');
+
+    const succeeding = recordingFetch(() => new Response('ok', { status: 200 }));
+    const outcome = await serviceWith(succeeding.impl).retry(delivery.id);
+
+    expect(outcome.skipped).toBe(false);
+    expect((await deliveries.findById(delivery.id))?.status).toBe('delivered');
+    expect(succeeding.calls).toHaveLength(1);
+  });
+
+  it('does not re-send a delivery the receiver already acknowledged', async () => {
+    const { impl, calls } = recordingFetch(() => new Response('ok', { status: 200 }));
+    const service = serviceWith(impl);
+
+    await service.dispatch({ email, address, event });
+    const [delivered] = await deliveries.listForEndpoint(endpointId);
+
+    const outcome = await service.retry(delivered.id);
+
+    expect(outcome).toEqual({ skipped: true, reason: 'not-retryable' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('404s on a delivery that does not exist', async () => {
+    const { impl } = recordingFetch(() => new Response('ok', { status: 200 }));
+
+    await expect(serviceWith(impl).retry('dlv_nope')).rejects.toThrow(/not found/);
   });
 });

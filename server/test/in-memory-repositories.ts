@@ -697,8 +697,57 @@ export class InMemoryDeliveryRepository implements DeliveryRepository {
     return this.rows.get(id) ?? null;
   }
 
-  async claim(): Promise<EndpointDelivery | null> {
-    throw new Error('claim lands in Phase 8');
+  /**
+   * The same transition the Neon `UPDATE … WHERE status IN (…) RETURNING *`
+   * makes, reproduced exactly: `pending`, or `delivering` with an expired
+   * lease, and never `failed`. A fake that let anything be claimed would make
+   * the double-delivery tests pass for the wrong reason.
+   */
+  async claim(
+    id: string,
+    leaseOwner: string,
+    leaseMs: number,
+  ): Promise<EndpointDelivery | null> {
+    const existing = this.rows.get(id);
+    if (!existing) return null;
+
+    const now = new Date();
+    const leaseExpired =
+      existing.status === 'delivering' &&
+      existing.leaseExpiresAt !== null &&
+      existing.leaseExpiresAt.getTime() < now.getTime();
+
+    if (existing.status !== 'pending' && !leaseExpired) return null;
+
+    const claimed: EndpointDelivery = {
+      ...existing,
+      status: 'delivering',
+      leaseOwner,
+      leaseExpiresAt: new Date(now.getTime() + leaseMs),
+      updatedAt: now,
+    };
+
+    this.rows.set(id, claimed);
+    return claimed;
+  }
+
+  async requeue(id: string): Promise<EndpointDelivery | null> {
+    const existing = this.rows.get(id);
+    if (!existing) return null;
+    if (existing.status !== 'failed' && existing.status !== 'pending') return null;
+
+    const now = new Date();
+    const requeued: EndpointDelivery = {
+      ...existing,
+      status: 'pending',
+      nextAttemptAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      updatedAt: now,
+    };
+
+    this.rows.set(id, requeued);
+    return requeued;
   }
 
   async markDelivered(id: string, responseCode: number): Promise<void> {
@@ -712,6 +761,8 @@ export class InMemoryDeliveryRepository implements DeliveryRepository {
       responseCode,
       lastError: null,
       deliveredAt: new Date(),
+      leaseOwner: null,
+      leaseExpiresAt: null,
       updatedAt: new Date(),
     });
   }
@@ -731,7 +782,11 @@ export class InMemoryDeliveryRepository implements DeliveryRepository {
       attempt: existing.attempt + 1,
       responseCode,
       lastError: error.slice(0, 2000),
+      // Left untouched on a final failure; `status` is what says there is no
+      // next attempt.
       nextAttemptAt: nextAttemptAt ?? existing.nextAttemptAt,
+      leaseOwner: null,
+      leaseExpiresAt: null,
       updatedAt: new Date(),
     });
   }

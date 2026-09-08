@@ -482,6 +482,40 @@ const STATUS_CLASS: Record<string, string> = {
 
 /** Status, response code, last error, attempt count — plan §13's delivery log. */
 export function DeliveryLog({ deliveries }: { deliveries: DeliveryRow[] }) {
+  const router = useRouter();
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  /**
+   * Routed through the same claim path a scheduled retry uses. It is not a
+   * shortcut — an operator presses this exactly when a retry is due, and a path
+   * that skipped the claim would be the easiest way to deliver twice.
+   */
+  async function retry(deliveryId: string) {
+    setError(null);
+    setNote(null);
+
+    try {
+      const result = await apiRequest<{ skipped: boolean; ok?: boolean }>(
+        `/api/v1/deliveries/${deliveryId}/retry`,
+        { method: 'POST' },
+      );
+
+      setNote(
+        result.skipped
+          ? 'Nothing to retry — already delivered, or in flight.'
+          : result.ok
+            ? 'Delivered.'
+            : 'Still failing. Check the last error.',
+      );
+
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
+
   if (deliveries.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -491,43 +525,61 @@ export function DeliveryLog({ deliveries }: { deliveries: DeliveryRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs">
-        <thead className="text-muted-foreground">
-          <tr>
-            <th className="py-1 pr-4 font-normal">When</th>
-            <th className="py-1 pr-4 font-normal">Status</th>
-            <th className="py-1 pr-4 font-normal">Code</th>
-            <th className="py-1 pr-4 font-normal">Attempts</th>
-            <th className="py-1 font-normal">Last error</th>
-          </tr>
-        </thead>
-        <tbody>
-          {deliveries.map((delivery) => (
-            <tr key={delivery.id} className="border-t border-border align-top">
-              <td className="py-1.5 pr-4 whitespace-nowrap text-muted-foreground">
-                {new Date(delivery.createdAt).toLocaleString()}
-              </td>
-              <td className="py-1.5 pr-4">
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                    STATUS_CLASS[delivery.status] ?? 'border-border'
-                  }`}
-                >
-                  {delivery.status}
-                </span>
-              </td>
-              <td className="py-1.5 pr-4 font-mono">
-                {delivery.responseCode ?? '—'}
-              </td>
-              <td className="py-1.5 pr-4 font-mono">{delivery.attempt}</td>
-              <td className="max-w-md py-1.5 break-all text-muted-foreground">
-                {delivery.lastError ?? '—'}
-              </td>
+    <div className="flex flex-col gap-2">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead className="text-muted-foreground">
+            <tr>
+              <th className="py-1 pr-4 font-normal">When</th>
+              <th className="py-1 pr-4 font-normal">Status</th>
+              <th className="py-1 pr-4 font-normal">Code</th>
+              <th className="py-1 pr-4 font-normal">Attempts</th>
+              <th className="py-1 pr-4 font-normal">Last error</th>
+              <th className="py-1 font-normal" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {deliveries.map((delivery) => (
+              <tr key={delivery.id} className="border-t border-border align-top">
+                <td className="py-1.5 pr-4 whitespace-nowrap text-muted-foreground">
+                  {new Date(delivery.createdAt).toLocaleString()}
+                </td>
+                <td className="py-1.5 pr-4">
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                      STATUS_CLASS[delivery.status] ?? 'border-border'
+                    }`}
+                  >
+                    {delivery.status}
+                  </span>
+                </td>
+                <td className="py-1.5 pr-4 font-mono">
+                  {delivery.responseCode ?? '—'}
+                </td>
+                <td className="py-1.5 pr-4 font-mono">{delivery.attempt}</td>
+                <td className="max-w-md py-1.5 pr-4 break-all text-muted-foreground">
+                  {delivery.lastError ?? '—'}
+                </td>
+                <td className="py-1.5">
+                  {delivery.status === 'delivered' ? null : (
+                    <button
+                      type="button"
+                      onClick={() => retry(delivery.id)}
+                      disabled={pending}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Retry
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

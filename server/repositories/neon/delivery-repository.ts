@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
 
 import { APIError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -76,18 +76,84 @@ export class NeonDeliveryRepository implements DeliveryRepository {
   }
 
   /**
-   * The atomic claim lands with the retry engine (roadmap Phase 8).
+   * The atomic state transition from plan §15.5.
    *
-   * Phase 7 needs no lease: `enqueue` already elects a single deliverer for the
-   * synchronous first attempt. A half-built claim that looked usable would be
-   * the more dangerous thing to leave lying around.
+   * One statement, so there is no window between deciding a row is claimable
+   * and claiming it. Whoever gets the row back owns the attempt; everyone else
+   * gets `null` and stops. That is what stops two Inngest executions, or an
+   * Inngest execution and an operator's manual retry, from delivering the same
+   * event twice.
+   *
+   * The expired-lease branch is the difference between this and the plan's
+   * version. A function that dies mid-attempt leaves the row `delivering` with
+   * a lease nobody holds, and without that branch the delivery is stuck there
+   * permanently — no retry can touch it, and the log shows it perpetually in
+   * flight.
    */
-  claim(): Promise<EndpointDelivery | null> {
-    throw new APIError(
-      'DeliveryRepository.claim is not implemented yet — lands in Phase 8 (retries)',
-      501,
-      'NOT_IMPLEMENTED',
-    );
+  async claim(
+    id: string,
+    leaseOwner: string,
+    leaseMs: number,
+  ): Promise<EndpointDelivery | null> {
+    const now = new Date();
+
+    const [row] = await db
+      .update(endpointDeliveries)
+      .set({
+        status: 'delivering',
+        leaseOwner,
+        leaseExpiresAt: new Date(now.getTime() + leaseMs),
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(endpointDeliveries.id, id),
+          or(
+            eq(endpointDeliveries.status, 'pending'),
+            and(
+              eq(endpointDeliveries.status, 'delivering'),
+              lt(endpointDeliveries.leaseExpiresAt, now),
+            ),
+          ),
+        ),
+      )
+      .returning();
+
+    return row ? toDelivery(row) : null;
+  }
+
+  /**
+   * Puts a delivery back in the queue, due now.
+   *
+   * Accepts `failed` — the whole point of a manual retry — and `pending`, which
+   * covers a delivery whose scheduled event was lost. It does not accept
+   * `delivered`: re-sending a webhook the receiver already acknowledged is not
+   * a retry, it is a duplicate.
+   */
+  async requeue(id: string): Promise<EndpointDelivery | null> {
+    const now = new Date();
+
+    const [row] = await db
+      .update(endpointDeliveries)
+      .set({
+        status: 'pending',
+        nextAttemptAt: now,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(endpointDeliveries.id, id),
+          or(
+            eq(endpointDeliveries.status, 'failed'),
+            eq(endpointDeliveries.status, 'pending'),
+          ),
+        ),
+      )
+      .returning();
+
+    return row ? toDelivery(row) : null;
   }
 
   async markDelivered(id: string, responseCode: number): Promise<void> {
@@ -126,7 +192,11 @@ export class NeonDeliveryRepository implements DeliveryRepository {
         // Truncated: a downstream 500 page can be an entire HTML document, and
         // the useful part is always at the front.
         lastError: error.slice(0, 2000),
-        nextAttemptAt: nextAttemptAt ?? new Date(),
+        // On a final failure the column is left as it was. The plan asks for
+        // NULL here (§15.6), but the column is NOT NULL and `status = 'failed'`
+        // already says there is no next attempt — the due index is keyed on
+        // status first, so nothing will ever read it.
+        ...(nextAttemptAt ? { nextAttemptAt } : {}),
         leaseOwner: null,
         leaseExpiresAt: null,
         updatedAt: new Date(),

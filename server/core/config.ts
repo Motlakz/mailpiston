@@ -119,6 +119,20 @@ const envSchema = z.object({
    * disabled it in production would be the entire vulnerability.
    */
   WEBHOOK_ALLOW_INSECURE_TARGETS: booleanish.default(false),
+
+  // --- Retry engine (Phase 8) ----------------------------------------------
+  /**
+   * Inngest owns the *timing* of retries; Neon stays the source of truth for
+   * their state (plan §15).
+   *
+   * Both keys are optional here so the Inngest dev server — which needs
+   * neither — works out of the box, and mandatory in production below. A
+   * deployment whose retry engine silently does nothing is worse than one that
+   * refuses to start: failed deliveries would accumulate as `pending` rows that
+   * nothing ever picks up, and the symptom is "the webhook just never fired".
+   */
+  INNGEST_EVENT_KEY: z.string().min(1).optional(),
+  INNGEST_SIGNING_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -156,6 +170,20 @@ function loadEnv(): Env {
       'WEBHOOK_ALLOW_INSECURE_TARGETS cannot be used in production: it lets a ' +
         'configured endpoint URL reach loopback and private addresses.',
     );
+  }
+
+  if (parsed.data.NODE_ENV === 'production') {
+    const missing = (
+      ['INNGEST_EVENT_KEY', 'INNGEST_SIGNING_KEY'] as const
+    ).filter((key) => !parsed.data[key]);
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Production requires ${missing.join(', ')}: without them webhook ` +
+          'deliveries that fail are never retried, and the only symptom is a ' +
+          'delivery that never arrives.',
+      );
+    }
   }
 
   // The API token is optional in the schema so `mock` can run with no Forward

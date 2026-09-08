@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { env } from '@/server/core/config';
+import { inngestRetryScheduler } from '@/server/jobs/inngest-scheduler';
 import { mailProviderRegistry } from '@/server/providers/registry';
 import { repositories } from '@/server/repositories';
 import { getStorage } from '@/server/storage';
@@ -107,7 +108,10 @@ export function getWebhookService(): WebhookService {
     repositories.deliveries,
     repositories.emails,
     repositories.events,
-    { timeoutMs: env.WEBHOOK_TIMEOUT_MS },
+    {
+      timeoutMs: env.WEBHOOK_TIMEOUT_MS,
+      scheduler: inngestRetryScheduler,
+    },
   );
   return webhookService;
 }

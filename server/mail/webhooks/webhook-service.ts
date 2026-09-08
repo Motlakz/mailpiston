@@ -2,10 +2,13 @@ import 'server-only';
 
 import { decryptSecret } from '@/server/core/crypto';
 import { NotFoundError, ValidationError } from '@/server/core/errors';
+import { newId } from '@/server/core/ids';
 import type {
   AddressWithDomain,
   Email,
+  EmailAttachment,
   Endpoint,
+  EndpointDelivery,
   EndpointWebhookConfig,
   MailEvent,
 } from '@/server/core/types';
@@ -19,26 +22,28 @@ import type { MailpistonWebhookEvent } from '@/sdk/src/payload';
 import { MAILPISTON_HEADERS, signPayload } from '@/sdk/src/signing';
 
 import { buildWebhookPayload, webhookEventTypeFor } from './payload';
+import { retryDelayMs } from './retry-schedule';
+import type { RetryScheduler } from './retry-scheduler';
 import { assertSafeWebhookUrl } from './url-guard';
 
 /**
- * Webhook delivery (roadmap Phase 7, plan §13–§14).
+ * Webhook delivery (roadmap Phases 7–8, plan §13–§15).
  *
- * One attempt, synchronously, on the ingest path — and then it stops. A failure
- * records a `pending` delivery and nothing else; the retry schedule is Phase
- * 8's, and a loop built here would be a second scheduler to reconcile with it
- * later.
+ * Every attempt — the synchronous first one on the ingest path, a scheduled
+ * retry, and an operator's manual retry — goes through the same claimed path.
+ * That is the single most important property here: three entry points that each
+ * did their own state handling would eventually disagree, and the way they
+ * would disagree is by delivering twice.
  *
- * Three properties this file exists to guarantee:
+ * Three other properties this file exists to guarantee:
  *
  * **Ingress never fails because a receiver did.** The message is already
  * durable when this runs. Turning a customer's 500 into a non-200 for the mail
  * provider would make the provider retry a delivery we already hold, and the
  * retry would deduplicate — costing the operator the mail itself.
  *
- * **Exactly one deliverer per (event, endpoint).** `enqueue` is the election:
- * whoever inserts the row delivers, and a concurrent second ingest of the same
- * event gets `created: false` and does nothing.
+ * **Exactly one deliverer per (event, endpoint).** `enqueue` elects it by
+ * constraint, and `claim` re-elects it on every subsequent attempt.
  *
  * **The URL is re-checked immediately before the request.** A host that
  * resolved publicly at configuration time can be repointed at loopback
@@ -51,6 +56,14 @@ export interface WebhookDeliveryOutcome {
   error: string | null;
 }
 
+export type AttemptResult =
+  | ({ skipped: false } & WebhookDeliveryOutcome)
+  | { skipped: true; reason: AttemptSkipReason };
+
+export type AttemptSkipReason =
+  | 'already-claimed-or-complete'
+  | 'not-retryable';
+
 export interface DispatchResult {
   delivered: number;
   failed: number;
@@ -58,8 +71,32 @@ export interface DispatchResult {
   skipped: number;
 }
 
+export interface WebhookServiceOptions {
+  timeoutMs: number;
+  /**
+   * Required, not defaulted. A deployment that ends up never retrying should
+   * have had to write that down.
+   */
+  scheduler: RetryScheduler;
+}
+
 /** How much of a failing response is worth keeping in the delivery log. */
 const ERROR_EXCERPT = 500;
+
+/**
+ * How long past the request timeout a claim stays held.
+ *
+ * Long enough that a slow-but-alive attempt is never stolen mid-flight, short
+ * enough that a process which died holding one is not stranded for long.
+ */
+const LEASE_GRACE_MS = 30_000;
+
+/** Everything a delivery needs, when the caller already has it loaded. */
+interface DeliveryContext {
+  event: MailEvent;
+  email: Email;
+  attachments: EmailAttachment[];
+}
 
 export class WebhookService {
   constructor(
@@ -67,7 +104,7 @@ export class WebhookService {
     private readonly deliveries: DeliveryRepository,
     private readonly emails: EmailRepository,
     private readonly events: EventRepository,
-    private readonly options: { timeoutMs: number },
+    private readonly options: WebhookServiceOptions,
     private readonly fetchImpl: typeof fetch = globalThis.fetch,
   ) {}
 
@@ -93,18 +130,36 @@ export class WebhookService {
 
     if (bound.length === 0) return result;
 
-    const attachments = await this.emails.listAttachments(input.email.id);
-    const payload = buildWebhookPayload({
+    // Loaded once and shared across endpoints. The delivery path can load this
+    // for itself, so a retry needs nothing from here — this only avoids reading
+    // the same message once per endpoint.
+    const context: DeliveryContext = {
       event: input.event,
       email: input.email,
-      attachments,
-      type,
-    });
+      attachments: await this.emails.listAttachments(input.email.id),
+    };
 
     for (const endpoint of bound) {
-      const outcome = await this.deliverTo(endpoint, input.event, payload);
+      const { delivery, created } = await this.deliveries.enqueue({
+        endpointId: endpoint.id,
+        eventId: input.event.id,
+        recipientId: null,
+      });
 
-      if (!outcome) result.skipped += 1;
+      if (!created) {
+        result.skipped += 1;
+        continue;
+      }
+
+      await this.events.create({
+        emailId: input.event.emailId,
+        type: 'webhook.queued',
+        metadata: { endpointId: endpoint.id, deliveryId: delivery.id },
+      });
+
+      const outcome = await this.attemptDelivery(delivery.id, context);
+
+      if (outcome.skipped) result.skipped += 1;
       else if (outcome.ok) result.delivered += 1;
       else result.failed += 1;
     }
@@ -113,52 +168,36 @@ export class WebhookService {
   }
 
   /**
-   * Re-attempts an existing delivery, rebuilding its payload from the event.
+   * One scheduled attempt. This is what the Inngest retry function calls.
    *
-   * Rebuilt rather than stored: attachment download URLs and the app origin can
-   * both move, and a payload frozen at first attempt would hand a receiver URLs
-   * that no longer resolve. The event id — the thing a receiver deduplicates on
-   * — is what stays fixed.
-   *
-   * Phase 8 calls this behind its atomic claim; it does no locking of its own.
+   * It claims before it does anything else, so a duplicate event, a re-run
+   * function, and a concurrent manual retry all collapse into one delivery.
    */
-  async attempt(deliveryId: string): Promise<WebhookDeliveryOutcome> {
-    const delivery = await this.deliveries.findById(deliveryId);
-    if (!delivery) throw new NotFoundError(`Delivery ${deliveryId} not found`);
+  async attempt(deliveryId: string): Promise<AttemptResult> {
+    const existing = await this.deliveries.findById(deliveryId);
+    if (!existing) throw new NotFoundError(`Delivery ${deliveryId} not found`);
 
-    const [endpoint, event] = await Promise.all([
-      this.endpoints.findById(delivery.endpointId),
-      this.events.findById(delivery.eventId),
-    ]);
+    return this.attemptDelivery(deliveryId);
+  }
 
-    if (!endpoint) {
-      throw new NotFoundError(`Endpoint ${delivery.endpointId} not found`);
-    }
-    if (!event) throw new NotFoundError(`Event ${delivery.eventId} not found`);
+  /**
+   * Manual retry from the delivery log.
+   *
+   * Requeues first, then goes through the identical claim path — it does not
+   * get a shortcut past it. A "retry now" button that bypassed the claim would
+   * be the easiest way in the entire system to deliver the same event twice,
+   * because the operator presses it exactly when a scheduled retry is due.
+   */
+  async retry(deliveryId: string): Promise<AttemptResult> {
+    const existing = await this.deliveries.findById(deliveryId);
+    if (!existing) throw new NotFoundError(`Delivery ${deliveryId} not found`);
 
-    const type = webhookEventTypeFor(event.type);
-    if (!type) {
-      throw new ValidationError(
-        `Event ${event.type} is not deliverable to a webhook`,
-      );
-    }
+    const requeued = await this.deliveries.requeue(deliveryId);
 
-    const email = event.emailId
-      ? await this.emails.findById(event.emailId)
-      : null;
+    // Already delivered, or in flight right now. Neither is worth re-sending.
+    if (!requeued) return { skipped: true, reason: 'not-retryable' };
 
-    if (!email) {
-      throw new NotFoundError(`Event ${event.id} has no email to deliver`);
-    }
-
-    const payload = buildWebhookPayload({
-      event,
-      email,
-      attachments: await this.emails.listAttachments(email.id),
-      type,
-    });
-
-    return this.send(delivery.id, endpoint, event, payload);
+    return this.attemptDelivery(deliveryId);
   }
 
   /**
@@ -185,109 +224,182 @@ export class WebhookService {
     };
   }
 
-  // --- Internals ------------------------------------------------------------
+  // --- The one delivery path ------------------------------------------------
 
-  /** Returns null when another ingest already owns this delivery. */
-  private async deliverTo(
-    endpoint: Endpoint,
-    event: MailEvent,
-    payload: MailpistonWebhookEvent,
-  ): Promise<WebhookDeliveryOutcome | null> {
-    const { delivery, created } = await this.deliveries.enqueue({
-      endpointId: endpoint.id,
-      eventId: event.id,
-      recipientId: null,
-    });
-
-    if (!created) return null;
-
-    await this.events.create({
-      emailId: event.emailId,
-      type: 'webhook.queued',
-      metadata: { endpointId: endpoint.id, deliveryId: delivery.id },
-    });
-
-    return this.send(delivery.id, endpoint, event, payload);
-  }
-
-  private async send(
+  private async attemptDelivery(
     deliveryId: string,
-    endpoint: Endpoint,
-    event: MailEvent,
-    payload: MailpistonWebhookEvent,
-  ): Promise<WebhookDeliveryOutcome> {
+    preloaded?: DeliveryContext,
+  ): Promise<AttemptResult> {
+    const claimed = await this.deliveries.claim(
+      deliveryId,
+      newId('run'),
+      this.options.timeoutMs + LEASE_GRACE_MS,
+    );
+
+    if (!claimed) return { skipped: true, reason: 'already-claimed-or-complete' };
+
+    const context = preloaded ?? (await this.loadContext(claimed));
+
+    // Nothing left to deliver — the message, event, or endpoint is gone. This
+    // is terminal rather than an exception: throwing would leave the row
+    // `delivering` until its lease expired, and every later attempt would
+    // rediscover the same missing row and strand it again.
+    if (!context) {
+      return {
+        skipped: false,
+        ...(await this.recordFailure(
+          claimed,
+          null,
+          null,
+          'The message this delivery refers to no longer exists',
+          null,
+        )),
+      };
+    }
+
+    const endpoint = await this.endpoints.findById(claimed.endpointId);
+    const type = webhookEventTypeFor(context.event.type);
+
+    if (!endpoint || !type) {
+      return {
+        skipped: false,
+        ...(await this.recordFailure(
+          claimed,
+          context.event,
+          null,
+          endpoint
+            ? `Event ${context.event.type} is not deliverable to a webhook`
+            : 'The endpoint this delivery was queued for no longer exists',
+          null,
+        )),
+      };
+    }
+
     const config = await this.endpoints.getWebhookConfig(endpoint.id);
 
     if (!config) {
       // A webhook endpoint with no URL cannot be created through the service,
-      // so this means the config row went away underneath us. It is a permanent
-      // failure: no schedule of retries will invent a destination.
-      return this.recordFailure(
-        deliveryId,
-        event,
-        endpoint.id,
-        null,
-        'Endpoint has no webhook configuration',
-        null,
-      );
+      // so this means the config row went away underneath us. Permanent: no
+      // schedule of retries will invent a destination.
+      return {
+        skipped: false,
+        ...(await this.recordFailure(
+          claimed,
+          context.event,
+          endpoint.id,
+          'Endpoint has no webhook configuration',
+          null,
+        )),
+      };
     }
 
-    const outcome = await this.post(config, deliveryId, payload);
+    const payload = buildWebhookPayload({
+      // Rebuilt on every attempt rather than stored. Attachment download URLs
+      // and the app origin can both move, and a payload frozen at first attempt
+      // would hand a receiver URLs that no longer resolve. The event id — what
+      // a receiver deduplicates on — is what stays fixed.
+      event: context.event,
+      email: context.email,
+      attachments: context.attachments,
+      type,
+    });
+
+    const outcome = await this.post(config, claimed.id, payload);
 
     if (outcome.ok) {
-      await this.deliveries.markDelivered(
-        deliveryId,
-        outcome.responseCode ?? 200,
-      );
-
+      await this.deliveries.markDelivered(claimed.id, outcome.responseCode ?? 200);
       await this.events.create({
-        emailId: event.emailId,
+        emailId: context.event.emailId,
         type: 'webhook.delivered',
         metadata: {
           endpointId: endpoint.id,
-          deliveryId,
+          deliveryId: claimed.id,
           responseCode: outcome.responseCode,
+          attempt: claimed.attempt + 1,
         },
       });
 
-      return outcome;
+      return { skipped: false, ...outcome };
     }
 
-    return this.recordFailure(
-      deliveryId,
-      event,
+    // `claimed.attempt` counts completed attempts, so the one that just failed
+    // is `+ 1` and the next one would be `+ 2`.
+    const nextAttempt = claimed.attempt + 2;
+    const delayMs = retryDelayMs(nextAttempt);
+
+    const recorded = await this.recordFailure(
+      claimed,
+      context.event,
       endpoint.id,
-      outcome.responseCode,
       outcome.error ?? 'Delivery failed',
-      // Due immediately. Phase 8 owns the backoff curve; leaving the row
-      // `pending` and due now is what hands it over, rather than inventing a
-      // schedule this phase has nothing to honour it with.
-      new Date(),
+      delayMs === null ? null : new Date(Date.now() + delayMs),
+      outcome.responseCode,
     );
+
+    if (delayMs !== null) {
+      // State first, schedule second (plan §15.2). If this process dies in
+      // between, the delivery is a `pending` row a manual retry can pick up.
+      // The other order loses the row and schedules an event pointing at
+      // nothing.
+      await this.options.scheduler.scheduleRetry({
+        deliveryId: claimed.id,
+        attempt: nextAttempt,
+        delayMs,
+      });
+    }
+
+    return { skipped: false, ...recorded };
+  }
+
+  private async loadContext(
+    delivery: EndpointDelivery,
+  ): Promise<DeliveryContext | null> {
+    const event = await this.events.findById(delivery.eventId);
+    if (!event?.emailId) return null;
+
+    const email = await this.emails.findById(event.emailId);
+    if (!email) return null;
+
+    return {
+      event,
+      email,
+      attachments: await this.emails.listAttachments(email.id),
+    };
   }
 
   private async recordFailure(
-    deliveryId: string,
-    event: MailEvent,
-    endpointId: string,
-    responseCode: number | null,
+    delivery: EndpointDelivery,
+    event: MailEvent | null,
+    endpointId: string | null,
     error: string,
     nextAttemptAt: Date | null,
+    responseCode: number | null = null,
   ): Promise<WebhookDeliveryOutcome> {
     await this.deliveries.markFailed(
-      deliveryId,
+      delivery.id,
       responseCode,
       error,
       nextAttemptAt,
     );
 
-    await this.events.create({
-      emailId: event.emailId,
-      type: 'webhook.failed',
-      metadata: { endpointId, deliveryId, responseCode, error },
-    });
+    if (event) {
+      await this.events.create({
+        emailId: event.emailId,
+        type: 'webhook.failed',
+        metadata: {
+          endpointId: endpointId ?? delivery.endpointId,
+          deliveryId: delivery.id,
+          responseCode,
+          error,
+          attempt: delivery.attempt + 1,
+          // The operator's first question about a failure is whether anything
+          // else will happen on its own.
+          final: nextAttemptAt === null,
+        },
+      });
+    }
 
-    return { deliveryId, ok: false, responseCode, error };
+    return { deliveryId: delivery.id, ok: false, responseCode, error };
   }
 
   /** The signed request itself. Every failure mode comes back as an outcome. */

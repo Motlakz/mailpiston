@@ -306,3 +306,74 @@ is the handover: nothing is lost, nothing is retried yet.
 local receiver can be used. It is refused outright when `NODE_ENV=production` —
 a flag that could disable the SSRF guard there would be the entire
 vulnerability.
+
+---
+
+## 6. Retries (Phase 8)
+
+Retries need the Inngest dev server running alongside `next dev`. It discovers
+functions by polling the app's own ingress:
+
+```bash
+npx inngest-cli@latest dev -u http://localhost:3000/api/inngest
+```
+
+Its dashboard is at <http://localhost:8288> — event stream on one tab, function
+runs on the other. Neither `INNGEST_EVENT_KEY` nor `INNGEST_SIGNING_KEY` is
+needed locally; both are mandatory in production, because a retry engine that
+silently does nothing looks exactly like a webhook that never arrives.
+
+### Watch a delivery climb the curve
+
+Point an endpoint at a receiver that always answers 500, then send it mail:
+
+```bash
+bun run post:inbound plain-text "support@$DOMAIN"
+```
+
+Expect: one immediate attempt, then a `webhook/delivery.failed` event in the
+Inngest stream, a run that sleeps ~30s, then another attempt. The delivery row
+stays `pending` with a rising `attempt` and the response code recorded:
+
+```bash
+curl -sS "$APP/api/v1/endpoints/$ENDPOINT_ID/deliveries" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+The curve is `0 / 30s / 2m / 10m / 1h / 6h / 24h` with ±15% jitter — seven
+attempts over roughly 31 hours. After the seventh the row is `failed` and
+nothing further is scheduled.
+
+Flip the receiver to 200 mid-chain and the next attempt delivers; no further
+event is emitted.
+
+### Manual retry
+
+```bash
+curl -sS -X POST "$APP/api/v1/deliveries/$DELIVERY_ID/retry" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+Or the **Retry** button in the delivery log. Both requeue and then go through
+the same atomic claim a scheduled retry uses — there is no path that skips it,
+because an operator presses that button exactly when a scheduled retry is due.
+
+A delivery that is already `delivered`, or in flight right now, comes back
+`{"skipped":true,"reason":"not-retryable"}`. That is not an error; there was
+nothing to do.
+
+### Prove two executions cannot both deliver
+
+Replay the same `webhook/delivery.failed` event twice from the Inngest
+dashboard, or press Retry while a run is sleeping. Exactly one attempt should
+reach the receiver: whoever wins the claim delivers, and the other returns
+`{"skipped":true,"reason":"already-claimed-or-complete"}`.
+
+A delivery that has finally `failed` refuses a scheduled attempt outright — only
+`requeue`, and therefore only a deliberate manual retry, brings it back.
+
+### If a delivery is stuck in `delivering`
+
+It should not be, and it repairs itself. The claim will take a `delivering` row
+whose lease has expired — the request timeout plus 30 seconds — so a function
+that died mid-attempt is picked up by the next retry rather than stranded.

@@ -475,6 +475,122 @@ Deliberately deferred:
 
 ---
 
+## Phase 8 — Inngest retry engine · **built, unverified against a live receiver**
+
+| Deliverable | Where |
+| --- | --- |
+| Atomic claim, and requeue for manual retry | `server/repositories/neon/delivery-repository.ts` |
+| Backoff curve with jitter | `server/mail/webhooks/retry-schedule.ts` |
+| Scheduler seam | `server/mail/webhooks/retry-scheduler.ts` |
+| Inngest client, event, retry function | `server/jobs/` |
+| Inngest ingress | `app/api/inngest/route.ts` |
+| Manual retry, through the same claim | `POST /v1/deliveries/:id/retry`, delivery-log button |
+
+No migration: `endpoint_deliveries` has carried `lease_owner`, `lease_expires_at`
+and `next_attempt_at` since `0000`, and the due index is already
+`(status, next_attempt_at)`.
+
+Held §15.7 exactly: no Redis, no BullMQ, no Vercel Cron scanner, no worker. The
+only new infrastructure is one Inngest function.
+
+### One claimed path, three entry points
+
+The first attempt on the ingest path, a scheduled retry, and an operator's
+manual retry now all run `attemptDelivery`, which claims before it does
+anything else. Three entry points each doing their own state handling would
+eventually disagree, and the way they would disagree is by delivering twice.
+
+The manual-retry button is the sharpest case, because an operator presses it
+precisely when a scheduled retry is due. It requeues and then goes through the
+identical claim — it gets no shortcut past it.
+
+### The claim has a branch the plan does not
+
+Plan §15.5 claims `WHERE status IN ('pending','failed')`. Two changes:
+
+- **`failed` is not claimable.** It is the terminal state, and a duplicate
+  Inngest event arriving after the schedule gave up must not resurrect a
+  delivery. Manual retry reaches it through `requeue`, which is an explicit
+  transition back to `pending`.
+- **An expired lease is claimable.** A function that dies mid-attempt leaves the
+  row `delivering` with a lease nobody holds. Without this branch the delivery
+  is stuck there permanently — no retry can touch it, and the log shows it
+  perpetually in flight. The lease is the request timeout plus 30 seconds, so a
+  slow-but-alive attempt is never stolen out from under itself.
+
+### `retries: 0` on the Inngest function
+
+Inngest's own retries would re-run the function and produce an extra delivery
+attempt that the schedule never authorised, on a curve nobody chose. The
+delivery's own schedule is the only one. The chain is self-terminating: each
+failure enqueues the next event before returning, and the last one enqueues
+nothing.
+
+### Jitter is not decoration
+
+A receiver that falls over drops every in-flight delivery at once. An unjittered
+schedule marches all of them back in lockstep, so the retry storm arrives at the
+same instant as the last one — precisely when the receiver is least able to take
+it. ±15%, and never applied to the immediate first attempt, which would only put
+the ingest path to sleep for no reason.
+
+### State first, schedule second
+
+`markFailed` runs before `scheduleRetry` (§15.2). If the process dies between
+them, the delivery is a `pending` row a manual retry can pick up — recoverable.
+The other order loses the row and books an event pointing at nothing. The
+scheduler is an interface rather than a direct Inngest call so the delivery
+service stays testable, and so that the split the design rests on stays visible
+in the types.
+
+`WebhookService` takes its scheduler as a **required** option. A deployment that
+ends up never retrying should have had to write that down.
+
+### Production refuses to start without Inngest keys
+
+`INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` are optional locally — the Inngest
+dev server needs neither — and mandatory when `NODE_ENV=production`. The failure
+mode they prevent is the quiet one: failed deliveries accumulating as `pending`
+rows that nothing ever picks up, whose only symptom is a webhook that never
+arrives.
+
+### Final failure leaves `next_attempt_at` alone
+
+Plan §15.6 asks for `NULL`. The column is `NOT NULL`, and `status = 'failed'`
+already says there is no next attempt — the due index is keyed on status first,
+so nothing will ever read the stale value.
+
+Covered by tests (16 in `retry-schedule.test.ts`, 12 new in
+`webhook-service.test.ts`): the curve pinned attempt by attempt; jitter bounded
+either side and never applied to attempt 1; the schedule refusing attempt 0 and
+anything past the last; a failure booking exactly one retry and a success
+booking none; a full run to exhaustion leaving `failed`, `attempt = 7`, one
+schedule fewer than attempts, and a `final: true` event; a stray attempt after
+final failure skipped; a second attempt while one is in flight skipped with no
+request made; an expired lease reclaimed and delivered; manual retry requeueing
+a finally-failed delivery and delivering it; manual retry refusing one the
+receiver already acknowledged; a missing delivery 404ing.
+
+Still needs a live receiver:
+
+- [ ] A 500 schedules a retry; a subsequent 200 stops the chain
+- [ ] Two concurrent Inngest executions cannot both deliver the same delivery
+      (force a duplicate event)
+- [ ] After the final attempt the delivery is `failed`, with full attempt
+      history inspectable
+- [ ] Manual retry works and does not bypass the claim
+
+Deliberately deferred:
+
+- **Attempt history.** The log shows the latest response code, error, and
+  attempt count. Per-attempt rows land with Phase 9's event timeline, where
+  `webhook.failed` events already carry the attempt number and finality.
+- **Dead-letter handling.** A `failed` delivery stays visible and manually
+  retryable. Anything more — alerting, bulk replay — waits until there is
+  evidence of needing it.
+
+---
+
 ## Not started
 
-Phases 8–11 as written in the roadmap.
+Phases 9–11 as written in the roadmap.

@@ -63,6 +63,17 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
     failOpen: false,
   },
 
+  /**
+   * Manual retry. Fail-closed: it makes an outbound HTTP request to a
+   * third-party URL, so a limiter outage must not turn the button into an
+   * amplifier pointed at someone else's server.
+   */
+  '/v1/deliveries': {
+    requests: 100,
+    windowMs: 60 * 60 * 1000,
+    failOpen: false,
+  },
+
   '/v1/api-keys': {
     requests: 20,
     windowMs: 60 * 60 * 1000,

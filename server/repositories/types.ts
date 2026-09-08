@@ -266,8 +266,28 @@ export interface DeliveryRepository {
     recipientId: string | null;
   }): Promise<EnqueueResult>;
   findById(id: string): Promise<EndpointDelivery | null>;
-  /** Atomic claim. Two workers must never receive the same row. */
-  claim(id: string, leaseOwner: string, leaseMs: number): Promise<EndpointDelivery | null>;
+  /**
+   * Atomic claim (plan §15.5). Two executions must never receive the same row.
+   *
+   * Takes a `pending` delivery, or a `delivering` one whose lease has expired —
+   * a process that dies mid-attempt would otherwise strand the row in
+   * `delivering` forever, and no schedule of retries can rescue a delivery that
+   * nothing is allowed to pick up.
+   *
+   * `failed` is deliberately not claimable: that is the terminal state, and a
+   * stray event must not resurrect a delivery the schedule already gave up on.
+   * Manual retry goes through `requeue` first.
+   */
+  claim(
+    id: string,
+    leaseOwner: string,
+    leaseMs: number,
+  ): Promise<EndpointDelivery | null>;
+  /**
+   * Manual retry: puts a delivery back in the queue, due now, so the ordinary
+   * claim path can pick it up. Returns null if there is nothing to requeue.
+   */
+  requeue(id: string): Promise<EndpointDelivery | null>;
   /** Both outcomes increment `attempt` in the same statement that sets status. */
   markDelivered(id: string, responseCode: number): Promise<void>;
   /**
