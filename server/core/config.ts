@@ -165,8 +165,33 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+/**
+ * A variable written but left blank means "not set".
+ *
+ * `.env.example` lists every optional variable with an empty value, which is
+ * how you document that something exists without supplying it — and copying
+ * that file is the first thing anyone does. Without this, `FOO=` parses as a
+ * present-but-invalid empty string, so an optional setting becomes a boot
+ * failure and the message points at a variable the operator deliberately left
+ * alone.
+ *
+ * Blanking before parsing also makes a required variable fail as "missing"
+ * rather than as "too short", which is the more useful sentence to read.
+ */
+export function withoutBlanks(
+  source: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(source).map(([key, value]) =>
+      typeof value === 'string' && value.trim() === ''
+        ? [key, undefined]
+        : [key, value],
+    ),
+  );
+}
+
 function loadEnv(): Env {
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse(withoutBlanks(process.env));
 
   if (!parsed.success) {
     const issues = parsed.error.issues

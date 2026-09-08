@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import { formatWhen, previewOf } from '@/lib/format';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Inbox · MailPiston' };
@@ -40,9 +41,9 @@ export default async function InboxPage() {
                 {email.subject || (
                   <span className="text-muted-foreground">(no subject)</span>
                 )}
-                {email.text ? (
+                {previewOf(email.text) ? (
                   <span className="ml-2 text-muted-foreground">
-                    — {email.text.replace(/\s+/g, ' ').slice(0, 120)}
+                    — {previewOf(email.text)}
                   </span>
                 ) : null}
               </span>
@@ -60,6 +61,7 @@ export default async function InboxPage() {
               <time
                 className="w-24 shrink-0 text-right text-xs text-muted-foreground"
                 dateTime={(email.receivedAt ?? email.createdAt).toISOString()}
+                title={`${(email.receivedAt ?? email.createdAt).toISOString().replace('T', ' ').slice(0, 19)} UTC`}
               >
                 {formatWhen(email.receivedAt ?? email.createdAt)}
               </time>
@@ -69,13 +71,4 @@ export default async function InboxPage() {
       )}
     </>
   );
-}
-
-/** Time for today, date for anything older — the usual mail-client shorthand. */
-function formatWhen(date: Date): string {
-  const isToday = new Date().toDateString() === date.toDateString();
-
-  return isToday
-    ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    : date.toISOString().slice(0, 10);
 }

@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
 const inputClass =
@@ -18,14 +19,41 @@ function messageFor(error: unknown): string {
 
 type EndpointType = 'email' | 'email_group' | 'webhook';
 
+const labelClass = 'text-[11px] font-medium tracking-wide text-muted-foreground';
+
+const fieldClass =
+  'h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs outline-none transition-colors focus-visible:border-ring';
+
+const TYPE_HELP: Record<EndpointType, string> = {
+  email: 'One verified mailbox. Mail arrives as a constructed notification.',
+  email_group: 'Several verified mailboxes, each verified separately.',
+  webhook: 'A signed POST of the public v1 payload to your application.',
+};
+
+/**
+ * Creating an endpoint, in a modal.
+ *
+ * The webhook signing secret is returned by exactly one response and never
+ * again, so the dialog stays open after a successful create and switches to
+ * showing it. Dismissing it is the operator saying they have copied it — which
+ * is a different thing from the form having submitted, and worth a separate
+ * click.
+ */
 export function AddEndpointForm() {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<EndpointType>('email');
   const [url, setUrl] = useState('');
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  function close() {
+    setOpen(false);
+    setSecret(null);
+    setError(null);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -46,55 +74,117 @@ export function AddEndpointForm() {
 
       setName('');
       setUrl('');
-      setSecret(created.secret);
       startTransition(() => router.refresh());
+
+      // A mailbox endpoint has nothing to show, so it closes; a webhook has a
+      // secret that exists in this response and nowhere else.
+      if (created.secret) setSecret(created.secret);
+      else setOpen(false);
     } catch (caught) {
       setError(messageFor(caught));
     }
   }
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="My inbox"
-          required
-          className={inputClass}
-        />
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Icon name="add" size={13} />
+        Add endpoint
+      </Button>
 
-        <select
-          value={type}
-          onChange={(event) => setType(event.target.value as EndpointType)}
-          className={inputClass}
-        >
-          <option value="email">email (one mailbox)</option>
-          <option value="email_group">email_group (several)</option>
-          <option value="webhook">webhook (HTTPS POST)</option>
-        </select>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => (next ? setOpen(true) : close())}
+        title={secret ? 'Endpoint created' : 'New endpoint'}
+        description={
+          secret
+            ? undefined
+            : 'Where an address fans out to once mail arrives for it.'
+        }
+      >
+        {secret ? (
+          <div className="flex flex-col gap-3">
+            <SecretOnce secret={secret} />
+            <div className="flex justify-end border-t border-border pt-3">
+              <Button onClick={close}>Done</Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className={labelClass} htmlFor="endpoint-name">
+                Name
+              </label>
+              <input
+                id="endpoint-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="My inbox"
+                required
+                className={fieldClass}
+              />
+            </div>
 
-        {type === 'webhook' ? (
-          <input
-            type="url"
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://app.example/api/mail"
-            required
-            className={`${inputClass} w-64 font-mono`}
-          />
-        ) : null}
+            <div className="flex flex-col gap-1.5">
+              <label className={labelClass} htmlFor="endpoint-type">
+                Type
+              </label>
+              <select
+                id="endpoint-type"
+                value={type}
+                onChange={(event) => setType(event.target.value as EndpointType)}
+                className={fieldClass}
+              >
+                <option value="email">email</option>
+                <option value="email_group">email_group</option>
+                <option value="webhook">webhook</option>
+              </select>
+              <p className="text-xs text-muted-foreground">{TYPE_HELP[type]}</p>
+            </div>
 
-        <Button type="submit" disabled={pending}>
-          <Icon name="add" size={13} />
-          Add endpoint
-        </Button>
+            {type === 'webhook' ? (
+              <div className="flex flex-col gap-1.5">
+                <label className={labelClass} htmlFor="endpoint-url">
+                  URL
+                </label>
+                <input
+                  id="endpoint-url"
+                  type="url"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  placeholder="https://app.example/api/mail"
+                  required
+                  className={`${fieldClass} font-mono`}
+                />
+                <p className="text-xs text-muted-foreground">
+                  HTTPS only, and never an address inside this deployment&apos;s
+                  own network — checked again before every delivery.
+                </p>
+              </div>
+            ) : null}
 
-        {error ? <span className="text-xs text-destructive">{error}</span> : null}
-      </form>
+            {error ? (
+              <p className="rounded-md border border-destructive/40 px-2.5 py-1.5 text-xs text-destructive">
+                {error}
+              </p>
+            ) : null}
 
-      {secret ? <SecretOnce secret={secret} onDismiss={() => setSecret(null)} /> : null}
-    </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={close}
+                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <Button type="submit" disabled={pending}>
+                Create endpoint
+              </Button>
+            </div>
+          </form>
+        )}
+      </Dialog>
+    </>
   );
 }
 
@@ -106,37 +196,33 @@ export function AddEndpointForm() {
  * encrypted column and a read endpoint that hands it back. Losing it means
  * rotating it, which is a button rather than a disaster.
  */
-function SecretOnce({
-  secret,
-  onDismiss,
-}: {
-  secret: string;
-  onDismiss: () => void;
-}) {
+function SecretOnce({ secret }: { secret: string }) {
+  const [copied, setCopied] = useState(false);
+
   return (
-    <div className="flex max-w-lg flex-col gap-1.5 rounded-lg border border-warning/40 bg-card px-4 py-3">
+    <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3">
       <p className="text-xs text-warning">
-        Copy this signing secret now — it is not shown again.
+        Copy this signing secret now — it is not shown again, and it cannot be
+        recovered. Losing it means rotating it.
       </p>
-      <code className="rounded bg-muted px-2 py-1 font-mono text-[11px] break-all">
+
+      <code className="rounded-md border border-border bg-background px-2.5 py-2 font-mono text-[11px] break-all">
         {secret}
       </code>
-      <div className="flex items-center gap-2">
+
+      <div>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => navigator.clipboard.writeText(secret)}
+          onClick={() => {
+            navigator.clipboard.writeText(secret);
+            setCopied(true);
+          }}
         >
-          Copy
+          <Icon name={copied ? 'verified' : 'copy'} size={12} />
+          {copied ? 'Copied' : 'Copy'}
         </Button>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="text-xs text-muted-foreground hover:text-foreground"
-        >
-          Done
-        </button>
       </div>
     </div>
   );
@@ -451,15 +537,21 @@ export function WebhookPanel({
       {result ? <p className="text-xs text-muted-foreground">{result}</p> : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
-      {secret ? (
-        <>
-          <p className="text-xs text-warning">
-            Deliveries fail verification until your application is redeployed
-            with this secret.
-          </p>
-          <SecretOnce secret={secret} onDismiss={() => setSecret(null)} />
-        </>
-      ) : null}
+      <Dialog
+        open={secret !== null}
+        onOpenChange={(next) => (next ? undefined : setSecret(null))}
+        title="Secret rotated"
+        description="Deliveries fail verification until your application is redeployed with this secret."
+      >
+        {secret ? (
+          <div className="flex flex-col gap-3">
+            <SecretOnce secret={secret} />
+            <div className="flex justify-end border-t border-border pt-3">
+              <Button onClick={() => setSecret(null)}>Done</Button>
+            </div>
+          </div>
+        ) : null}
+      </Dialog>
     </div>
   );
 }

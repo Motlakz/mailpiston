@@ -5,6 +5,7 @@ import {
   ArrowLeft02Icon,
   ArrowRight02Icon,
   Attachment01Icon,
+  Cancel01Icon,
   CheckmarkCircle02Icon,
   Copy01Icon,
   DashboardSquare01Icon,
@@ -51,6 +52,7 @@ const ICONS = {
   settings: Settings02Icon,
 
   add: PlusSignIcon,
+  close: Cancel01Icon,
   copy: Copy01Icon,
   delete: Delete02Icon,
   refresh: RefreshIcon,

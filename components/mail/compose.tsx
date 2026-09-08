@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
 export interface SendableAddress {
@@ -13,8 +14,18 @@ export interface SendableAddress {
 }
 
 const inputClass =
-  'h-7 w-full rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring';
+  'h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs outline-none transition-colors focus-visible:border-ring';
 
+const labelClass = 'text-[11px] font-medium tracking-wide text-muted-foreground';
+
+/**
+ * Compose, as a modal rather than an expanding panel.
+ *
+ * It used to render its form directly into the page header's action slot, so
+ * opening it inflated the header and pushed the message list down the screen —
+ * the content the operator was looking at moved the moment they clicked. Only
+ * the trigger belongs up there now, and it never changes size.
+ */
 export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -27,18 +38,9 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
 
   if (addresses.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="max-w-xs text-right text-xs text-muted-foreground">
         No send-capable address yet — create one with sending enabled.
       </p>
-    );
-  }
-
-  if (!open) {
-    return (
-      <Button onClick={() => setOpen(true)}>
-        <Icon name="add" size={13} />
-        Compose
-      </Button>
     );
   }
 
@@ -72,62 +74,102 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="flex w-full max-w-xl flex-col gap-2 rounded-lg border border-border bg-card p-3"
-    >
-      <div className="flex gap-2">
-        <select
-          value={addressId}
-          onChange={(event) => setAddressId(event.target.value)}
-          className={inputClass}
-        >
-          {addresses.map((address) => (
-            <option key={address.id} value={address.id}>
-              {address.email}
-            </option>
-          ))}
-        </select>
-        <input
-          value={to}
-          onChange={(event) => setTo(event.target.value)}
-          placeholder="to@example.com, another@example.com"
-          required
-          className={inputClass}
-        />
-      </div>
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Icon name="add" size={13} />
+        Compose
+      </Button>
 
-      <input
-        value={subject}
-        onChange={(event) => setSubject(event.target.value)}
-        placeholder="Subject"
-        required
-        className={inputClass}
-      />
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="New message"
+        description="Sent from a managed address, and recorded in Sent before it leaves."
+      >
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label className={labelClass} htmlFor="compose-from">
+              From
+            </label>
+            <select
+              id="compose-from"
+              value={addressId}
+              onChange={(event) => setAddressId(event.target.value)}
+              className={inputClass}
+            >
+              {addresses.map((address) => (
+                <option key={address.id} value={address.id}>
+                  {address.email}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      <textarea
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder="Message"
-        required
-        rows={6}
-        className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-xs outline-none focus-visible:border-ring"
-      />
+          <div className="flex flex-col gap-1.5">
+            <label className={labelClass} htmlFor="compose-to">
+              To
+            </label>
+            <input
+              id="compose-to"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              placeholder="customer@example.com, another@example.com"
+              required
+              className={inputClass}
+            />
+          </div>
 
-      <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending}>
-          Send
-        </Button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="text-xs text-muted-foreground hover:text-foreground"
-        >
-          Cancel
-        </button>
-        {error ? <span className="text-xs text-destructive">{error}</span> : null}
-      </div>
-    </form>
+          <div className="flex flex-col gap-1.5">
+            <label className={labelClass} htmlFor="compose-subject">
+              Subject
+            </label>
+            <input
+              id="compose-subject"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              placeholder="What this is about"
+              required
+              className={inputClass}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className={labelClass} htmlFor="compose-body">
+              Message
+            </label>
+            <textarea
+              id="compose-body"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="Plain text. Attachments are not carried on outbound mail yet."
+              required
+              rows={8}
+              className="w-full resize-y rounded-md border border-input bg-background px-2.5 py-2 text-xs leading-relaxed outline-none transition-colors focus-visible:border-ring"
+            />
+          </div>
+
+          {error ? (
+            <p className="rounded-md border border-destructive/40 px-2.5 py-1.5 text-xs text-destructive">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <Button type="submit" disabled={pending}>
+              <Icon name="sent" size={13} />
+              Send
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </>
   );
 }
 
