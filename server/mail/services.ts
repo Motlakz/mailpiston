@@ -13,6 +13,7 @@ import { ForwardingService } from './forwarding/forwarding-service';
 import { RelayService } from './forwarding/relay-service';
 import { InboundService } from './inbound/inbound-service';
 import { DefaultThreadResolver } from './threads/thread-resolver';
+import { WebhookService } from './webhooks/webhook-service';
 
 /**
  * Production wiring for the mail services.
@@ -28,6 +29,7 @@ let outboundService: OutboundService | undefined;
 let endpointService: EndpointService | undefined;
 let forwardingService: ForwardingService | undefined;
 let relayService: RelayService | undefined;
+let webhookService: WebhookService | undefined;
 
 export function getDomainService(): DomainService {
   domainService ??= new DomainService(
@@ -57,7 +59,11 @@ export function getInboundService(): InboundService {
     // captured in production before R2 is configured.
     getStorage,
     { storeRawMime: env.STORE_RAW_MIME },
-    { relay: getRelayService(), forwarding: getForwardingService() },
+    {
+      relay: getRelayService(),
+      forwarding: getForwardingService(),
+      webhooks: getWebhookService(),
+    },
   );
   return inboundService;
 }
@@ -95,6 +101,17 @@ export function getRelayService(): RelayService {
   return relayService;
 }
 
+export function getWebhookService(): WebhookService {
+  webhookService ??= new WebhookService(
+    repositories.endpoints,
+    repositories.deliveries,
+    repositories.emails,
+    repositories.events,
+    { timeoutMs: env.WEBHOOK_TIMEOUT_MS },
+  );
+  return webhookService;
+}
+
 export function getEndpointService(): EndpointService {
   endpointService ??= new EndpointService(
     repositories.endpoints,
@@ -112,4 +129,5 @@ export {
   InboundService,
   OutboundService,
   RelayService,
+  WebhookService,
 };

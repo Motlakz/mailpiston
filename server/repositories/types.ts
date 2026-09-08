@@ -236,6 +236,8 @@ export interface EventRepository {
     type: MailEventType;
     metadata: Record<string, unknown>;
   }): Promise<MailEvent>;
+  /** A retry rebuilds its payload from the event it was enqueued for. */
+  findById(id: string): Promise<MailEvent | null>;
   list(filter: {
     emailId?: string;
     type?: MailEventType;
@@ -244,18 +246,46 @@ export interface EventRepository {
   }): Promise<Paginated<MailEvent>>;
 }
 
+/**
+ * Whether this enqueue is the one that created the row.
+ *
+ * The unique index on (event, endpoint, recipient) makes enqueueing idempotent,
+ * but idempotent is not the same as safe: two concurrent ingests of the same
+ * event would both go on to *deliver* unless exactly one of them learns it lost
+ * the race. `created` is how it finds out.
+ */
+export interface EnqueueResult {
+  delivery: EndpointDelivery;
+  created: boolean;
+}
+
 export interface DeliveryRepository {
   enqueue(data: {
     endpointId: string;
     eventId: string;
     recipientId: string | null;
-  }): Promise<EndpointDelivery>;
+  }): Promise<EnqueueResult>;
   findById(id: string): Promise<EndpointDelivery | null>;
   /** Atomic claim. Two workers must never receive the same row. */
   claim(id: string, leaseOwner: string, leaseMs: number): Promise<EndpointDelivery | null>;
+  /** Both outcomes increment `attempt` in the same statement that sets status. */
   markDelivered(id: string, responseCode: number): Promise<void>;
-  markFailed(id: string, responseCode: number | null, error: string, nextAttemptAt: Date | null): Promise<void>;
+  /**
+   * A `nextAttemptAt` leaves the delivery `pending` and due then; `null` is the
+   * final failure and sets `failed`.
+   */
+  markFailed(
+    id: string,
+    responseCode: number | null,
+    error: string,
+    nextAttemptAt: Date | null,
+  ): Promise<void>;
   listForEvent(eventId: string): Promise<EndpointDelivery[]>;
+  /** The delivery log, newest first. */
+  listForEndpoint(
+    endpointId: string,
+    limit?: number,
+  ): Promise<EndpointDelivery[]>;
 }
 
 export interface ReplyRelayRepository {

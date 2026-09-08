@@ -14,10 +14,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./server/test/setup.ts'],
-    include: ['server/**/*.test.ts', 'lib/**/*.test.ts'],
+    include: ['server/**/*.test.ts', 'lib/**/*.test.ts', 'sdk/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['server/**/*.ts'],
+      include: ['server/**/*.ts', 'sdk/**/*.ts'],
     },
   },
 });

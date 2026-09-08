@@ -6,7 +6,7 @@ import { NeonDomainRepository } from './neon/domain-repository';
 import { NeonEmailRepository } from './neon/email-repository';
 import { NeonEventRepository } from './neon/event-repository';
 import { NeonEndpointRepository } from './neon/endpoint-repository';
-import { NeonDeliveryRepository } from './neon/pending';
+import { NeonDeliveryRepository } from './neon/delivery-repository';
 import { NeonReplyRelayRepository } from './neon/reply-relay-repository';
 import { NeonThreadRepository } from './neon/thread-repository';
 

@@ -94,6 +94,31 @@ const envSchema = z.object({
    * invitation: the address is public the moment a notification is delivered.
    */
   RELAY_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+
+  // --- Webhook endpoints (Phase 7) -----------------------------------------
+  /**
+   * How long a downstream endpoint has to answer the first attempt.
+   *
+   * Short on purpose: that attempt runs inside the provider's inbound request,
+   * so a slow customer application must not push our own ingress towards the
+   * platform timeout. Anything that misses it becomes a `pending` delivery and
+   * is retried out of band.
+   */
+  WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(8_000),
+  /**
+   * The replay window receivers are told to enforce, in seconds. Published by
+   * the SDK and the docs from here so both halves of the contract agree on one
+   * number.
+   */
+  WEBHOOK_REPLAY_WINDOW_SECONDS: z.coerce.number().int().positive().default(300),
+  /**
+   * Development escape hatch for `http://localhost` receivers.
+   *
+   * Off by default and refused in production: the SSRF guard exists to stop a
+   * configured URL reaching the deployment's own network, and a flag that
+   * disabled it in production would be the entire vulnerability.
+   */
+  WEBHOOK_ALLOW_INSECURE_TARGETS: booleanish.default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -123,6 +148,16 @@ function loadEnv(): Env {
     );
   }
 
+  if (
+    parsed.data.WEBHOOK_ALLOW_INSECURE_TARGETS &&
+    parsed.data.NODE_ENV === 'production'
+  ) {
+    throw new Error(
+      'WEBHOOK_ALLOW_INSECURE_TARGETS cannot be used in production: it lets a ' +
+        'configured endpoint URL reach loopback and private addresses.',
+    );
+  }
+
   // The API token is optional in the schema so `mock` can run with no Forward
   // Email account, but it is mandatory once the real provider is selected.
   // The webhook key is only an optional fallback: per-domain keys live in the
@@ -147,6 +182,19 @@ export const env: Env = loadEnv();
 /** Absolute URL of the provider ingress every alias points at. */
 export function inboundIngressUrl(): string {
   return new URL('/api/providers/forward-email/inbound', env.APP_URL).toString();
+}
+
+/**
+ * Authenticated download URL for an attachment, as published in the webhook
+ * payload (§13). Built from `APP_URL` for the same reason the ingress URL is:
+ * the origin is a migration, not a runtime choice, and one builder means one
+ * place to change.
+ */
+export function attachmentDownloadUrl(attachmentId: string): string {
+  return new URL(
+    `/api/v1/attachments/${attachmentId}/download`,
+    env.APP_URL,
+  ).toString();
 }
 
 /** The relay address a reply to this token should be sent to. */

@@ -4,7 +4,7 @@ Companion to [`PROJECT_ROADMAP.md`](./PROJECT_ROADMAP.md). What is built, what i
 deliberately deferred, and what still needs a live domain before it can be
 called done.
 
-Last updated: 2026-09-06.
+Last updated: 2026-09-08.
 
 ---
 
@@ -227,8 +227,9 @@ Still open, and deliberately so:
   base64 exceeds Vercel's ~4.5 MB body cap, the fix is a Cloudflare Worker that
   streams the body to R2 and POSTs a pointer (§5.1) — the pipeline above does
   not change, only where `NormalizedAttachment.content` comes from.
-- **Endpoint fan-out to webhooks.** `email.received` reaches email endpoints
-  (Phase 6); HTTP endpoints are Phase 7.
+- **Endpoint fan-out.** Now complete: `email.received` reaches email endpoints
+  (Phase 6) and webhook endpoints (Phase 7). Each destination is isolated from
+  the others and from ingress, so one failure costs only itself.
 - **Orphaned objects.** Attachment bytes are written before the row, so a
   delivery that then turns out to be a duplicate leaves objects nothing
   references. That is the correct direction to fail — the alternative is a
@@ -335,9 +336,6 @@ Still needs live mail:
 
 Deliberately deferred:
 
-- **Webhook endpoints.** The subtype is refused by `EndpointService.create`
-  rather than half-built: an endpoint that accepts a URL and never delivers is
-  worse than one that says "not yet". Phase 7.
 - **Attachments on outbound.** Send and reply carry text and HTML only.
 - **Reply-all.** The relay answers the original external sender, per §19.3.
 - **The relay domain itself.** `RELAY_DOMAIN` must be a domain whose DNS we
@@ -346,6 +344,137 @@ Deliberately deferred:
 
 ---
 
+## Phase 7 — Webhook endpoints · **built, unverified against a live receiver**
+
+| Deliverable | Where |
+| --- | --- |
+| `webhook` subtype enabled, secret shown once | `server/mail/endpoints/endpoint-service.ts` |
+| Public v1 payload | `sdk/src/payload.ts`, built by `server/mail/webhooks/payload.ts` |
+| Signing and verification, one implementation | `sdk/src/signing.ts` |
+| SSRF guard, config time *and* delivery time | `server/mail/webhooks/url-guard.ts` |
+| Synchronous first attempt, then stop | `server/mail/webhooks/webhook-service.ts` |
+| Delivery persistence | `server/repositories/neon/delivery-repository.ts` |
+| Test delivery, rotate secret, delivery log | `/v1/endpoints/:id/{test,rotate-secret,deliveries}` |
+| Delivery log UI, webhook panel | `app/(dashboard)/endpoints/`, `components/mail/endpoint-actions.tsx` |
+| SDK: `verifyWebhook`, payload types, guard, `send`/`reply` | `sdk/` |
+
+No migration: `endpoint_webhook_configs` and `endpoint_deliveries` have been in
+the schema since `0000`. Phase 7 is the first thing to write to them.
+
+### The SDK owns the contract, and the server imports it
+
+`sdk/src/payload.ts` and `sdk/src/signing.ts` are not copies of server types —
+they are *the* definitions, and `server/mail/webhooks/` imports them through the
+`@/` path alias. Two consequences, both deliberate:
+
+- A field that exists only server-side is impossible, because there is no
+  server-side definition to add it to.
+- The server signs with the same function receivers verify with. A signer and a
+  verifier written separately agree exactly until one of them is edited; this
+  way there is nothing to drift. `signing.test.ts` still pins the scheme against
+  an independent `node:crypto` HMAC, because the format is documented and third
+  parties will reimplement it.
+
+Web Crypto rather than `node:crypto` in the SDK, so the same module runs in
+Node, Bun, Deno, Workers, and on the edge. A receiver should not have to pick a
+runtime to check a signature.
+
+### Enqueue is the election, not a lock
+
+The synchronous first attempt runs on the ingest path, and two concurrent
+deliveries of the same provider payload would otherwise both POST. `enqueue`
+inserts with `ON CONFLICT DO NOTHING` against the unique index on
+(event, endpoint, recipient) and reports whether *it* created the row; only the
+creator delivers. A read-then-write check would leave a window where both
+callers see nothing and both deliver.
+
+That is why Phase 8's `claim` is still unimplemented rather than half-built:
+Phase 7 needs no lease, and a claim that looked usable would be the more
+dangerous thing to leave lying around.
+
+### A failure is `pending`, not `failed`
+
+`markFailed` takes a `nextAttemptAt`; a time leaves the row `pending` and due
+then, `null` sets `failed`. Phase 7 always passes a time, so a failed delivery
+sits due-now until Phase 8 has a scheduler to pick it up. Recording it as
+`failed` would mean Phase 8 has to guess which failures were final.
+
+### The URL is checked twice, and the residual gap is named
+
+HTTPS only, no embedded credentials, and no resolution into loopback, private,
+link-local, CGNAT, benchmarking, or multicast space — including the IPv6 forms
+that reach an IPv4 host (`::ffff:127.0.0.1`, `::127.0.0.1`, `64:ff9b::`). The
+check runs when the endpoint is configured **and** immediately before every
+delivery, because a hostname that resolved publicly when saved can be repointed
+afterwards. Redirects are never followed: a 302 to the metadata service would
+walk straight past the host we just validated.
+
+What is *not* closed: `fetch` resolves the hostname itself, so a record that
+changes between our lookup and its lookup is not covered. Closing it needs a
+custom agent that dials the validated address. The window is milliseconds and
+the attacker must already control DNS for a hostname the operator typed in
+themselves — but it is a gap, and it is written down rather than implied.
+
+### The secret is encrypted, and still shown once
+
+It has to be recoverable — the server signs every delivery with it — so it
+cannot be hashed. That makes "returned by exactly one response, ever" the only
+remaining control, and there is no read path that returns it. `webhookUrl()`
+exists precisely so the dashboard can show the destination without the config
+row (and its ciphertext) travelling to a page.
+
+Rotation has no grace period. Honouring two secrets at once would mean a
+compromised secret keeps working until somebody removes it.
+
+### What the payload deliberately excludes
+
+Inline attachment bytes, raw MIME, provider session objects, relay tokens,
+personal forwarding destinations, fingerprints, storage keys, and provider
+message ids. Attachments carry metadata plus an authenticated `downloadUrl`.
+The envelope is a separate object from the headers, because they disagree on
+exactly the deliveries that matter — a BCC arrives with a `To:` naming somebody
+else, and routing followed the envelope.
+
+`EmailStatus` is translated rather than exported: `soft_bounced` and
+`hard_bounced` both surface as `bounced`, since which one it was is our retry
+decision and an application reacts identically to both.
+
+Covered by tests (19 in `webhook-service.test.ts`, 13 in
+`endpoint-service.test.ts`, 16 in `sdk/src/signing.test.ts`, 26 in
+`url-guard.test.ts`): a delivery the published SDK verifies end to end; a wrong
+secret and a tampered body both rejected; stale *and* future timestamps
+rejected; a 500 leaving a `pending` row with the code recorded and no throw; a
+transport error with no code; a private-address endpoint failing without any
+request being made; one delivery per event however many times it is dispatched;
+disabled endpoints and mailbox endpoints ignored by the webhook path;
+attachment metadata with no bytes and no storage keys; internal fields absent
+from the body; a test delivery that writes no row; secrets stored only as
+ciphertext and never returned on a read; a refused URL leaving no endpoint
+behind; repointing a URL keeping the secret.
+
+Still needs a live receiver:
+
+- [ ] Mail to `support@` POSTs to the configured endpoint within seconds
+- [ ] The receiving app verifies the signature with the published snippet
+- [ ] A stale timestamp fails verification
+- [ ] An endpoint returning 500 leaves a `pending` delivery with the response
+      code recorded, and **ingress still returns 200**
+
+Deliberately deferred:
+
+- **Retries.** Phase 8. A failed delivery is `pending` and due; nothing scans
+  for it yet.
+- **Manual retry button.** Phase 8, routed through the same claim path. The
+  service method it needs (`WebhookService.attempt`) exists and is tested.
+- **Events other than `email.received`.** The deliverable set is one entry in a
+  map in `webhooks/payload.ts`; bounce and delivery events land with Phase 9's
+  timeline, where they have somewhere to be read.
+- **SDK packaging.** `sdk/` is source-only and consumed through the path alias.
+  It gets a build and a version the first time someone outside this repository
+  needs it.
+
+---
+
 ## Not started
 
-Phases 7–11 as written in the roadmap.
+Phases 8–11 as written in the roadmap.

@@ -213,3 +213,96 @@ of domains; an HMAC costs microseconds.
 Rotating a key takes effect within 60 seconds on its own, or immediately for
 whoever saved it — the resolver caches, because it runs before authentication
 and must not let an unauthenticated caller drive one query per request.
+
+---
+
+## 5. Webhook endpoints (Phase 7)
+
+### Create one, and keep the secret
+
+```bash
+curl -sS -X POST "$APP/api/v1/endpoints" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY" \
+  -d '{"name":"My app","type":"webhook","url":"https://app.example/api/mail"}'
+```
+
+The `secret` in that response is the only time it is ever returned. It is stored
+encrypted rather than hashed — the server has to recover it to *sign* every
+delivery — so "shown once" is the only thing between an encrypted column and a
+read endpoint that hands it back. Lost it? Rotate:
+
+```bash
+curl -sS -X POST "$APP/api/v1/endpoints/$ENDPOINT_ID/rotate-secret" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+Rotation takes effect immediately and there is no grace period. Deliveries
+between the rotation and your redeploy will fail verification, which is the
+correct trade: a secret being rotated because it leaked has to stop working the
+moment it is rotated.
+
+### Bind it to an address and send a test
+
+```bash
+curl -sS -X POST "$APP/api/v1/addresses/$ADDRESS_ID/endpoints" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY" \
+  -d "{\"endpointId\":\"$ENDPOINT_ID\"}"
+
+curl -sS -X POST "$APP/api/v1/endpoints/$ENDPOINT_ID/test" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+The test reports what the receiver said and writes no delivery row — the log is
+the audit trail of real mail, and a test entry in it would be indistinguishable
+from one.
+
+### Read the delivery log
+
+```bash
+curl -sS "$APP/api/v1/endpoints/$ENDPOINT_ID/deliveries?limit=20" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+### Verify a delivery by hand
+
+The signature is over `timestamp + "." + body`, so both header and body are
+needed:
+
+```bash
+BODY='<the exact raw bytes you received>'
+TS='<X-Mailpiston-Timestamp>'
+
+printf '%s.%s' "$TS" "$BODY" \
+  | openssl dgst -sha256 -hmac "$ENDPOINT_SECRET" -hex | sed 's/^.* /sha256=/'
+```
+
+Compare that against `X-Mailpiston-Signature`. In an application, use
+`verifyWebhook` from `@mailpiston/sdk` instead — it reads the body once, as
+text, which is the part people get wrong: parsing and re-serialising the JSON
+changes key order and number formatting, and the signature will never match.
+
+### The four outcomes worth checking
+
+| Test | How | Expected |
+| --- | --- | --- |
+| Delivery | send mail to a bound address | receiver gets a signed POST within seconds; delivery row `delivered` with the response code |
+| Stale timestamp | replay a captured delivery an hour later | receiver's `verifyWebhook` throws `Timestamp outside the replay window` |
+| Failing receiver | make the receiver answer 500 | delivery row stays `pending` with `500` recorded — **and the mail provider still gets a 200** |
+| SSRF | configure `https://169.254.169.254/` | refused at creation; if a hostname is repointed there afterwards, the delivery fails with `private address` and nothing is sent |
+
+The failing-receiver case is the one to check most carefully. The message is
+already durable when delivery runs, so a non-200 back to the mail provider would
+make it retry a delivery we already hold — the retry deduplicates, and the
+operator simply never sees the mail.
+
+Retries are Phase 8. Until then a failed delivery sits `pending` and due, which
+is the handover: nothing is lost, nothing is retried yet.
+
+### Local development against an HTTP receiver
+
+`WEBHOOK_ALLOW_INSECURE_TARGETS=true` allows `http://` and loopback targets so a
+local receiver can be used. It is refused outright when `NODE_ENV=production` —
+a flag that could disable the SSRF guard there would be the entire
+vulnerability.

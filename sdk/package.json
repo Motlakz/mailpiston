@@ -1,0 +1,14 @@
+{
+  "name": "@mailpiston/sdk",
+  "version": "0.1.0",
+  "description": "Types and webhook verification for MailPiston endpoints",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["src"],
+  "license": "MIT"
+}

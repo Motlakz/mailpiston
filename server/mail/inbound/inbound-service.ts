@@ -7,6 +7,7 @@ import type { AddressWithDomain } from '@/server/core/types';
 import type { ForwardingService } from '@/server/mail/forwarding/forwarding-service';
 import type { RelayService } from '@/server/mail/forwarding/relay-service';
 import type { ThreadResolver } from '@/server/mail/threads/thread-resolver';
+import type { WebhookService } from '@/server/mail/webhooks/webhook-service';
 import type { NormalizedInboundEmail } from '@/server/providers/types';
 import type {
   AddressRepository,
@@ -50,12 +51,14 @@ export interface InboundResult {
   reason?: string;
 }
 
-/** The two fan-outs that run after capture. Both are optional wiring. */
+/** The fan-outs that run after capture. All optional wiring. */
 export interface InboundHandlers {
   /** Replies arriving from a verified personal inbox (plan §19.2). */
   relay?: RelayService;
   /** Notifications out to verified personal inboxes (plan §19.1). */
   forwarding?: ForwardingService;
+  /** Signed deliveries to HTTP endpoints (plan §13). */
+  webhooks?: WebhookService;
 }
 
 export class InboundService {
@@ -141,8 +144,10 @@ export class InboundService {
     }
 
     // Fan-out runs after the message is durable and can never undo it: a
-    // personal mailbox being unreachable must not turn into a provider retry
-    // that then deduplicates, leaving the operator with no mail at all.
+    // personal mailbox or a customer's application being unreachable must not
+    // turn into a provider retry that then deduplicates, leaving the operator
+    // with no mail at all. Each destination is isolated from the others for the
+    // same reason — one failing endpoint must not cost the rest their delivery.
     if (this.handlers.forwarding) {
       try {
         await this.handlers.forwarding.forward({
@@ -151,6 +156,18 @@ export class InboundService {
         });
       } catch (error) {
         console.error('Personal forwarding failed', error);
+      }
+    }
+
+    if (this.handlers.webhooks) {
+      try {
+        await this.handlers.webhooks.dispatch({
+          email: result.email,
+          address,
+          event: result.event,
+        });
+      } catch (error) {
+        console.error('Webhook dispatch failed', error);
       }
     }
 

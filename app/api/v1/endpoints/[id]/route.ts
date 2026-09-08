@@ -14,9 +14,11 @@ export const GET = withApi(
     const endpoint = await service.get(params.id);
     if (!endpoint) throw new NotFoundError(`Endpoint ${params.id} not found`);
 
+    // The URL comes back; the signing secret never does.
     return NextResponse.json({
       data: {
         ...endpoint,
+        url: await service.webhookUrl(endpoint.id),
         recipients: await service.listRecipients(endpoint.id),
       },
     });

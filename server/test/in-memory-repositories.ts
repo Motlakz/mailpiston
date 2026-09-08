@@ -8,6 +8,7 @@ import type {
   EmailListItem,
   MailEvent,
   Endpoint,
+  EndpointDelivery,
   EndpointEmailRecipient,
   EndpointWebhookConfig,
   MailEventType,
@@ -19,7 +20,9 @@ import type {
   AddressRepository,
   CreateAttachmentData,
   CreateEmailData,
+  DeliveryRepository,
   EmailRepository,
+  EnqueueResult,
   EventRepository,
   InboundCaptureResult,
   InboundThreadTarget,
@@ -228,8 +231,16 @@ export class InMemoryEmailRepository implements EmailRepository {
    * Threads are written through the email repository, exactly as the Neon one
    * does inside the capture transaction, so a test sees the same rollback
    * behaviour: a duplicate leaves no thread behind.
+   *
+   * `eventStore` mirrors the other half of that transaction. In Neon the
+   * capture event is a `mail_events` row like any other, so anything reading
+   * events finds it; passing the event repository here reproduces that, and a
+   * test that looks an event up by id sees the one capture wrote.
    */
-  constructor(readonly threads = new InMemoryThreadRepository()) {}
+  constructor(
+    readonly threads = new InMemoryThreadRepository(),
+    private readonly eventStore?: InMemoryEventRepository,
+  ) {}
 
   async create(data: CreateEmailData): Promise<Email> {
     const now = new Date();
@@ -278,6 +289,7 @@ export class InMemoryEmailRepository implements EmailRepository {
       occurredAt: now,
     };
     this.events.push(event);
+    this.eventStore?.rows.push(event);
 
     return { duplicate: false, email, event };
   }
@@ -440,6 +452,10 @@ export class InMemoryEventRepository implements EventRepository {
     const event: MailEvent = { ...data, id: nextId('evt'), occurredAt: new Date() };
     this.rows.push(event);
     return event;
+  }
+
+  async findById(id: string): Promise<MailEvent | null> {
+    return this.rows.find((row) => row.id === id) ?? null;
   }
 
   async list(filter: {
@@ -629,6 +645,109 @@ export class InMemoryEndpointRepository implements EndpointRepository {
     if (!this.recipients.delete(recipientId)) {
       throw new NotFoundError(`Recipient ${recipientId} not found`);
     }
+  }
+}
+
+/**
+ * Endpoint deliveries.
+ *
+ * Reproduces the one constraint the Neon implementation leans on the database
+ * for — the unique index on (event, endpoint, recipient) — because that index
+ * *is* how a single deliverer gets elected. A fake that let both callers insert
+ * would make a concurrency test pass while the real thing double-delivers.
+ */
+export class InMemoryDeliveryRepository implements DeliveryRepository {
+  readonly rows = new Map<string, EndpointDelivery>();
+
+  async enqueue(data: {
+    endpointId: string;
+    eventId: string;
+    recipientId: string | null;
+  }): Promise<EnqueueResult> {
+    const existing = [...this.rows.values()].find(
+      (row) =>
+        row.eventId === data.eventId &&
+        row.endpointId === data.endpointId &&
+        (row.recipientId ?? '') === (data.recipientId ?? ''),
+    );
+
+    if (existing) return { delivery: existing, created: false };
+
+    const now = new Date();
+    const delivery: EndpointDelivery = {
+      ...data,
+      id: nextId('dlv'),
+      status: 'pending',
+      attempt: 0,
+      responseCode: null,
+      lastError: null,
+      nextAttemptAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      deliveredAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.rows.set(delivery.id, delivery);
+    return { delivery, created: true };
+  }
+
+  async findById(id: string): Promise<EndpointDelivery | null> {
+    return this.rows.get(id) ?? null;
+  }
+
+  async claim(): Promise<EndpointDelivery | null> {
+    throw new Error('claim lands in Phase 8');
+  }
+
+  async markDelivered(id: string, responseCode: number): Promise<void> {
+    const existing = this.rows.get(id);
+    if (!existing) return;
+
+    this.rows.set(id, {
+      ...existing,
+      status: 'delivered',
+      attempt: existing.attempt + 1,
+      responseCode,
+      lastError: null,
+      deliveredAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  async markFailed(
+    id: string,
+    responseCode: number | null,
+    error: string,
+    nextAttemptAt: Date | null,
+  ): Promise<void> {
+    const existing = this.rows.get(id);
+    if (!existing) return;
+
+    this.rows.set(id, {
+      ...existing,
+      status: nextAttemptAt ? 'pending' : 'failed',
+      attempt: existing.attempt + 1,
+      responseCode,
+      lastError: error.slice(0, 2000),
+      nextAttemptAt: nextAttemptAt ?? existing.nextAttemptAt,
+      updatedAt: new Date(),
+    });
+  }
+
+  async listForEvent(eventId: string): Promise<EndpointDelivery[]> {
+    return [...this.rows.values()].filter((row) => row.eventId === eventId);
+  }
+
+  async listForEndpoint(
+    endpointId: string,
+    limit = 50,
+  ): Promise<EndpointDelivery[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.endpointId === endpointId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
   }
 }
 

@@ -27,6 +27,16 @@ export class NeonEventRepository implements EventRepository {
     return toEvent(row);
   }
 
+  async findById(id: string): Promise<MailEvent | null> {
+    const [row] = await db
+      .select()
+      .from(mailEvents)
+      .where(eq(mailEvents.id, id))
+      .limit(1);
+
+    return row ? toEvent(row) : null;
+  }
+
   async list(filter: {
     emailId?: string;
     type?: MailEventType;

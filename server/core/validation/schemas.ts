@@ -92,20 +92,34 @@ export const replyEmailSchema = z
   })
   .refine(hasBody, { message: 'A reply needs a text or HTML body' });
 
-export const createEndpointSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  /**
-   * `webhook` is accepted by the schema and refused by the service until
-   * Phase 7: the shape is public API surface, the behaviour is not built.
-   */
-  type: z.enum(['webhook', 'email', 'email_group']),
-  enabled: z.boolean().default(true),
-});
+/**
+ * A webhook destination.
+ *
+ * The shape is all this can check. Whether the URL points somewhere it is
+ * allowed to point — https, and not into our own network — is a question about
+ * DNS, so it belongs in `webhooks/url-guard.ts` and is asked again immediately
+ * before every delivery.
+ */
+export const webhookUrlSchema = z.url().max(2000);
+
+export const createEndpointSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    type: z.enum(['webhook', 'email', 'email_group']),
+    enabled: z.boolean().default(true),
+    /** Required for `webhook`, refused for the mailbox subtypes. */
+    url: webhookUrlSchema.optional(),
+  })
+  .refine((value) => value.type !== 'webhook' || Boolean(value.url), {
+    message: 'A webhook endpoint needs a URL',
+    path: ['url'],
+  });
 
 export const updateEndpointSchema = z
   .object({
     name: z.string().trim().min(1).max(100).optional(),
     enabled: z.boolean().optional(),
+    url: webhookUrlSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field must be provided',

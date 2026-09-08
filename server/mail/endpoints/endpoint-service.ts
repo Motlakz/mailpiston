@@ -1,29 +1,51 @@
 import 'server-only';
 
 import { ConflictError, NotFoundError, ValidationError } from '@/server/core/errors';
-import { randomToken, sha256Hex } from '@/server/core/crypto';
+import { encryptSecret, randomToken, sha256Hex } from '@/server/core/crypto';
 import type { Endpoint, EndpointEmailRecipient } from '@/server/core/types';
 import type {
   AddressRepository,
   EndpointRepository,
 } from '@/server/repositories/types';
 
+import { assertSafeWebhookUrl } from '../webhooks/url-guard';
+
 import type { OutboundService } from '../emails/outbound-service';
 
 /**
  * Endpoints: typed destinations an address fans out to (plan §13).
  *
- * Phase 6 enables the `email` and `email_group` subtypes. `webhook` is refused
- * here rather than half-built: an endpoint that accepts a URL and never
- * delivers to it is worse than one that says "not yet", because the operator
- * configures it, sees no error, and assumes their app is wired up. It lands in
- * Phase 7 with signing, SSRF checks, and a delivery log behind it.
+ * All three subtypes are live: `email` and `email_group` deliver a constructed
+ * notification to a verified mailbox (Phase 6), `webhook` signs and POSTs the
+ * public v1 payload (Phase 7).
  *
- * Recipients are verified by challenge, not by assertion. The operator can type
- * any address; without proof of control, a typo starts forwarding a customer's
- * mail to a stranger, and neither of them would ever know.
+ * The two halves are checked in opposite directions, and both are load-bearing:
+ *
+ *  - a **mailbox** proves it wants our mail, by answering a challenge. The
+ *    operator can type any address, and without proof of control a typo starts
+ *    forwarding a customer's mail to a stranger.
+ *  - a **URL** proves nothing and is not asked to. It is constrained instead:
+ *    HTTPS only, and never resolving into this deployment's own network. That
+ *    check runs here *and* again at delivery time, because DNS can change in
+ *    between (see `webhooks/url-guard.ts`).
  */
 const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** 32 bytes, base64url. Long enough that guessing is not a strategy. */
+const SIGNING_SECRET_BYTES = 32;
+
+/**
+ * A created endpoint, plus the signing secret if one was minted.
+ *
+ * The secret comes back exactly once, here, and is never readable again. It is
+ * stored encrypted rather than hashed because the server must recover it to
+ * *sign* deliveries — but an endpoint whose secret can be re-read on demand
+ * turns every read path into a way to leak it.
+ */
+export interface CreatedEndpoint {
+  endpoint: Endpoint;
+  secret: string | null;
+}
 
 export class EndpointService {
   constructor(
@@ -36,18 +58,52 @@ export class EndpointService {
     name: string;
     type: Endpoint['type'];
     enabled?: boolean;
-  }): Promise<Endpoint> {
-    if (input.type === 'webhook') {
-      throw new ValidationError(
-        'Webhook endpoints land in Phase 7, with signing and a delivery log. Use an email endpoint for now.',
-      );
+    url?: string;
+  }): Promise<CreatedEndpoint> {
+    if (input.type !== 'webhook') {
+      if (input.url) {
+        throw new ValidationError('Only a webhook endpoint takes a URL');
+      }
+
+      const endpoint = await this.endpoints.create({
+        name: input.name,
+        type: input.type,
+        enabled: input.enabled ?? true,
+      });
+
+      return { endpoint, secret: null };
     }
 
-    return this.endpoints.create({
+    if (!input.url) {
+      throw new ValidationError('A webhook endpoint needs a URL');
+    }
+
+    // Validated before the row exists, so a rejected URL leaves nothing behind.
+    await assertSafeWebhookUrl(input.url);
+
+    const endpoint = await this.endpoints.create({
       name: input.name,
-      type: input.type,
+      type: 'webhook',
       enabled: input.enabled ?? true,
     });
+
+    const secret = randomToken(SIGNING_SECRET_BYTES);
+
+    try {
+      await this.endpoints.setWebhookConfig({
+        endpointId: endpoint.id,
+        url: input.url,
+        secretCiphertext: encryptSecret(secret),
+      });
+    } catch (error) {
+      // Same rule as a failed alias create in Phase 3: an endpoint that exists
+      // with no destination is worse than no endpoint at all, because it looks
+      // configured and silently delivers nothing.
+      await this.endpoints.delete(endpoint.id).catch(() => undefined);
+      throw error;
+    }
+
+    return { endpoint, secret };
   }
 
   get(id: string): Promise<Endpoint | null> {
@@ -58,8 +114,70 @@ export class EndpointService {
     return this.endpoints.list();
   }
 
-  update(id: string, data: { name?: string; enabled?: boolean }): Promise<Endpoint> {
-    return this.endpoints.update(id, data);
+  /** The URL an operator configured. The secret deliberately does not come back. */
+  async webhookUrl(id: string): Promise<string | null> {
+    const config = await this.endpoints.getWebhookConfig(id);
+    return config?.url ?? null;
+  }
+
+  async update(
+    id: string,
+    data: { name?: string; enabled?: boolean; url?: string },
+  ): Promise<Endpoint> {
+    if (data.url !== undefined) {
+      await this.requireWebhookEndpoint(id);
+      const config = await this.endpoints.getWebhookConfig(id);
+
+      await assertSafeWebhookUrl(data.url);
+
+      await this.endpoints.setWebhookConfig({
+        endpointId: id,
+        url: data.url,
+        // Repointing an endpoint keeps its secret. The receiving application
+        // already has that secret deployed, and rotating it as a side effect of
+        // a URL change would break every verification at the new URL for a
+        // reason the operator never asked for. `rotateSecret` is the explicit
+        // way to change it.
+        secretCiphertext:
+          config?.secretCiphertext ??
+          encryptSecret(randomToken(SIGNING_SECRET_BYTES)),
+      });
+    }
+
+    const { name, enabled } = data;
+
+    if (name === undefined && enabled === undefined) {
+      const endpoint = await this.endpoints.findById(id);
+      if (!endpoint) throw new NotFoundError(`Endpoint ${id} not found`);
+      return endpoint;
+    }
+
+    return this.endpoints.update(id, { name, enabled });
+  }
+
+  /**
+   * Mints a new signing secret and returns it once.
+   *
+   * There is an unavoidable window: deliveries between this call and the
+   * receiver being redeployed fail verification. That is the right trade — the
+   * alternative is honouring two secrets at once, which means a compromised
+   * secret keeps working for as long as nobody gets round to removing it.
+   */
+  async rotateSecret(id: string): Promise<string> {
+    await this.requireWebhookEndpoint(id);
+
+    const config = await this.endpoints.getWebhookConfig(id);
+    if (!config) throw new NotFoundError('Endpoint has no webhook configuration');
+
+    const secret = randomToken(SIGNING_SECRET_BYTES);
+
+    await this.endpoints.setWebhookConfig({
+      endpointId: id,
+      url: config.url,
+      secretCiphertext: encryptSecret(secret),
+    });
+
+    return secret;
   }
 
   delete(id: string): Promise<void> {
@@ -173,6 +291,17 @@ export class EndpointService {
 
   removeRecipient(recipientId: string): Promise<void> {
     return this.endpoints.removeRecipient(recipientId);
+  }
+
+  private async requireWebhookEndpoint(endpointId: string): Promise<Endpoint> {
+    const endpoint = await this.endpoints.findById(endpointId);
+    if (!endpoint) throw new NotFoundError(`Endpoint ${endpointId} not found`);
+
+    if (endpoint.type !== 'webhook') {
+      throw new ValidationError('That endpoint is not a webhook endpoint');
+    }
+
+    return endpoint;
   }
 
   private async requireEmailEndpoint(endpointId: string): Promise<Endpoint> {

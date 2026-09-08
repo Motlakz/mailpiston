@@ -1,13 +1,18 @@
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import {
   AddEndpointForm,
+  DeliveryLog,
   EndpointBindings,
   RecipientList,
+  WebhookPanel,
 } from '@/components/mail/endpoint-actions';
 import { env } from '@/server/core/config';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Endpoints · MailPiston' };
+
+/** Enough of the log to see a pattern, not so much that it needs paging. */
+const DELIVERY_LOG_LIMIT = 10;
 
 export default async function EndpointsPage() {
   const [endpoints, addresses] = await Promise.all([
@@ -29,6 +34,20 @@ export default async function EndpointsPage() {
   const detail = await Promise.all(
     endpoints.map(async (endpoint) => ({
       endpoint,
+      // The URL only. The signing secret was shown once, at creation, and there
+      // is deliberately no path that reads it back.
+      webhookUrl:
+        endpoint.type === 'webhook'
+          ? ((await repositories.endpoints.getWebhookConfig(endpoint.id))?.url ??
+            null)
+          : null,
+      deliveries:
+        endpoint.type === 'webhook'
+          ? await repositories.deliveries.listForEndpoint(
+              endpoint.id,
+              DELIVERY_LOG_LIMIT,
+            )
+          : [],
       recipients: (await repositories.endpoints.listRecipients(endpoint.id)).map(
         (recipient) => ({
           id: recipient.id,
@@ -53,7 +72,7 @@ export default async function EndpointsPage() {
     <>
       <PageHeader
         title="Endpoints"
-        description="Where mail goes next: a verified mailbox, or a group of them. Webhook endpoints land in Phase 7."
+        description="Where mail goes next: a verified mailbox, a group of them, or a signed POST to your application."
         actions={<AddEndpointForm />}
       />
 
@@ -74,7 +93,7 @@ export default async function EndpointsPage() {
           />
         ) : (
           <div className="flex flex-col gap-4">
-            {detail.map(({ endpoint, recipients, bound }) => (
+            {detail.map(({ endpoint, recipients, bound, webhookUrl, deliveries }) => (
               <section
                 key={endpoint.id}
                 className="rounded-lg border border-border bg-card"
@@ -91,14 +110,29 @@ export default async function EndpointsPage() {
                   ) : null}
                 </header>
 
-                <div className="border-b border-border px-5 py-3">
-                  <p className="mb-2 text-xs text-muted-foreground">Recipients</p>
-                  <RecipientList
-                    endpointId={endpoint.id}
-                    recipients={recipients}
-                    addresses={sendable}
-                  />
-                </div>
+                {endpoint.type === 'webhook' ? (
+                  <>
+                    <div className="border-b border-border px-5 py-3">
+                      <WebhookPanel endpointId={endpoint.id} url={webhookUrl} />
+                    </div>
+
+                    <div className="border-b border-border px-5 py-3">
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        Recent deliveries
+                      </p>
+                      <DeliveryLog deliveries={deliveries} />
+                    </div>
+                  </>
+                ) : (
+                  <div className="border-b border-border px-5 py-3">
+                    <p className="mb-2 text-xs text-muted-foreground">Recipients</p>
+                    <RecipientList
+                      endpointId={endpoint.id}
+                      recipients={recipients}
+                      addresses={sendable}
+                    />
+                  </div>
+                )}
 
                 <div className="px-5 py-3">
                   <p className="mb-2 text-xs text-muted-foreground">
