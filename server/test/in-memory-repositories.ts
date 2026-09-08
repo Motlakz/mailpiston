@@ -23,6 +23,7 @@ import type {
   DeliveryRepository,
   EmailRepository,
   EnqueueResult,
+  EventFilter,
   EventRepository,
   InboundCaptureResult,
   InboundThreadTarget,
@@ -458,14 +459,16 @@ export class InMemoryEventRepository implements EventRepository {
     return this.rows.find((row) => row.id === id) ?? null;
   }
 
-  async list(filter: {
-    emailId?: string;
-    type?: MailEventType;
-    limit?: number;
-  }): Promise<Paginated<MailEvent>> {
+  async list(filter: EventFilter): Promise<Paginated<MailEvent>> {
     const items = this.rows
       .filter((row) => !filter.emailId || row.emailId === filter.emailId)
-      .filter((row) => !filter.type || row.type === filter.type)
+      .filter((row) => !filter.types?.length || filter.types.includes(row.type))
+      .filter(
+        (row) =>
+          !filter.endpointId || row.metadata.endpointId === filter.endpointId,
+      )
+      .filter((row) => !filter.since || row.occurredAt >= filter.since)
+      .filter((row) => !filter.until || row.occurredAt <= filter.until)
       .slice(0, filter.limit ?? 50);
 
     return { items, nextCursor: null };

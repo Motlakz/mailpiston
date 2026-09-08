@@ -238,12 +238,31 @@ export interface EventRepository {
   }): Promise<MailEvent>;
   /** A retry rebuilds its payload from the event it was enqueued for. */
   findById(id: string): Promise<MailEvent | null>;
-  list(filter: {
-    emailId?: string;
-    type?: MailEventType;
-    limit?: number;
-    cursor?: string | null;
-  }): Promise<Paginated<MailEvent>>;
+  list(filter: EventFilter): Promise<Paginated<MailEvent>>;
+}
+
+/**
+ * The unified event stream (roadmap Phase 9).
+ *
+ * `addressId` and `recipient` are two halves of one question. Most events hang
+ * off a message, and a message knows its address — but `email.rejected` has no
+ * message at all, and it is the single event an operator most often goes
+ * looking for ("where did that mail go?"). Its recipient lives in the metadata,
+ * so filtering by address matches both.
+ */
+export interface EventFilter {
+  emailId?: string;
+  types?: MailEventType[];
+  /** Events for messages this address received or sent. */
+  addressId?: string;
+  /** Also match address-less events (rejections) aimed at this mailbox. */
+  recipient?: string;
+  /** Matches `metadata.endpointId`, which fan-out events all carry. */
+  endpointId?: string;
+  since?: Date;
+  until?: Date;
+  limit?: number;
+  cursor?: string | null;
 }
 
 /**

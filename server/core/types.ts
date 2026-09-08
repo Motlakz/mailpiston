@@ -172,26 +172,40 @@ export interface EmailAttachment {
   createdAt: Date;
 }
 
-/** §4.7, plus `email.rejected` from roadmap Phase 4. */
-export type MailEventType =
-  | 'email.received'
-  | 'email.rejected'
-  | 'email.queued'
-  | 'email.sent'
-  | 'email.delivered'
-  | 'email.forwarded'
-  | 'email.soft_bounced'
-  | 'email.hard_bounced'
-  | 'email.failed'
-  | 'personal_forward.queued'
-  | 'personal_forward.delivered'
-  | 'personal_forward.failed'
-  | 'relay.reply_received'
-  | 'relay.reply_rejected'
-  | 'relay.reply_sent'
-  | 'webhook.queued'
-  | 'webhook.delivered'
-  | 'webhook.failed';
+/**
+ * §4.7, plus `email.rejected` from roadmap Phase 4.
+ *
+ * A value, not just a union, because the Logs page renders a filter from it and
+ * `/v1/events` validates against it — and a hand-maintained second list is a
+ * filter that quietly stops offering the newest event type. The order is the
+ * lifecycle order, so the filter reads top to bottom the way mail moves.
+ *
+ * `server/db/schema/enums.ts` holds the same values for Postgres. A type-level
+ * check there fails the build if the two ever diverge; they are separate files
+ * only so that importing this one does not drag Drizzle into a client bundle.
+ */
+export const MAIL_EVENT_TYPES = [
+  'email.received',
+  'email.rejected',
+  'email.queued',
+  'email.sent',
+  'email.delivered',
+  'email.forwarded',
+  'email.soft_bounced',
+  'email.hard_bounced',
+  'email.failed',
+  'personal_forward.queued',
+  'personal_forward.delivered',
+  'personal_forward.failed',
+  'relay.reply_received',
+  'relay.reply_rejected',
+  'relay.reply_sent',
+  'webhook.queued',
+  'webhook.delivered',
+  'webhook.failed',
+] as const;
+
+export type MailEventType = (typeof MAIL_EVENT_TYPES)[number];
 
 export interface MailEvent {
   id: string;

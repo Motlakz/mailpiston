@@ -1,5 +1,7 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
 
+import { MAIL_EVENT_TYPES, type MailEventType } from '@/server/core/types';
+
 /** Execution plan §4.1 */
 export const domainStatus = pgEnum('domain_status', [
   'pending',
@@ -33,26 +35,22 @@ export const emailStatus = pgEnum('email_status', [
  * decision (roadmap §1.2): mail for an unknown local part is recorded and
  * dropped rather than bounced.
  */
-export const mailEventType = pgEnum('mail_event_type', [
-  'email.received',
-  'email.rejected',
-  'email.queued',
-  'email.sent',
-  'email.delivered',
-  'email.forwarded',
-  'email.soft_bounced',
-  'email.hard_bounced',
-  'email.failed',
-  'personal_forward.queued',
-  'personal_forward.delivered',
-  'personal_forward.failed',
-  'relay.reply_received',
-  'relay.reply_rejected',
-  'relay.reply_sent',
-  'webhook.queued',
-  'webhook.delivered',
-  'webhook.failed',
-]);
+export const mailEventType = pgEnum('mail_event_type', MAIL_EVENT_TYPES);
+
+/**
+ * The Postgres enum and the domain type are the same list, and this makes the
+ * compiler enforce it. Adding a type without a migration would otherwise fail
+ * only at runtime, on the insert of the first event of the new kind.
+ */
+type MailEventTypesMatch =
+  (typeof mailEventType.enumValues)[number] extends MailEventType
+    ? MailEventType extends (typeof mailEventType.enumValues)[number]
+      ? true
+      : never
+    : never;
+
+const _mailEventTypesMatch: MailEventTypesMatch = true;
+void _mailEventTypesMatch;
 
 /** Execution plan §4.8 */
 export const deliveryStatus = pgEnum('delivery_status', [

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { Icon } from '@/components/icon';
 import { PageHeader } from '@/components/layout/page-shell';
 import { EmailBody } from '@/components/mail/email-body';
+import { EventTimeline } from '@/components/mail/event-timeline';
 import { ReplyForm } from '@/components/mail/compose';
 import { repositories } from '@/server/repositories';
 
@@ -93,18 +94,18 @@ export default async function EmailPage({
 
       {events.items.length > 0 ? (
         <section className="mt-5">
-          <h2 className="mb-2 text-sm font-medium">History</h2>
-          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card text-sm">
-            {events.items.map((event) => (
-              <li key={event.id} className="flex items-baseline gap-3 px-4 py-2">
-                <span className="font-mono text-xs">{event.type}</span>
-                <span className="flex-1" />
-                <time className="text-xs text-muted-foreground">
-                  {event.occurredAt.toISOString().replace('T', ' ').slice(0, 19)} UTC
-                </time>
-              </li>
-            ))}
-          </ul>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-medium">History</h2>
+            <Link
+              href={`/logs?addressId=${email.addressId ?? ''}`}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              All events for this address
+            </Link>
+          </div>
+          {/* The same component the Logs page renders. Two timelines that could
+              disagree would mean one of them is lying about what happened. */}
+          <EventTimeline events={events.items} />
         </section>
       ) : null}
     </>

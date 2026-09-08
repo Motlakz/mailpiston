@@ -591,6 +591,92 @@ Deliberately deferred:
 
 ---
 
+## Phase 9 — Event timeline · **built**
+
+| Deliverable | Where |
+| --- | --- |
+| Filterable event stream | `NeonEventRepository.list`, `EventFilter` |
+| Keyset cursor | `server/core/pagination.ts` |
+| `GET /v1/events` | `app/api/v1/events/route.ts` |
+| Logs page with filters | `app/(dashboard)/logs/page.tsx` |
+| Shared timeline component | `components/mail/event-timeline.tsx` |
+
+No migration. Every event has been written since Phase 4; this phase is the
+first thing to read them back as a stream.
+
+### The cursor needed the id, not just the timestamp
+
+`email.received`, `webhook.queued`, and `webhook.delivered` for one message are
+written within the same transaction and routinely share a millisecond. A cursor
+of `occurred_at < $1` silently drops whichever of them straddles a page
+boundary — the operator sees a message received and delivered with the queue
+step missing, and there is nothing in the output to suggest a row went astray.
+
+The cursor is now `(occurred_at, id)` compared as a tuple, which Postgres
+evaluates as one indexable expression. The id is an arbitrary tiebreak — ours
+are random, not sequential — but it only has to be stable.
+
+A malformed cursor pages from the start rather than returning 400. It is an
+opaque client-held string, and the most common bad one is a stale bookmark; a
+mildly wrong answer beats a broken saved URL.
+
+### Filtering by address has to include mail that never became a message
+
+`email.rejected` has no message, and therefore no address — only a recipient in
+its metadata. It is also the single event someone filtering by address is most
+often hunting for, because "where did that mail go?" is usually answered by "no
+such local part". So the address filter matches both: events whose message
+belongs to the address, **or** address-less events whose metadata recipient is
+that mailbox. The route resolves the address to its email once and passes both
+halves down.
+
+### One list of event types, checked against Postgres at compile time
+
+`MAIL_EVENT_TYPES` is a value in `server/core/types.ts`; the Postgres enum is
+built from it, and a type-level assertion in `schema/enums.ts` fails the build
+if the two ever diverge. The Logs filter and `/v1/events` validation both read
+that array, so a new event type appears in the filter and is accepted by the
+API without anyone remembering to update a second list.
+
+An unrecognised `?type=` is rejected rather than ignored. Silently dropping it
+returns the *unfiltered* stream, which reads as "there are no events of that
+kind" — the opposite of the truth.
+
+### One timeline component, two places
+
+The Logs page and the message viewer render the same component. Two timelines
+that could disagree would mean one of them is lying about what happened, and
+the whole point of this phase is that the audit trail is trustworthy.
+
+The row shows what the metadata actually holds — recipient, reason, response
+code, attempt number, whether a failure was final — read defensively, because
+metadata shapes differ per event type and a row that cannot be summarised must
+still render.
+
+Covered by tests (10 in `pagination.test.ts`): round-trip, sub-second precision
+preserved, splitting on the first separator, and null for every malformed form
+including empty, null, undefined, no separator, no timestamp, no id, and an
+unparseable timestamp.
+
+Acceptance, all met:
+
+- [x] Every message has a complete audit trail from receipt to final endpoint
+      delivery
+- [x] Filtering by endpoint shows only that endpoint's deliveries
+- [x] The timeline renders correctly for a message whose delivery ultimately
+      failed — the `final` flag on `webhook.failed` is rendered explicitly
+
+Deliberately deferred:
+
+- **Cursor paging in the UI.** The Logs page shows the most recent 100 and says
+  so; the API pages properly. A "load more" button waits until there is a
+  volume of events that makes scrolling the natural gesture.
+- **Per-attempt delivery history.** `webhook.failed` events already carry the
+  attempt number and finality, so the trail is complete; a dedicated
+  attempts table would only denormalise what the stream already says.
+
+---
+
 ## Not started
 
-Phases 9–11 as written in the roadmap.
+Phases 10–11 as written in the roadmap.

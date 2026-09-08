@@ -377,3 +377,55 @@ A delivery that has finally `failed` refuses a scheduled attempt outright — on
 It should not be, and it repairs itself. The claim will take a `delivering` row
 whose lease has expired — the request timeout plus 30 seconds — so a function
 that died mid-attempt is picked up by the next retry rather than stranded.
+
+---
+
+## 7. The event stream (Phase 9)
+
+Everything, newest first:
+
+```bash
+curl -sS "$APP/api/v1/events?limit=20" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+Filters compose. `type` may repeat; an unknown one is a 400 rather than a
+silently unfiltered stream, which would read as "no events of that kind":
+
+```bash
+curl -sS "$APP/api/v1/events?type=webhook.failed&type=webhook.delivered&endpointId=$ENDPOINT_ID" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+
+curl -sS "$APP/api/v1/events?addressId=$ADDRESS_ID&since=2026-09-01T00:00:00Z" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+Filtering by address includes mail that never became a message. `email.rejected`
+has no message and therefore no address — only a recipient in its metadata — and
+it is exactly what someone asking "where did that mail go?" is looking for. Send
+one and check it appears:
+
+```bash
+bun run post:inbound plain-text "nobody@$DOMAIN"
+```
+
+### Paging
+
+Follow `nextCursor` back through the stream:
+
+```bash
+curl -sS "$APP/api/v1/events?limit=10&cursor=$NEXT_CURSOR" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+The cursor is `(occurred_at, id)`, not a timestamp alone. Events for one message
+are written in a single transaction and routinely share a millisecond, so a
+timestamp-only cursor drops whichever of them lands on a page boundary. A
+malformed or stale cursor pages from the start rather than 400ing.
+
+### In the dashboard
+
+`/logs` carries the same filters in the URL, so a filtered view is a link worth
+pasting into a conversation about what happened to somebody's mail. The message
+viewer renders the same timeline component for one message, with a link through
+to everything for that address.

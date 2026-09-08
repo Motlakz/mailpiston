@@ -64,6 +64,16 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
   },
 
   /**
+   * The event stream. Fail-open: it is a read, and the moment an operator most
+   * needs the logs is the moment something else is already broken.
+   */
+  '/v1/events': {
+    requests: 600,
+    windowMs: 60 * 60 * 1000,
+    failOpen: true,
+  },
+
+  /**
    * Manual retry. Fail-closed: it makes an outbound HTTP request to a
    * third-party URL, so a limiter outage must not turn the button into an
    * amplifier pointed at someone else's server.
