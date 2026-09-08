@@ -8,6 +8,150 @@ import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
+export interface DriftFinding {
+  resourceId: string;
+  resourceType: string;
+  status: string;
+  detail: Record<string, unknown>;
+}
+
+/**
+ * The drift banner (roadmap Phase 10).
+ *
+ * Reconciliation detects and stops. This is where a person sees what it found
+ * and decides — the repair button is per domain, and it is the only thing in
+ * the system that changes provider configuration on the strength of a finding.
+ */
+export function DriftBanner({
+  findings,
+  checkedAt,
+  domainNames,
+}: {
+  findings: DriftFinding[];
+  checkedAt: string | null;
+  /** Domain id → name, so a finding reads as a place rather than an id. */
+  domainNames: Record<string, string>;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  async function recheck() {
+    setError(null);
+    setBusy('recheck');
+
+    try {
+      await apiRequest('/api/v1/reconciliation', { method: 'POST' });
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function repair(domainId: string) {
+    setError(null);
+    setBusy(domainId);
+
+    try {
+      await apiRequest(`/api/v1/domains/${domainId}/catch-all`, {
+        method: 'PUT',
+      });
+      await apiRequest('/api/v1/reconciliation', { method: 'POST' });
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (findings.length === 0) {
+    return (
+      <p className="mt-4 text-xs text-muted-foreground">
+        {checkedAt
+          ? `Provider configuration matched at ${checkedAt} UTC.`
+          : 'Provider configuration has not been checked yet.'}{' '}
+        <button
+          type="button"
+          onClick={recheck}
+          disabled={busy !== null}
+          className="underline hover:text-foreground"
+        >
+          Check now
+        </button>
+        {error ? <span className="ml-2 text-destructive">{error}</span> : null}
+      </p>
+    );
+  }
+
+  return (
+    <section className="mt-4 rounded-lg border border-warning/40 bg-card px-5 py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-medium text-warning">
+          Provider configuration has drifted
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          {checkedAt ? `checked ${checkedAt} UTC` : null}
+        </span>
+      </div>
+
+      <p className="mt-1 text-xs text-muted-foreground">
+        Nothing has been changed. Mail for anything listed here may not be
+        reaching MailPiston at all.
+      </p>
+
+      <ul className="mt-3 flex flex-col gap-2">
+        {findings.map((finding) => (
+          <li
+            key={`${finding.resourceType}-${finding.resourceId}-${String(finding.detail.reason)}`}
+            className="flex flex-wrap items-center gap-2 text-xs"
+          >
+            <span className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] text-warning">
+              {finding.status}
+            </span>
+            <span className="font-mono">
+              {finding.resourceType === 'alias'
+                ? `${String(finding.detail.localPart ?? '?')}@${String(finding.detail.domain ?? '')}`
+                : (domainNames[finding.resourceId] ??
+                  String(finding.detail.name ?? finding.resourceId))}
+            </span>
+            <span className="text-muted-foreground">
+              {String(finding.detail.reason ?? 'unknown')}
+            </span>
+
+            {finding.detail.localPart === '*' &&
+            domainNames[finding.resourceId] ? (
+              <button
+                type="button"
+                onClick={() => repair(finding.resourceId)}
+                disabled={busy !== null}
+                className="underline hover:text-foreground"
+              >
+                Repair catch-all
+              </button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={recheck}
+          disabled={busy !== null}
+          className="text-xs text-muted-foreground underline hover:text-foreground"
+        >
+          Check again
+        </button>
+        {error ? <span className="text-xs text-destructive">{error}</span> : null}
+      </div>
+    </section>
+  );
+}
+
 export function AddDomainForm() {
   const router = useRouter();
   const [name, setName] = useState('');

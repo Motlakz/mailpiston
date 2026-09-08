@@ -7,6 +7,7 @@ import { NeonEmailRepository } from './neon/email-repository';
 import { NeonEventRepository } from './neon/event-repository';
 import { NeonEndpointRepository } from './neon/endpoint-repository';
 import { NeonDeliveryRepository } from './neon/delivery-repository';
+import { NeonReconciliationRepository } from './neon/reconciliation-repository';
 import { NeonReplyRelayRepository } from './neon/reply-relay-repository';
 import { NeonThreadRepository } from './neon/thread-repository';
 
@@ -28,6 +29,7 @@ export const repositories = {
   endpoints: new NeonEndpointRepository(),
   deliveries: new NeonDeliveryRepository(),
   replyRelays: new NeonReplyRelayRepository(),
+  reconciliation: new NeonReconciliationRepository(),
 } as const;
 
 export type Repositories = typeof repositories;

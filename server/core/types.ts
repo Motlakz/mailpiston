@@ -237,6 +237,37 @@ export interface EndpointDelivery {
   updatedAt: Date;
 }
 
+/** Phase 10 — one comparison of our state against the provider's. */
+export type ReconciliationRunStatus = 'running' | 'completed' | 'failed';
+
+/**
+ * `drift` — both sides exist and disagree.
+ * `missing` — we expect it and the provider does not have it.
+ * `error` — we could not find out, which is not the same as "fine".
+ */
+export type ReconciliationItemStatus = 'ok' | 'drift' | 'missing' | 'error';
+
+export interface ReconciliationRun {
+  id: string;
+  provider: string;
+  status: ReconciliationRunStatus;
+  startedAt: Date;
+  finishedAt: Date | null;
+  error: string | null;
+}
+
+export interface ReconciliationItem {
+  id: string;
+  runId: string;
+  /** `domain` or `alias`. */
+  resourceType: string;
+  /** Our id for the thing compared, so a finding links back to a page. */
+  resourceId: string;
+  status: ReconciliationItemStatus;
+  detail: Record<string, unknown>;
+  createdAt: Date;
+}
+
 export interface ApiKey {
   id: string;
   name: string;

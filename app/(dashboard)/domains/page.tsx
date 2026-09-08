@@ -3,6 +3,7 @@ import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import {
   AddDomainForm,
   CopyButton,
+  DriftBanner,
   VerificationIssues,
   VerifyDomainButton,
   WebhookKeyForm,
@@ -14,12 +15,32 @@ import { repositories } from '@/server/repositories';
 export const metadata = { title: 'Domains · MailPiston' };
 
 export default async function DomainsPage() {
-  const [domains, withKeys] = await Promise.all([
+  const [domains, withKeys, latestRun] = await Promise.all([
     repositories.domains.list(),
     listDomainsWithWebhookKeys(),
+    repositories.reconciliation.latestRun(),
   ]);
 
   const configuredKeys = new Set(withKeys.map((row) => row.domainId));
+
+  // Findings only. An `ok` item means the sweep looked and was satisfied, which
+  // belongs in the run summary rather than in a banner about problems.
+  const items = latestRun
+    ? await repositories.reconciliation.listItems(latestRun.id)
+    : [];
+
+  const findings = items
+    .filter((item) => item.status !== 'ok')
+    .map((item) => ({
+      resourceId: item.resourceId,
+      resourceType: item.resourceType,
+      status: item.status,
+      detail: item.detail,
+    }));
+
+  const domainNames = Object.fromEntries(
+    domains.map((domain) => [domain.id, domain.name]),
+  );
 
   return (
     <>
@@ -27,6 +48,18 @@ export default async function DomainsPage() {
         title="Domains"
         description="Add or import a domain, publish the records it shows you, then verify. Existing Forward Email domains are imported automatically."
         actions={<AddDomainForm />}
+      />
+
+      {/* Detected, never repaired on its own. The button below is the only
+          thing that changes provider configuration from a finding. */}
+      <DriftBanner
+        findings={findings}
+        checkedAt={
+          latestRun?.finishedAt
+            ? latestRun.finishedAt.toISOString().replace('T', ' ').slice(0, 19)
+            : null
+        }
+        domainNames={domainNames}
       />
 
       {domains.length === 0 ? (

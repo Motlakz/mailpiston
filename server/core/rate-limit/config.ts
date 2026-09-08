@@ -64,6 +64,17 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
   },
 
   /**
+   * Reconciliation. Fail-closed: a manual sweep walks every domain at the
+   * provider, and a limiter outage must not let it become a way to burn the
+   * provider's rate limit.
+   */
+  '/v1/reconciliation': {
+    requests: 30,
+    windowMs: 60 * 60 * 1000,
+    failOpen: false,
+  },
+
+  /**
    * The event stream. Fail-open: it is a read, and the moment an operator most
    * needs the logs is the moment something else is already broken.
    */

@@ -429,3 +429,65 @@ malformed or stale cursor pages from the start rather than 400ing.
 pasting into a conversation about what happened to somebody's mail. The message
 viewer renders the same timeline component for one message, with a link through
 to everything for that address.
+
+---
+
+## 8. Provider reconciliation (Phase 10)
+
+The sweep runs every six hours from Inngest. To run one now:
+
+```bash
+curl -sS -X POST "$APP/api/v1/reconciliation" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+It returns a summary — `checked`, `drift`, `missing`, `errors`. Read the
+findings:
+
+```bash
+curl -sS "$APP/api/v1/reconciliation" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+`ok` items come back too. "We checked 14 things and 13 were fine" and "we
+checked one thing" look identical if only problems are returned, and the
+difference between them is whether the sweep actually ran.
+
+### Prove it catches the drift that costs mail
+
+Each of these is invisible without the sweep — nothing errors, the dashboard
+still looks correct, and mail simply stops arriving.
+
+| Do this in the Forward Email dashboard | Expected finding |
+| --- | --- |
+| Delete the catch-all alias | `alias` / `missing` / `not_found_at_provider` |
+| Repoint the catch-all at another URL | `alias` / `drift` / `recipient_not_our_ingress` |
+| Add a second recipient next to ours | `alias` / `drift` / `additional_recipients` |
+| Disable the alias | `alias` / `drift` / `disabled_at_provider` |
+| Delete the domain | `domain` / `missing` / `not_found_at_provider` |
+| Delete and recreate the domain | `domain` / `drift` / `provider_domain_id_changed` |
+
+The extra-recipient case is the one worth checking by hand. Delivery to us still
+works, so nothing looks wrong, while a copy of the customer's mail is being
+delivered somewhere MailPiston does not know about.
+
+### Nothing is repaired without a click
+
+Run the sweep against any of the above and confirm the provider state is
+unchanged afterwards. Then repair the catch-all explicitly:
+
+```bash
+curl -sS -X PUT "$APP/api/v1/domains/$DOMAIN_ID/catch-all" \
+  -H "Authorization: Bearer $MAILPISTON_API_KEY"
+```
+
+Or press **Repair catch-all** in the drift banner on `/domains`. Repair
+repoints rather than deleting and recreating — deleting first would leave a
+window with no catch-all at all, and mail arriving in that window is gone, not
+delayed. It finds the alias by local part rather than by our stored id, so it
+still works after a domain has been recreated at the provider.
+
+### Watching the cron
+
+In the Inngest dev dashboard, `reconcile-provider` appears with its `0 */6 * * *`
+schedule and can be triggered by hand from the Functions tab.

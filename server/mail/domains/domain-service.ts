@@ -114,6 +114,49 @@ export class DomainService {
     return this.domains.update(id, { catchAllAliasId: alias.id });
   }
 
+  /**
+   * Repairs the catch-all so it exists, is enabled, and points at our ingress
+   * and nothing else (roadmap Phase 10).
+   *
+   * Only ever called from an explicit operator action. Reconciliation detects
+   * drift and stops there: an automatic repair racing an operator who is
+   * mid-change turns a visible problem into an argument between two writers,
+   * and getting it wrong routes a customer's mail somewhere unintended.
+   *
+   * It repoints rather than deletes-and-recreates. Deleting first would open a
+   * window in which the domain has no catch-all at all, and mail arriving in
+   * that window is gone — not delayed, gone.
+   */
+  async repairCatchAll(id: string): Promise<Domain> {
+    const domain = await this.get(id);
+
+    if (!domain.providerDomainId) {
+      throw new ConflictError(`Domain ${domain.name} has no provider record`);
+    }
+
+    const ingress = inboundIngressUrl();
+
+    // Found by local part, not by the stored id: the stored id is exactly what
+    // goes stale when a domain is recreated at the provider, and repair has to
+    // work in precisely that case.
+    const existing = await this.provider.findAlias(domain.providerDomainId, '*');
+
+    const alias = existing
+      ? await this.provider.updateAlias(existing.id, {
+          domainId: domain.providerDomainId,
+          recipients: [ingress],
+          enabled: true,
+        })
+      : await this.provider.createAlias({
+          domainId: domain.providerDomainId,
+          localPart: '*',
+          recipients: [ingress],
+          description: 'MailPiston catch-all ingress',
+        });
+
+    return this.domains.update(id, { catchAllAliasId: alias.id });
+  }
+
   async removeCatchAll(id: string): Promise<Domain> {
     const domain = await this.get(id);
 

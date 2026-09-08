@@ -13,6 +13,9 @@ import type {
   EndpointWebhookConfig,
   MailEventType,
   Paginated,
+  ReconciliationItem,
+  ReconciliationItemStatus,
+  ReconciliationRun,
   ReplyRelay,
   Thread,
 } from '@/server/core/types';
@@ -28,6 +31,7 @@ import type {
   InboundCaptureResult,
   InboundThreadTarget,
   EndpointRepository,
+  ReconciliationRepository,
   ReplyRelayRepository,
   ThreadRepository,
   CreateAddressData,
@@ -834,6 +838,75 @@ export class InMemoryReplyRelayRepository implements ReplyRelayRepository {
   async revoke(id: string): Promise<void> {
     const relay = this.rows.get(id);
     if (relay) this.rows.set(id, { ...relay, revokedAt: new Date() });
+  }
+}
+
+export class InMemoryReconciliationRepository
+  implements ReconciliationRepository
+{
+  readonly runs: ReconciliationRun[] = [];
+  readonly items: ReconciliationItem[] = [];
+
+  async startRun(provider: string): Promise<ReconciliationRun> {
+    const run: ReconciliationRun = {
+      id: nextId('run'),
+      provider,
+      status: 'running',
+      startedAt: new Date(),
+      finishedAt: null,
+      error: null,
+    };
+
+    this.runs.push(run);
+    return run;
+  }
+
+  async finishRun(
+    id: string,
+    status: 'completed' | 'failed',
+    error: string | null = null,
+  ): Promise<ReconciliationRun> {
+    const index = this.runs.findIndex((run) => run.id === id);
+    if (index < 0) throw new NotFoundError(`Reconciliation run ${id} not found`);
+
+    const finished: ReconciliationRun = {
+      ...this.runs[index],
+      status,
+      error,
+      finishedAt: new Date(),
+    };
+
+    this.runs[index] = finished;
+    return finished;
+  }
+
+  async addItem(data: {
+    runId: string;
+    resourceType: string;
+    resourceId: string;
+    status: ReconciliationItemStatus;
+    detail: Record<string, unknown>;
+  }): Promise<ReconciliationItem> {
+    const item: ReconciliationItem = {
+      ...data,
+      id: nextId('item'),
+      createdAt: new Date(),
+    };
+
+    this.items.push(item);
+    return item;
+  }
+
+  async latestRun(): Promise<ReconciliationRun | null> {
+    return this.runs.at(-1) ?? null;
+  }
+
+  async listRuns(limit = 20): Promise<ReconciliationRun[]> {
+    return [...this.runs].reverse().slice(0, limit);
+  }
+
+  async listItems(runId: string): Promise<ReconciliationItem[]> {
+    return this.items.filter((item) => item.runId === runId);
   }
 }
 

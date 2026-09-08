@@ -14,6 +14,9 @@ import type {
   MailEvent,
   MailEventType,
   Paginated,
+  ReconciliationItem,
+  ReconciliationItemStatus,
+  ReconciliationRun,
   ReplyRelay,
   Thread,
 } from '@/server/core/types';
@@ -331,6 +334,33 @@ export interface ReplyRelayRepository {
   create(data: Omit<ReplyRelay, 'id' | 'createdAt' | 'revokedAt'>): Promise<ReplyRelay>;
   findByTokenHash(tokenHash: string): Promise<ReplyRelay | null>;
   revoke(id: string): Promise<void>;
+}
+
+/**
+ * Phase 10 — drift detection against the provider.
+ *
+ * A run is opened before any comparison happens, so a crash mid-sweep leaves a
+ * `running` row rather than nothing. "We do not know what happened" is a
+ * finding; silence is not.
+ */
+export interface ReconciliationRepository {
+  startRun(provider: string): Promise<ReconciliationRun>;
+  finishRun(
+    id: string,
+    status: 'completed' | 'failed',
+    error?: string | null,
+  ): Promise<ReconciliationRun>;
+  addItem(data: {
+    runId: string;
+    resourceType: string;
+    resourceId: string;
+    status: ReconciliationItemStatus;
+    detail: Record<string, unknown>;
+  }): Promise<ReconciliationItem>;
+  /** The most recent run, whatever its state. */
+  latestRun(): Promise<ReconciliationRun | null>;
+  listRuns(limit?: number): Promise<ReconciliationRun[]>;
+  listItems(runId: string): Promise<ReconciliationItem[]>;
 }
 
 export interface ApiKeyRepository {

@@ -15,6 +15,23 @@ export const POST = withApi(
   { endpoint: '/v1/domains' },
 );
 
+/**
+ * Repairs a drifted catch-all: recreates it if it is gone, repoints it at our
+ * current ingress if it is not.
+ *
+ * A `PUT` rather than a second `POST` because it is idempotent — running it on
+ * a healthy domain changes nothing. It exists only as an operator action:
+ * reconciliation detects drift and stops, because an automatic repair racing
+ * somebody mid-change turns a visible problem into two writers disagreeing.
+ */
+export const PUT = withApi(
+  async ({ params }) => {
+    const domain = await getDomainService().repairCatchAll(params.id);
+    return NextResponse.json({ data: domain });
+  },
+  { endpoint: '/v1/domains' },
+);
+
 export const DELETE = withApi(
   async ({ params }) => {
     const domain = await getDomainService().removeCatchAll(params.id);

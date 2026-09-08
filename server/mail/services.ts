@@ -13,6 +13,7 @@ import { EndpointService } from './endpoints/endpoint-service';
 import { ForwardingService } from './forwarding/forwarding-service';
 import { RelayService } from './forwarding/relay-service';
 import { InboundService } from './inbound/inbound-service';
+import { ReconciliationService } from './reconciliation/reconciliation-service';
 import { DefaultThreadResolver } from './threads/thread-resolver';
 import { WebhookService } from './webhooks/webhook-service';
 
@@ -31,6 +32,7 @@ let endpointService: EndpointService | undefined;
 let forwardingService: ForwardingService | undefined;
 let relayService: RelayService | undefined;
 let webhookService: WebhookService | undefined;
+let reconciliationService: ReconciliationService | undefined;
 
 export function getDomainService(): DomainService {
   domainService ??= new DomainService(
@@ -116,6 +118,16 @@ export function getWebhookService(): WebhookService {
   return webhookService;
 }
 
+export function getReconciliationService(): ReconciliationService {
+  reconciliationService ??= new ReconciliationService(
+    repositories.reconciliation,
+    repositories.domains,
+    repositories.addresses,
+    mailProviderRegistry.active(),
+  );
+  return reconciliationService;
+}
+
 export function getEndpointService(): EndpointService {
   endpointService ??= new EndpointService(
     repositories.endpoints,
@@ -132,6 +144,7 @@ export {
   ForwardingService,
   InboundService,
   OutboundService,
+  ReconciliationService,
   RelayService,
   WebhookService,
 };

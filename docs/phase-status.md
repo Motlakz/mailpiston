@@ -677,6 +677,109 @@ Deliberately deferred:
 
 ---
 
+## Phase 10 — Provider reconciliation · **built, unverified against a live account**
+
+| Deliverable | Where |
+| --- | --- |
+| The sweep, and what counts as drift | `server/mail/reconciliation/reconciliation-service.ts` |
+| Run and item persistence | `server/repositories/neon/reconciliation-repository.ts` |
+| Six-hourly cron | `server/jobs/reconcile-provider.ts` |
+| Read the latest run, or force one | `GET`/`POST /v1/reconciliation` |
+| Explicit repair | `PUT /v1/domains/:id/catch-all`, `DomainService.repairCatchAll` |
+| Drift banner | `app/(dashboard)/domains/page.tsx`, `DriftBanner` |
+
+No migration: `provider_reconciliation_runs` and `_items` have been in the
+schema since `0000`.
+
+### What this phase is actually for
+
+MailPiston's state and the provider's are two copies of one configuration, and
+the provider's is the one that routes mail. They drift for ordinary reasons —
+somebody deletes an alias in the Forward Email dashboard, the app origin moves
+and leaves every alias pointing at a dead URL, a domain gets removed and
+recreated. **None of that produces an error anywhere.** Mail stops arriving and
+the dashboard goes on looking correct. This sweep exists to notice.
+
+### It never repairs, and that is a design decision, not caution
+
+Not even the "obviously safe" cases. An automatic repair racing an operator who
+is mid-change turns a visible problem into two writers disagreeing, and a wrong
+repair routes a customer's mail somewhere unintended. Repair is
+`DomainService.repairCatchAll`, reachable only from a button next to the
+finding.
+
+Repair **repoints** rather than deleting and recreating: deleting first opens a
+window in which the domain has no catch-all at all, and mail arriving in that
+window is gone, not delayed. It also finds the alias by local part rather than
+by our stored id — the stored id is exactly what goes stale when a domain is
+recreated at the provider, which is one of the cases repair has to handle.
+
+### "We could not tell" is a finding
+
+A provider call that throws becomes an `error` item and the sweep continues to
+the next domain — the one after the broken one might be the one that is
+actually wrong. Skipping it silently would render as "checked, fine", which is
+the one thing this phase must never say.
+
+`ok` items are recorded and returned too. "We checked 14 things and 13 were
+fine" and "we checked one thing" look identical if only problems come back, and
+the difference between them is whether the sweep ran at all.
+
+### It compares in one direction
+
+Provider domains MailPiston does not know about are not drift. Phase 3 adopts
+existing domains, and an operator's Forward Email account may legitimately hold
+others; flagging them would train everyone to ignore the banner.
+
+### Alias checks go past the roadmap's scope, deliberately
+
+The roadmap scopes this to the catch-all. Concrete address aliases are checked
+too, because `listAliases` already returns them in the same call and a repointed
+address alias is the same failure with a narrower blast radius — one mailbox
+silently stops receiving instead of all of them.
+
+Four alias conditions count as drift: disabled at the provider, local part
+changed, recipients that do not include our current ingress URL, and **extra
+recipients alongside ours**. The last is the subtle one: delivery to us still
+works, so nothing looks wrong, while a copy of the operator's customer mail goes
+somewhere MailPiston does not know about.
+
+### Six hours
+
+Not a default. Drift here is silent, so the interval is really "how long is it
+acceptable to lose mail before anyone is told". A day is too long; a minute
+spends the provider's rate limit finding nothing, all day. The cron function
+gets `retries: 1`, unlike the delivery function's `0` — a sweep that failed on a
+transient hiccup is worth repeating, and repeating it is safe precisely because
+it writes findings and changes nothing.
+
+Covered by tests (15 in `reconciliation-service.test.ts`): a healthy account
+reporting two `ok` items and a completed run; a deleted catch-all; a repointed
+catch-all; an extra recipient; a disabled alias; a domain gone from the
+provider; a domain recreated under a new id; a drifted concrete address alias;
+the sweep changing nothing when it finds a problem; unmanaged provider domains
+ignored; a provider error recorded as a finding; the sweep continuing past a
+failed domain; repair recreating a deleted catch-all; repair repointing rather
+than recreating; repair working from a stale alias id.
+
+Still needs a live provider account:
+
+- [ ] Manually deleting a catch-all alias in the Forward Email dashboard raises
+      a drift warning within one cycle
+- [ ] Manually repointing a catch-all at a different URL is detected
+- [ ] Nothing is repaired without an explicit click
+
+Deliberately deferred:
+
+- **Repairing address aliases.** Detected, but only the catch-all has a repair
+  button. An address alias repair is `AddressService`'s to own, and it wants
+  the same care about not deleting first.
+- **Alerting.** The banner is on the page an operator visits when they suspect
+  a domain problem. Pushing a notification anywhere waits until there is a
+  deployment for it to notify.
+
+---
+
 ## Not started
 
-Phases 10–11 as written in the roadmap.
+Phase 11 as written in the roadmap.
