@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
+import { SIDEBAR_INIT_SCRIPT } from "@/components/layout/sidebar";
 import { THEME_INIT_SCRIPT } from "@/components/site/theme-toggle";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -49,8 +51,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Blocking, in <head>, and inline: a theme applied from a component
             paints the wrong colours first and snaps after hydration. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* One provider for the whole app: tooltips coordinate their open delay
+            with each other, so a shared provider is what stops the second
+            tooltip in a row replaying the full delay. */}
+        <TooltipProvider delay={250}>{children}</TooltipProvider>
+      </body>
     </html>
   );
 }

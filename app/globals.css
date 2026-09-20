@@ -567,3 +567,114 @@ textarea:focus-visible {
   --radius-lg: calc(var(--radius) + 4px);
   --radius-xl: calc(var(--radius) + 8px);
 }
+
+/* ---------------------------------------------------------------------------
+   Sidebar.
+
+   Width and label visibility are CSS rather than React state, because the
+   collapsed preference lives in localStorage and the server cannot see it. A
+   React-driven width renders expanded and animates shut after hydration on
+   every page load. `SIDEBAR_INIT_SCRIPT` sets `data-sidebar` on <html> before
+   first paint, so there is nothing left to correct.
+
+   `[data-sidebar="collapsed"]` is the only selector that changes anything; the
+   expanded state is the default, so a browser with the script blocked gets a
+   working, readable sidebar rather than an icon rail it cannot label.
+--------------------------------------------------------------------------- */
+
+:root { --sidebar-width: 14rem; }
+[data-sidebar="collapsed"] { --sidebar-width: 3.75rem; }
+
+nav[data-slot="sidebar"] {
+  background: color-mix(in oklch, var(--card) 60%, transparent);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  height: 100dvh;
+  overflow: hidden;
+  padding: 1rem 0;
+  position: sticky;
+  top: 0;
+  flex-shrink: 0;
+  width: var(--sidebar-width);
+  transition: width .28s cubic-bezier(.22, 1, .36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  nav[data-slot="sidebar"] { transition: none; }
+}
+
+.sidebar-head {
+  align-items: center;
+  display: flex;
+  gap: .5rem;
+  justify-content: space-between;
+  padding: 0 .75rem;
+}
+[data-sidebar="collapsed"] .sidebar-head { justify-content: center; }
+[data-sidebar="collapsed"] .sidebar-brand { display: none; }
+
+.sidebar-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 .5rem;
+}
+
+.sidebar-foot { padding: 0 .5rem; }
+
+.sidebar-group-label {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  padding: 0 .5rem .25rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Both are always in the DOM; the state picks one. Swapping them in React
+   would mean a hydration-time change on every load. */
+.sidebar-group-rule { display: none; }
+[data-sidebar="collapsed"] .sidebar-group-label { display: none; }
+[data-sidebar="collapsed"] .sidebar-group-rule { display: block; margin: .375rem 0; }
+
+.sidebar-link {
+  align-items: center;
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  display: flex;
+  gap: .5rem;
+  outline: none;
+  padding: .375rem .5rem;
+  position: relative;
+  font-size: .875rem;
+  transition: color .2s ease, background-color .2s ease;
+}
+.sidebar-link:hover { background: var(--muted); color: var(--foreground); }
+.sidebar-link.is-active { color: var(--foreground); }
+.sidebar-link.is-active:hover { background: transparent; }
+.sidebar-link:focus-visible { box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 50%, transparent); }
+[data-sidebar="collapsed"] .sidebar-link { justify-content: center; }
+
+.sidebar-label {
+  overflow: hidden;
+  position: relative;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 10;
+  /* Fades slightly ahead of the width so the two read as one movement rather
+     than as text being clipped by a moving edge. */
+  transition: opacity .16s ease .06s;
+}
+[data-sidebar="collapsed"] .sidebar-label {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition-delay: 0s;
+  width: 0;
+}

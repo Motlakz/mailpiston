@@ -9,6 +9,7 @@ import {
   CheckmarkCircle02Icon,
   Copy01Icon,
   DashboardSquare01Icon,
+  Book02Icon,
   Delete02Icon,
   DeletePutBackIcon,
   Download01Icon,
@@ -21,6 +22,7 @@ import {
   Message01Icon,
   PlusSignIcon,
   RefreshIcon,
+  PanelLeftIcon,
   Settings02Icon,
   Shield01Icon,
   ShieldKeyIcon,
@@ -70,6 +72,8 @@ const ICONS = {
   spam: SpamIcon,
   shield: Shield01Icon,
   restore: DeletePutBackIcon,
+  docs: Book02Icon,
+  panelLeft: PanelLeftIcon,
 } as const;
 
 export type IconName = keyof typeof ICONS;

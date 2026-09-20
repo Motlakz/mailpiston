@@ -12,7 +12,7 @@ export interface NavItem {
   href: string;
   label: string;
   icon: IconName;
-  group: 'mail' | 'config' | 'account';
+  group: 'mail' | 'config' | 'account' | 'help';
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -29,4 +29,10 @@ export const NAV_ITEMS: NavItem[] = [
 
   { href: '/api-keys', label: 'API Keys', icon: 'apiKeys', group: 'account' },
   { href: '/settings', label: 'Settings', icon: 'settings', group: 'account' },
+
+  // Pinned to the bottom of the sidebar rather than sitting in a group.
+  // Reference material is not a place in the product, it is something you
+  // reach for while you are somewhere else, so it should not compete with
+  // the sections for vertical position.
+  { href: '/docs', label: 'Docs', icon: 'docs', group: 'help' },
 ];
