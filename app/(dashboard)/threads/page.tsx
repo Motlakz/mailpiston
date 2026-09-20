@@ -1,49 +1,125 @@
 import Link from 'next/link';
 
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import { formatWhen } from '@/lib/format';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Threads · MailPiston' };
 
-export default async function ThreadsPage() {
-  const { items } = await repositories.threads.list({ limit: 100 });
+/**
+ * Conversations, which is not the same thing as threads.
+ *
+ * Every captured message gets a thread, so a list of all threads is the mail
+ * list again with less information — which is exactly why this page felt
+ * redundant. A conversation is a thread somebody actually replied in, and that
+ * is what this page shows by default.
+ *
+ * Single-message threads are still reachable behind the toggle rather than
+ * removed. They are not wrong, they are just not news, and an operator chasing
+ * a specific message should not find a page that denies it exists.
+ */
+export default async function ThreadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const raw = Array.isArray(params.show) ? params.show[0] : params.show;
+  const showAll = raw === 'all';
+
+  const { items } = await repositories.threads.list({
+    limit: 100,
+    minMessages: showAll ? 1 : 2,
+  });
 
   return (
     <>
       <PageHeader
         title="Threads"
-        description="Conversations resolved from In-Reply-To and References headers."
+        description="Conversations with a reply in them, resolved from In-Reply-To and References headers."
       />
+
+      <nav className="mt-4 flex flex-wrap items-center gap-1.5">
+        <Toggle href="/threads" label="Conversations" active={!showAll} />
+        <Toggle
+          href="/threads?show=all"
+          label="Including single messages"
+          active={showAll}
+        />
+      </nav>
 
       {items.length === 0 ? (
         <EmptyState
           icon="threads"
-          title="No threads yet"
-          description="Thread resolution runs on headers only. A subject-and-participant fallback is deliberately not shipped: wrongly merging two customers' threads is a data-leak-shaped bug."
+          title={showAll ? 'No threads yet' : 'No conversations yet'}
+          description={
+            showAll
+              ? 'Thread resolution runs on headers only. A subject-and-participant fallback is deliberately not shipped: wrongly merging two customers’ threads is a data-leak-shaped bug.'
+              : 'A conversation appears here once somebody replies. Everything received so far is a first message, and all of it is on Mail.'
+          }
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="mt-4 overflow-hidden rounded-lg border border-border bg-card">
           {items.map((thread) => (
             <Link
               key={thread.id}
               href={`/threads/${thread.id}`}
               className="flex items-baseline gap-3 border-b border-border px-4 py-3 last:border-0 hover:bg-muted/40"
             >
+              <span className="w-48 shrink-0 truncate text-sm font-medium">
+                {/* Who is in it matters more than the subject when scanning:
+                    a conversation is with a person, about a subject. */}
+                {thread.participants.join(', ') || (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </span>
+
               <span className="min-w-0 flex-1 truncate text-sm">
                 {thread.subject || (
                   <span className="text-muted-foreground">(no subject)</span>
                 )}
               </span>
+
+              <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                {thread.messageCount}{' '}
+                {thread.messageCount === 1 ? 'message' : 'messages'}
+              </span>
+
               <time
                 dateTime={thread.lastMessageAt.toISOString()}
-                className="shrink-0 text-xs text-muted-foreground"
+                title={`${thread.lastMessageAt.toISOString().replace('T', ' ').slice(0, 19)} UTC`}
+                className="w-24 shrink-0 text-right text-xs text-muted-foreground"
               >
-                {thread.lastMessageAt.toISOString().replace('T', ' ').slice(0, 16)}
+                {formatWhen(thread.lastMessageAt)}
               </time>
             </Link>
           ))}
         </div>
       )}
     </>
+  );
+}
+
+function Toggle({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+        active
+          ? 'border-foreground/20 bg-foreground text-background'
+          : 'border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+      }`}
+    >
+      {label}
+    </Link>
   );
 }

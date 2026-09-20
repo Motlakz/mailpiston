@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/page-shell';
+import { FilterLists } from '@/components/mail/filter-lists';
 import { env } from '@/server/core/config';
 import { repositories } from '@/server/repositories';
 
@@ -16,7 +17,10 @@ export const metadata = { title: 'Settings · MailPiston' };
  * privileged mutations, which is worth nothing if nobody can read it.
  */
 export default async function SettingsPage() {
-  const audit = await repositories.audit.list({ limit: 50 });
+  const [audit, filters] = await Promise.all([
+    repositories.audit.list({ limit: 50 }),
+    repositories.mailFilters.list(),
+  ]);
 
   return (
     <>
@@ -79,6 +83,15 @@ export default async function SettingsPage() {
               : 'Failed deliveries will stay pending and never be retried.'}
           </Setting>
         </dl>
+      </section>
+
+      {/* Unlike everything above, these ARE editable here — they are the
+          operator's own judgement about senders rather than deployment
+          configuration, and they have to be changeable the moment the filter
+          gets somebody wrong. */}
+      <section className="mt-6">
+        <h2 className="mb-2 text-sm font-medium">Mail filtering</h2>
+        <FilterLists entries={filters} />
       </section>
 
       <section className="mt-4 rounded-lg border border-border bg-card">

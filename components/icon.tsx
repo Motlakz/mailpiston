@@ -10,6 +10,7 @@ import {
   Copy01Icon,
   DashboardSquare01Icon,
   Delete02Icon,
+  DeletePutBackIcon,
   Download01Icon,
   GlobalIcon,
   InboxIcon,
@@ -21,7 +22,9 @@ import {
   PlusSignIcon,
   RefreshIcon,
   Settings02Icon,
+  Shield01Icon,
   ShieldKeyIcon,
+  SpamIcon,
   WebhookIcon,
 } from '@hugeicons/core-free-icons';
 
@@ -64,6 +67,9 @@ const ICONS = {
   attachment: Attachment01Icon,
   download: Download01Icon,
   signIn: ShieldKeyIcon,
+  spam: SpamIcon,
+  shield: Shield01Icon,
+  restore: DeletePutBackIcon,
 } as const;
 
 export type IconName = keyof typeof ICONS;

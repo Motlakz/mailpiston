@@ -3,10 +3,15 @@ import Link from 'next/link';
 import { Icon } from '@/components/icon';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import { ComposeForm } from '@/components/mail/compose';
+import {
+  EmptyBinButton,
+  MessageActions,
+} from '@/components/mail/message-actions';
 import { QuotaBar } from '@/components/mail/quota-bar';
 import { formatWhen, previewOf } from '@/lib/format';
-import type { EmailListItem, EmailStatus } from '@/server/core/types';
+import type { EmailListItem, EmailStatus, SpamCategory } from '@/server/core/types';
 import { getOutboundQuota } from '@/server/mail/emails/quota';
+import type { EmailFilter } from '@/server/repositories';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Mail · MailPiston' };
@@ -21,11 +26,16 @@ const PAGE_SIZE = 100;
  * which half of it they were looking for. Direction is a filter here, not a
  * destination.
  *
+ * Spam and Bin are filters too, for the same reason — they are not different
+ * kinds of thing, they are the same messages in a different state, and a
+ * message moves between them. What separates them from the rest is that they
+ * are the only two views that are *excluded* by default: quarantined and binned
+ * mail is opted into everywhere in the stack, so a query that forgets to say
+ * hides it rather than leaking it.
+ *
  * The conversation view still lives at `/threads`: a filter answers "what
  * happened", a thread answers "what is going on with this person", and those
- * are different questions. Threading is header-only by design (Phase 5), so a
- * flat list remains the reliable view — it never depends on a customer's mail
- * client having sent `References`.
+ * are different questions.
  */
 const FILTERS = {
   all: { label: 'All', query: {} },
@@ -37,7 +47,18 @@ const FILTERS = {
     // question the operator is asking.
     query: { statuses: ['soft_bounced', 'hard_bounced'] as EmailStatus[] },
   },
-} as const;
+  spam: { label: 'Spam', query: { spamVerdicts: ['spam' as const] } },
+  bin: {
+    label: 'Bin',
+    // Every verdict, because the bin holds whatever was put in it — including
+    // quarantined mail binned from the Spam view, which would otherwise be
+    // unreachable from the only screen that can restore it.
+    query: {
+      deleted: true,
+      spamVerdicts: ['clean', 'suspicious', 'spam'] as const,
+    },
+  },
+} as const satisfies Record<string, { label: string; query: EmailFilter }>;
 
 type FilterKey = keyof typeof FILTERS;
 
@@ -68,7 +89,13 @@ export default async function MailPage({
       <PageHeader
         title="Mail"
         description="Everything a managed address received or sent, newest first."
-        actions={<ComposeForm addresses={sendable} />}
+        actions={
+          active === 'bin' ? (
+            <EmptyBinButton count={page.items.length} />
+          ) : (
+            <ComposeForm addresses={sendable} />
+          )
+        }
       />
 
       <nav className="mt-4 flex flex-wrap items-center gap-1.5">
@@ -90,10 +117,25 @@ export default async function MailPage({
 
       {showQuota ? <QuotaBar quota={quota} /> : null}
 
+      {active === 'spam' ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Quarantined, not deleted. None of these reached a webhook or a personal
+          inbox. Releasing one makes it visible again — it does not re-send the
+          delivery your application never received.
+        </p>
+      ) : null}
+
+      {active === 'bin' ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Still here and still restorable. Emptying the bin removes these
+          messages and their attachments for good.
+        </p>
+      ) : null}
+
       <div className="mt-4">
         {page.items.length === 0 ? (
           <EmptyState
-            icon="inbox"
+            icon={EMPTY_ICON[active]}
             title={emptyTitle(active)}
             description={emptyDescription(active)}
           />
@@ -133,10 +175,13 @@ function MailRow({ email }: { email: EmailListItem }) {
   const preview = previewOf(email.text);
 
   return (
-    <Link
-      href={`/mail/${email.id}`}
-      className="flex items-baseline gap-3 border-b border-border px-4 py-3 last:border-0 hover:bg-muted/40"
-    >
+    <div className="group relative flex items-baseline gap-3 border-b border-border px-4 py-3 last:border-0 hover:bg-muted/40">
+      <Link
+        href={`/mail/${email.id}`}
+        className="absolute inset-0"
+        aria-label={email.subject || '(no subject)'}
+      />
+
       <span
         aria-label={outbound ? 'Sent' : 'Received'}
         className={`w-3 shrink-0 text-xs ${outbound ? 'text-muted-foreground' : 'text-transparent'}`}
@@ -156,6 +201,8 @@ function MailRow({ email }: { email: EmailListItem }) {
           <span className="ml-2 text-muted-foreground">— {preview}</span>
         ) : null}
       </span>
+
+      <SpamBadge email={email} />
 
       {email.attachmentCount > 0 ? (
         <Icon
@@ -180,9 +227,58 @@ function MailRow({ email }: { email: EmailListItem }) {
       >
         {formatWhen(when)}
       </time>
-    </Link>
+
+      {/* Sits above the overlay link so acting on a row does not open it. */}
+      <span className="relative z-10 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <MessageActions
+          emailId={email.id}
+          verdict={email.spamVerdict}
+          binned={Boolean(email.deletedAt)}
+          outbound={outbound}
+          compact
+        />
+      </span>
+    </div>
   );
 }
+
+/**
+ * Why a message was classified, in one word.
+ *
+ * `suspicious` is shown as well as `spam`, and that is the point of having
+ * three states: the operator can see what the engine nearly hid without it
+ * having been hidden.
+ */
+function SpamBadge({ email }: { email: EmailListItem }) {
+  if (email.spamVerdict === 'clean') return null;
+
+  const label = email.spamCategory
+    ? CATEGORY_LABEL[email.spamCategory]
+    : email.spamVerdict;
+
+  return (
+    <span
+      title={email.spamSignals.map((signal) => signal.rule).join(', ')}
+      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${
+        email.spamVerdict === 'spam'
+          ? 'border-destructive/40 text-destructive'
+          : 'border-warning/40 text-warning'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+export const CATEGORY_LABEL: Record<SpamCategory, string> = {
+  authentication: 'forged',
+  phishing: 'phishing',
+  malware: 'malware',
+  promotional: 'promo',
+  gibberish: 'gibberish',
+  cold_outreach: 'pitch',
+  empty: 'empty',
+};
 
 const STATUS_TONE: Record<EmailStatus, string> = {
   received: 'border-border text-muted-foreground',
@@ -209,8 +305,26 @@ function StatusBadge({ status }: { status: EmailStatus }) {
   );
 }
 
+const EMPTY_ICON: Record<FilterKey, 'inbox' | 'spam' | 'delete'> = {
+  all: 'inbox',
+  received: 'inbox',
+  sent: 'inbox',
+  bounced: 'inbox',
+  spam: 'spam',
+  bin: 'delete',
+};
+
 function emptyTitle(filter: FilterKey): string {
-  return filter === 'bounced' ? 'Nothing has bounced' : 'No messages yet';
+  switch (filter) {
+    case 'bounced':
+      return 'Nothing has bounced';
+    case 'spam':
+      return 'Nothing quarantined';
+    case 'bin':
+      return 'The bin is empty';
+    default:
+      return 'No messages yet';
+  }
 }
 
 function emptyDescription(filter: FilterKey): string {
@@ -221,6 +335,10 @@ function emptyDescription(filter: FilterKey): string {
       return 'Compose a message from a send-capable address, or reply to something you have received.';
     case 'bounced':
       return 'A send the far end refused would appear here, with the provider’s reason on the message.';
+    case 'spam':
+      return 'Phishing, malware, bulk campaigns, bot noise and cold pitches land here instead of reaching your webhooks. Nothing is ever deleted by the filter.';
+    case 'bin':
+      return 'Messages you bin stay here until you empty it. Nothing arrives here on its own.';
     default:
       return 'Mail to a managed address lands here, alongside everything sent from one.';
   }

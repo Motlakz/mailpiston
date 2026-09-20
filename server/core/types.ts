@@ -104,6 +104,20 @@ export interface Thread {
   updatedAt: Date;
 }
 
+/**
+ * A thread as the conversation list renders it.
+ *
+ * `messageCount` is the field that makes the list worth having. Every captured
+ * message creates a thread, so a list of all threads is a second, worse copy of
+ * the mail list — the ones worth calling conversations are the ones with a
+ * reply in them.
+ */
+export interface ThreadListItem extends Thread {
+  messageCount: number;
+  /** Everyone who has written in this thread, for the list row. */
+  participants: string[];
+}
+
 /** §4.6 */
 export type EmailDirection = 'inbound' | 'outbound';
 

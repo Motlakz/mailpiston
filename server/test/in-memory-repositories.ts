@@ -18,6 +18,7 @@ import type {
   ReconciliationRun,
   ReplyRelay,
   Thread,
+  ThreadListItem,
 } from '@/server/core/types';
 import type {
   AddressRepository,
@@ -293,6 +294,7 @@ export class InMemoryEmailRepository implements EmailRepository {
     this.rows.set(email.id, email);
     // Stands in for the Neon join the resolver runs against `emails`.
     this.threads.index([email.messageId, email.providerMessageId], threadId);
+    this.threads.recordMessage(threadId, email.from);
 
     for (const attachment of input.attachments) {
       const id = nextId('att');
@@ -553,12 +555,33 @@ export class InMemoryThreadRepository implements ThreadRepository {
     return null;
   }
 
-  async list(filter: { limit?: number }): Promise<Paginated<Thread>> {
+  /**
+   * Mirrors the Neon query, which counts rows in `emails` grouped by thread.
+   * The fake has no emails table to join, so the counts are recorded as
+   * messages are written — see `recordMessage`.
+   */
+  async list(filter: {
+    limit?: number;
+    minMessages?: number;
+  }): Promise<Paginated<ThreadListItem>> {
+    const minMessages = filter.minMessages ?? 1;
+
     const items = [...this.rows.values()]
+      .map((thread) => ({
+        ...thread,
+        messageCount: this.senders.get(thread.id)?.length ?? 0,
+        participants: [...new Set(this.senders.get(thread.id) ?? [])],
+      }))
+      .filter((thread) => thread.messageCount >= minMessages)
       .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime())
       .slice(0, filter.limit ?? 50);
 
     return { items, nextCursor: null };
+  }
+
+  /** One entry per message written into this thread, in arrival order. */
+  recordMessage(threadId: string, from: string): void {
+    this.senders.set(threadId, [...(this.senders.get(threadId) ?? []), from]);
   }
 
   async touch(id: string, lastMessageAt: Date): Promise<void> {
@@ -573,6 +596,8 @@ export class InMemoryThreadRepository implements ThreadRepository {
       updatedAt: new Date(),
     });
   }
+
+  private readonly senders = new Map<string, string[]>();
 
   /** Test-side stand-in for the Neon join from emails to threads. */
   index(messageIds: (string | null)[], threadId: string): void {

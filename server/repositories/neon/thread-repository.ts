@@ -1,9 +1,20 @@
 import 'server-only';
 
-import { and, desc, eq, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import { newId } from '@/server/core/ids';
-import type { Paginated, Thread } from '@/server/core/types';
+import type { Paginated, Thread, ThreadListItem } from '@/server/core/types';
 import { db } from '@/server/db/client';
 import { emails, threads } from '@/server/db/schema';
 import type { ThreadRepository } from '@/server/repositories/types';
@@ -71,25 +82,68 @@ export class NeonThreadRepository implements ThreadRepository {
     return row ? toThread(row.thread) : null;
   }
 
+  /**
+   * The conversation list.
+   *
+   * `minMessages` is what stops this page being a worse copy of `/mail`. Every
+   * captured message creates a thread, so listing all of them lists every
+   * message twice — once here and once there — and the duplicate is what makes
+   * threads feel redundant. A conversation is a thread somebody replied in, and
+   * `minMessages: 2` is that sentence as a query.
+   *
+   * Quarantined and binned messages do not count towards the total. A spam run
+   * that happens to carry a `References` header must not manufacture a
+   * conversation, and restoring a binned message should put its thread back
+   * rather than having left a hollow one in the list.
+   */
   async list(filter: {
     limit?: number;
     cursor?: string | null;
-  }): Promise<Paginated<Thread>> {
+    minMessages?: number;
+  }): Promise<Paginated<ThreadListItem>> {
     const limit = Math.min(filter.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
     // Threads page by activity, not creation: a long-running conversation that
     // just received a reply belongs at the top of the list.
     const cursorDate = filter.cursor ? new Date(filter.cursor) : null;
+    const minMessages = filter.minMessages ?? 1;
+
+    const counted = db
+      .select({
+        threadId: emails.threadId,
+        messageCount: sql<number>`count(*)::int`.as('message_count'),
+        participants: sql<
+          string[]
+        >`array_agg(distinct ${emails.from})`.as('participants'),
+      })
+      .from(emails)
+      .where(and(isNotNull(emails.threadId), isNull(emails.deletedAt), eq(emails.spamVerdict, 'clean')))
+      .groupBy(emails.threadId)
+      .as('counted');
 
     const rows = await db
-      .select()
+      .select({
+        thread: threads,
+        messageCount: counted.messageCount,
+        participants: counted.participants,
+      })
       .from(threads)
-      .where(cursorDate ? lt(threads.lastMessageAt, cursorDate) : undefined)
+      .innerJoin(counted, eq(counted.threadId, threads.id))
+      .where(
+        and(
+          cursorDate ? lt(threads.lastMessageAt, cursorDate) : undefined,
+          gte(counted.messageCount, minMessages),
+        ),
+      )
       .orderBy(desc(threads.lastMessageAt))
       .limit(limit + 1);
 
     const hasMore = rows.length > limit;
-    const items = (hasMore ? rows.slice(0, limit) : rows).map(toThread);
+    const items = (hasMore ? rows.slice(0, limit) : rows).map((row) => ({
+      ...toThread(row.thread),
+      messageCount: row.messageCount,
+      participants: row.participants ?? [],
+    }));
 
     return {
       items,

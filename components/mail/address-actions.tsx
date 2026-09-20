@@ -13,9 +13,18 @@ export interface DomainOption {
   hasCatchAll: boolean;
 }
 
-export function AddAddressForm({ domains }: { domains: DomainOption[] }) {
+export function AddAddressForm({
+  domains,
+  defaultDomainId,
+}: {
+  domains: DomainOption[];
+  /** The domain tab currently being viewed, when one is. */
+  defaultDomainId?: string;
+}) {
   const router = useRouter();
-  const [domainId, setDomainId] = useState(domains[0]?.id ?? '');
+  const [domainId, setDomainId] = useState(
+    defaultDomainId ?? domains[0]?.id ?? '',
+  );
   const [localPart, setLocalPart] = useState('');
   const [canSend, setCanSend] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,5 +135,54 @@ export function DeleteAddressButton({ addressId }: { addressId: string }) {
     >
       <Icon name="delete" size={12} />
     </Button>
+  );
+}
+
+/**
+ * Repoints this address's provider alias at the current ingress.
+ *
+ * The same action the drift banner offers, available where the address itself
+ * is. Reconciliation only sweeps every six hours, so an operator who has just
+ * moved `APP_URL` would otherwise have to wait for a banner to tell them what
+ * they already know.
+ */
+export function RepairAliasButton({ addressId }: { addressId: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Repoint provider alias at this deployment"
+        title="Repoint provider alias at this deployment"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+
+          try {
+            await apiRequest(`/api/v1/addresses/${addressId}/repair`, {
+              method: 'PUT',
+            });
+            router.refresh();
+          } catch (caught) {
+            setError(
+              caught instanceof ApiRequestError
+                ? caught.message
+                : 'Something went wrong. Check the server logs.',
+            );
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Icon name="refresh" size={12} />
+      </Button>
+
+      {error ? <span className="text-xs text-destructive">{error}</span> : null}
+    </span>
   );
 }

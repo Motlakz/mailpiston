@@ -23,6 +23,7 @@ import type {
   SpamSignal,
   SpamVerdict,
   Thread,
+  ThreadListItem,
 } from '@/server/core/types';
 
 /**
@@ -336,10 +337,18 @@ export interface ThreadRepository {
   findById(id: string): Promise<Thread | null>;
   /** Thread resolution step: find the thread owning any of these message ids. */
   findByMessageIds(messageIds: string[]): Promise<Thread | null>;
+  /**
+   * The conversation list.
+   *
+   * `minMessages` stops this page duplicating the mail list: every captured
+   * message creates a thread, so listing all of them shows every message
+   * twice. A conversation is a thread somebody replied in.
+   */
   list(filter: {
     limit?: number;
     cursor?: string | null;
-  }): Promise<Paginated<Thread>>;
+    minMessages?: number;
+  }): Promise<Paginated<ThreadListItem>>;
   touch(id: string, lastMessageAt: Date): Promise<void>;
 }
 
