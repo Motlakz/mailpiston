@@ -80,6 +80,11 @@ export function AddAddressForm({
       <span className="text-xs text-muted-foreground">@</span>
 
       <Select
+        // Without `items` the trigger shows the domain id rather than its name.
+        items={domains.map((domain) => ({
+          value: domain.id,
+          label: domain.name,
+        }))}
         value={domainId}
         onValueChange={(value) => setDomainId(String(value))}
       >

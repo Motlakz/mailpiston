@@ -95,6 +95,12 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
           <Field>
             <FieldLabel htmlFor="compose-from">From</FieldLabel>
             <Select
+              // Gives Select.Value the label for the selected id; without it the
+              // trigger renders the raw address id.
+              items={addresses.map((address) => ({
+                value: address.id,
+                label: address.email,
+              }))}
               value={addressId}
               onValueChange={(value) => setAddressId(String(value))}
             >
@@ -175,7 +181,14 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
  * else, because a reply whose `In-Reply-To` is editable is a reply that breaks
  * threading in the customer's client.
  */
-export function ReplyForm({ emailId }: { emailId: string }) {
+export function ReplyForm({
+  emailId,
+  replyAs,
+}: {
+  emailId: string;
+  /** The managed address this reply will be sent from, where it is known. */
+  replyAs?: string | null;
+}) {
   const router = useRouter();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -205,29 +218,57 @@ export function ReplyForm({ emailId }: { emailId: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 flex flex-col gap-2">
-      <Field>
-        <FieldLabel htmlFor="reply-body">Reply</FieldLabel>
-        <Textarea
-          id="reply-body"
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value);
-            setSent(false);
-          }}
-          rows={5}
-          required
-          placeholder="Your reply. Threading headers are set from this message."
-          className="resize-y leading-relaxed"
-        />
-      </Field>
-      <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending}>
+    // Three bands — identity, body, actions — as one bordered object, the way
+    // the product mock has drawn it from the start. It used to be a bare form on
+    // the page background, so the dashboard's grid ran behind the textarea and
+    // the composer read as floating debris rather than as part of the message.
+    //
+    // The identity band is the point of it: a reply goes out as the managed
+    // address, never the operator's own mailbox, and that is worth stating on
+    // the surface rather than leaving as something you have to know.
+    <form onSubmit={submit} className="reply-panel">
+      <div className="reply-panel__identity">
+        <span>Reply as</span>
+        {replyAs ? (
+          <strong>
+            <i aria-hidden /> {replyAs}
+          </strong>
+        ) : (
+          <strong>
+            <i aria-hidden /> the managed address
+          </strong>
+        )}
+      </div>
+
+      <Textarea
+        id="reply-body"
+        aria-label="Reply"
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          setSent(false);
+        }}
+        rows={5}
+        required
+        placeholder="Your reply. Threading headers are set from this message."
+        className="reply-panel__body"
+      />
+
+      <div className="reply-panel__footer">
+        <span className="reply-panel__status">
+          {sent ? (
+            <span className="text-success">Sent.</span>
+          ) : error ? (
+            <span className="text-destructive">{error}</span>
+          ) : (
+            'Threading headers are taken from this message.'
+          )}
+        </span>
+
+        <Button type="submit" size="sm" disabled={pending}>
           <Icon name="sent" size={13} />
           {pending ? 'Sending…' : 'Send reply'}
         </Button>
-        {sent ? <span className="text-xs text-success">Sent.</span> : null}
-        {error ? <span className="text-xs text-destructive">{error}</span> : null}
       </div>
     </form>
   );

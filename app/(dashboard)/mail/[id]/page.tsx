@@ -8,6 +8,7 @@ import { EventTimeline } from '@/components/mail/event-timeline';
 import { ReplyForm } from '@/components/mail/compose';
 import { MessageActions } from '@/components/mail/message-actions';
 import type { Email } from '@/server/core/types';
+import { formatBytes } from '@/lib/format';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Message · MailPiston' };
@@ -130,15 +131,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <>
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words font-mono text-xs">{children}</dd>
+      <dd className="min-w-0 wrap-break-word font-mono text-xs">{children}</dd>
     </>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /**

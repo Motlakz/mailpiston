@@ -421,6 +421,10 @@ function VerifyRecipient({
       ) : (
         <>
           <Select
+            items={addresses.map((address) => ({
+              value: address.id,
+              label: `from ${address.email}`,
+            }))}
             value={addressId}
             onValueChange={(value) => setAddressId(String(value))}
           >
@@ -751,6 +755,10 @@ export function EndpointBindings({
       {unbound.length > 0 ? (
         <>
           <Select
+            items={unbound.map((address) => ({
+              value: address.id,
+              label: address.email,
+            }))}
             value={addressId}
             onValueChange={(value) => setAddressId(String(value))}
           >

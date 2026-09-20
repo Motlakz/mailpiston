@@ -41,7 +41,7 @@
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--orange) 45%, transparent), transparent);
   content: ""; height: 1px; left: 22%; opacity: .58; position: absolute; right: 22%; top: 0;
 }
-.landing-v2 .brand-logo { height: 38px; }
+.landing-v2 .brand { --brand-mark: 32px; }
 .landing-v2 .site-nav { gap: 7px; }
 .landing-v2 .site-nav a { border-radius: 999px; padding: 9px 13px; position: relative; }
 .landing-v2 .site-nav a::after {
@@ -131,6 +131,11 @@
 .landing-v2 .route-map { background: #edf4f3; min-height: 30rem; }
 .landing-v2 .route-map::before { display: none; }
 .landing-v2 .react-flow__pane { cursor: default; }
+/* Kept, because hiding it is a Pro entitlement — but toned to the surface so it
+   reads as a credit rather than as a control. */
+.landing-v2 .react-flow__attribution { background: transparent; }
+.landing-v2 .react-flow__attribution a { color: color-mix(in srgb, var(--foreground) 34%, transparent); font-size: 8px; letter-spacing: .04em; }
+.landing-v2 .react-flow__attribution a:hover { color: color-mix(in srgb, var(--foreground) 62%, transparent); }
 .landing-v2 .react-flow__background { color: rgba(16,25,28,.14); }
 .landing-v2 .react-flow__node.flow-node {
   background: rgba(255,255,255,.97);
@@ -192,7 +197,7 @@
 .landing-v2 .final-cta::before { background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px); background-size: 24px 24px; content: ""; inset: 0; mask-image: radial-gradient(circle at center, black, transparent 70%); position: absolute; }
 .landing-v2 .site-footer { padding-block: 3.5rem 2rem; }
 .landing-v2 .site-footer__nav a, .landing-v2 .site-footer__top-link { transition: color .2s ease; }
-.landing-v2 .site-footer .brand-logo { height: 34px; }
+.landing-v2 .site-footer .brand { --brand-mark: 28px; }
 
 .dark .landing-v2 { --landing-shadow: 0 34px 90px rgba(0,0,0,.46); }
 .dark .landing-v2 .site-header { border-color: rgba(255,255,255,.11); box-shadow: 0 18px 54px rgba(0,0,0,.3), inset 0 1px rgba(255,255,255,.08); }
@@ -210,6 +215,9 @@
 .dark .landing-v2 .boundary-column li { color: #d8e0e1; }
 .dark .landing-v2 .boundary-divider span { background: #0c1518; color: #839397; }
 .dark .landing-v2 .privacy-visual { background: linear-gradient(145deg, rgba(44,77,89,.7), rgba(20,29,32,.94)); }
+/* The orbit rings are drawn in ink at 15% — invisible once the panel behind them
+   goes dark, which is why the section lost its geometry and read as a flat card. */
+.dark .landing-v2 .privacy-orbit { border-color: rgba(255,255,255,.16); }
 .dark .landing-v2 .privacy-visual .identity-card { color: #10191c; }
 .dark .landing-v2 .privacy-visual .identity-card > span { color: #667479; }
 .dark .landing-v2 .privacy-visual .identity-card small { color: #78878b; }
@@ -276,7 +284,7 @@
 }
 @media (max-width: 620px) {
   .landing-v2 .site-header { padding-left: 10px; }
-  .landing-v2 .brand-logo { height: 34px; }
+  .landing-v2 .brand { --brand-mark: 27px; }
   .landing-v2 .site-header__actions { gap: 6px; }
   .landing-v2 .site-header__actions .theme-toggle { display: none; }
   .landing-v2 .button--nav { font-size: 0; min-height: 40px; padding-inline: 12px; }

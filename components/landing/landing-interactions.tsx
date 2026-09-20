@@ -112,7 +112,6 @@ export function MailFlowDemo() {
             zoomOnPinch={false}
             zoomOnScroll={false}
             preventScrolling={false}
-            proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
           </ReactFlow>

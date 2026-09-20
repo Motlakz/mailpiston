@@ -132,6 +132,7 @@ function FilterSelect({
 
   return (
     <Select
+      items={[{ value: ANY, label: placeholder }, ...options]}
       value={value ?? ANY}
       onValueChange={(next) => {
         const chosen = String(next);

@@ -1,6 +1,6 @@
 'use client';
 
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useLinkStatus } from 'next/link';
 
@@ -48,7 +48,7 @@ export function NavTabs({
     <nav
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-[3px]',
+        'inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-0.75',
         className,
       )}
     >
@@ -108,21 +108,27 @@ function NavTabLink({ tab, active }: { tab: NavTab; active: boolean }) {
  * already prefetched, so on a warm tab this never appears — which is correct:
  * an indicator that flashes on an instant navigation is noise.
  *
- * Always rendered and toggled by opacity. Mounting it on pending would shift
- * the row's layout at exactly the moment the eye is on it.
+ * Always rendered and toggled by opacity, because mounting it on pending would
+ * shift the row's layout at exactly the moment the eye is on it. But it is
+ * positioned *absolutely* rather than left in the flex flow: in the flow its
+ * 4px box plus the row's 6px gap reserved ten permanent pixels to the right of
+ * every label, which pushed the text off-centre inside the active lozenge and
+ * read as a lopsided tab. Out of the flow it costs nothing when hidden and
+ * still shifts nothing when it appears.
+ *
+ * It sits inside the tab's own right padding, so it never collides with the
+ * label or the count.
  */
 function PendingDot() {
   const { pending } = useLinkStatus();
 
   return (
-    <AnimatePresence>
-      <motion.span
-        aria-hidden
-        className="relative z-10 size-1 rounded-full bg-current"
-        initial={false}
-        animate={{ opacity: pending ? 1 : 0, scale: pending ? 1 : 0.4 }}
-        transition={{ duration: 0.15 }}
-      />
-    </AnimatePresence>
+    <motion.span
+      aria-hidden
+      className="pointer-events-none absolute top-1/2 right-1 z-10 size-1 -translate-y-1/2 rounded-full bg-current"
+      initial={false}
+      animate={{ opacity: pending ? 1 : 0, scale: pending ? 1 : 0.4 }}
+      transition={{ duration: 0.15 }}
+    />
   );
 }

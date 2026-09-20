@@ -19,7 +19,9 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 96px; }
+/* `stable` so opening a dialog — which locks body scroll — does not remove the
+   scrollbar and jolt the whole page sideways by its width. */
+html { scroll-behavior: smooth; scroll-padding-top: 96px; scrollbar-gutter: stable; }
 body {
   margin: 0;
   background: var(--cream);
@@ -62,8 +64,23 @@ button, summary, a { -webkit-tap-highlight-color: transparent; }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
-.brand { align-items: center; display: inline-flex; font-size: 17px; font-weight: 700; gap: 10px; letter-spacing: -.03em; width: max-content; }
-.brand-logo { border-radius: 12px; display: block; height: 46px; object-fit: contain; width: auto; }
+/* One variable sets the whole lock-up, so mark and wordmark can never drift
+   out of proportion with each other. */
+.brand { --brand-mark: 34px; align-items: center; display: inline-flex; gap: 9px; width: max-content; }
+.brand[data-size="sm"] { --brand-mark: 26px; gap: 7px; }
+.brand[data-size="lg"] { --brand-mark: 42px; gap: 11px; }
+.brand-mark { border-radius: 27%; display: block; height: var(--brand-mark); object-fit: contain; width: var(--brand-mark); }
+/* Sized off the mark rather than set independently — the optical match between
+   a square icon and a cap height is a ratio, not a pair of numbers. */
+.brand-word {
+  font-family: var(--font-geist-sans), var(--sans);
+  font-size: calc(var(--brand-mark) * .52);
+  font-weight: 700;
+  letter-spacing: -.035em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.brand-word__accent { color: var(--orange-dark); }
 .site-nav { align-items: center; display: flex; gap: 30px; }
 .site-nav a { color: var(--nav-ink); font-size: 13px; font-weight: 650; transition: color .2s ease; }
 .site-nav a:hover { color: var(--orange-dark); }
@@ -382,13 +399,61 @@ em { color: var(--orange-dark); font-weight: 400; }
 }
 .dark .button--cream { background: var(--paper); color: var(--ink); }
 
-/* Product mock: pinned to the light palette on purpose — see the note above. */
+/* Product mock: pinned to the light palette on purpose — see the note above.
+ *
+ * `color-scheme` alone was not enough, and that was the bug. It governs form
+ * controls and scrollbars; it does nothing to custom properties. So the mock
+ * kept its hard-coded white panels while every token inside it resolved against
+ * `.dark` — `--ink` flipped to #eef2f1 and the inbox titles, sender names and
+ * subject lines went white on white. Everything that stayed legible did so by
+ * accident, because it used a literal grey rather than a token.
+ *
+ * Redeclaring the palette here is what actually pins it: these are the `:root`
+ * values, so a descendant asking for `var(--ink)` gets the dark ink it was
+ * designed against no matter which theme the page is in. The mock is a picture
+ * of the product, not a part of the page — it does not follow the theme. */
+.dark .mail-app,
 .dark .inbox-window,
 .dark .browser-frame,
-.dark .privacy-visual,
 .dark .flow-demo__screen {
   color-scheme: light;
+
+  /* Re-asserted, and not redundant with the tokens below. `body` resolves
+     `color: var(--ink)` against *its own* `--ink`, and descendants inherit the
+     computed colour rather than the variable — so anything in the mock that
+     never declares a colour of its own (the inbox title, the detail heading,
+     the sender name) was inheriting dark-mode white straight past this block.
+     Redeclaring the palette fixes the elements that ask for a token; this line
+     fixes the ones that just inherit. */
+  color: #10191c;
+
+  --ink: #10191c;
+  --ink-soft: #233136;
+  --muted: #667479;
+  --cream: #f8f4ea;
+  --paper: #fffdf7;
+  --orange-dark: #c9461d;
+  --blue: #bfe1ee;
+  --blue-bright: #8bcce1;
+  --pink: #f1b5bb;
+  --line: rgba(16, 25, 28, 0.12);
+  --shadow: 0 28px 80px rgba(28, 46, 50, 0.14);
+
+  --glass-from: rgba(255, 255, 255, 0.82);
+  --glass-to: rgba(255, 255, 255, 0.48);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --glass-inner: rgba(255, 255, 255, 0.9);
+  --header-bg: rgba(248, 244, 234, 0.72);
+  --header-edge: rgba(255, 255, 255, 0.7);
+  --sheet: rgba(255, 255, 255, 0.7);
+  --sheet-soft: rgba(255, 255, 255, 0.52);
+  --sheet-hover: #ffffff;
+  --nav-ink: #48565a;
 }
+
+/* The privacy panel is the exception: it is a *dark* surface in dark mode by
+   design, carrying light identity cards. It wants the theme, not the pin. */
+.dark .privacy-visual { color-scheme: light; }
 
 /* Ambient light behind the hero, tuned per theme: at light-mode opacity these
    wash out text on a dark ground. */
@@ -628,7 +693,8 @@ nav[data-slot="sidebar"] {
   padding: 0 .75rem;
 }
 [data-sidebar="collapsed"] .sidebar-head { justify-content: center; }
-[data-sidebar="collapsed"] .sidebar-brand { display: none; }
+/* The mark still fits the rail; only the name has to go. */
+[data-sidebar="collapsed"] .sidebar-brand .brand-word { display: none; }
 
 .sidebar-scroll {
   display: flex;

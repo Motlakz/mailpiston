@@ -363,7 +363,7 @@ function Field({
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+      <dd className="min-w-0 wrap-break-word">{children}</dd>
     </>
   );
 }

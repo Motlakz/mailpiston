@@ -1,47 +1,61 @@
 .dashboard-shell {
   --dashboard-radius: 1rem;
+  /* The grid is atmosphere, not content. At full `--border` strength and a
+     48px pitch a horizontal rule landed through roughly every other line of
+     body text and read as a strikethrough. Fainter, and a wider pitch so fewer
+     lines cross anything at all. */
   background:
     radial-gradient(circle at 86% 2%, color-mix(in srgb, var(--blue) 24%, transparent), transparent 24rem),
-    linear-gradient(var(--border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--border) 38%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 38%, transparent) 1px, transparent 1px),
     var(--background);
-  background-size: auto, 48px 48px, 48px 48px, auto;
+  background-size: auto, 72px 72px, 72px 72px, auto;
   font-family: var(--font-geist-sans), var(--sans);
 }
 
+/* The sidebar follows the theme like everything else. It used to be pinned to
+   #111b1e in both, which made light mode a bright page with one black column
+   down the side — and made the theme toggle look broken, since a third of the
+   screen ignored it. */
 .dashboard-shell nav[data-slot="sidebar"] {
   background:
-    radial-gradient(circle at 20% 0, rgba(139, 204, 225, .1), transparent 15rem),
-    #111b1e;
-  border-color: rgba(255,255,255,.08);
-  color: #eef2f1;
+    radial-gradient(circle at 20% 0, color-mix(in srgb, var(--blue) 16%, transparent), transparent 15rem),
+    var(--card);
+  border-color: var(--border);
+  color: var(--foreground);
   gap: 1.5rem;
   padding-block: 1.1rem;
-  box-shadow: 16px 0 50px rgba(16,25,28,.08);
+  box-shadow: 16px 0 50px color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 .dashboard-shell .sidebar-head { padding-inline: .85rem; }
-.dashboard-shell .sidebar-brand { background: #fffdf7; border-radius: .8rem; box-shadow: 0 10px 28px rgba(0,0,0,.2); padding: .2rem .45rem; }
-.dashboard-shell .sidebar-group-label { color: #65767a; font-size: 9px; font-weight: 700; letter-spacing: .15em; }
+/* No plate of its own any more: the old wordmark PNG carried a white
+   background that needed hiding, and the mark brings its own. */
+.dashboard-shell .sidebar-brand { align-items: center; display: inline-flex; gap: .55rem; }
+.dashboard-shell .sidebar-brand .brand-mark { height: 30px; width: 30px; }
+.dashboard-shell .sidebar-brand .brand-word { font-size: 15px; }
+.dashboard-shell .sidebar-group-label { color: var(--muted-foreground); font-size: 9px; font-weight: 700; letter-spacing: .15em; }
 .dashboard-shell .sidebar-link {
   border-radius: .65rem;
-  color: #87979b;
+  color: var(--muted-foreground);
   min-height: 2.2rem;
   padding-inline: .7rem;
   transition: background-color .18s ease, color .18s ease, transform .18s ease;
 }
-.dashboard-shell .sidebar-link:hover { background: rgba(255,255,255,.055); color: #eef2f1; transform: translateX(2px); }
-.dashboard-shell .sidebar-link.is-active { color: #fff; }
-.dashboard-shell .sidebar-link.is-active > span:first-child { background: rgba(255,255,255,.08); box-shadow: inset 2px 0 var(--orange); }
+.dashboard-shell .sidebar-link:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); color: var(--foreground); transform: translateX(2px); }
+.dashboard-shell .sidebar-link.is-active { color: var(--foreground); }
+.dashboard-shell .sidebar-link.is-active > span:first-child { background: color-mix(in srgb, var(--foreground) 8%, transparent); box-shadow: inset 2px 0 var(--orange); }
 .dashboard-shell .sidebar-foot [data-slot="separator"],
-.dashboard-shell .sidebar-group-rule { background: rgba(255,255,255,.08); }
-.dashboard-shell nav[data-slot="sidebar"] [data-slot="button"] { color: #839398; }
-.dashboard-shell nav[data-slot="sidebar"] [data-slot="button"]:hover { background: rgba(255,255,255,.08); color: #fff; }
+.dashboard-shell .sidebar-group-rule { background: var(--border); }
+.dashboard-shell nav[data-slot="sidebar"] [data-slot="button"] { color: var(--muted-foreground); }
+.dashboard-shell nav[data-slot="sidebar"] [data-slot="button"]:hover { background: color-mix(in srgb, var(--foreground) 8%, transparent); color: var(--foreground); }
 
 .dashboard-workspace { min-height: 100dvh; }
+/* Opaque. A translucent bar over a grid means the grid lines slide through the
+   controls as the page scrolls, which reads as flicker rather than as depth. */
 .dashboard-topbar {
-  background: color-mix(in srgb, var(--background) 84%, transparent);
-  border-color: color-mix(in srgb, var(--border) 80%, transparent);
-  box-shadow: 0 1px 0 rgba(255,255,255,.35), 0 12px 38px rgba(27,39,41,.04);
+  background: var(--background);
+  border-color: var(--border);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent), 0 12px 38px rgba(27,39,41,.04);
 }
 .dashboard-health i { background: var(--success); border-radius: 50%; box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 13%, transparent); height: 5px; width: 5px; }
 .dashboard-topbar .theme-toggle { background: var(--card); box-shadow: inset 0 0 0 1px var(--border); }
@@ -49,7 +63,18 @@
 .dashboard-content { margin-inline: auto; max-width: 96rem; padding: clamp(1.5rem, 3vw, 2.75rem); width: 100%; }
 .dashboard-page { gap: 1.5rem; }
 
-.dashboard-page-header { margin-bottom: .35rem; }
+/* A solid ground of its own. The header carries the page title, its
+   description and — on domains and addresses — the search and filter inputs,
+   and none of those should have a background grid running behind them. */
+.dashboard-page-header {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--dashboard-radius);
+  box-shadow: 0 10px 30px rgba(31,44,46,.04);
+  margin-bottom: .35rem;
+  padding: 1.3rem 1.45rem;
+}
+.dark .dashboard-page-header { box-shadow: 0 14px 36px rgba(0,0,0,.18); }
 .dashboard-page-header h1 {
   font-family: var(--font-geist-sans), var(--sans);
   font-size: clamp(2rem, 3vw, 3.15rem);
@@ -124,13 +149,84 @@
 .message-metadata { border-radius: 1rem; box-shadow: 0 18px 48px rgba(31,44,46,.055); }
 .dashboard-shell iframe[title="Message body"], .dashboard-shell pre { border-radius: 1rem; box-shadow: 0 18px 48px rgba(31,44,46,.055); }
 
+/* Plain-text bodies, given the same surface and measure as the HTML frame. */
+.email-body-plain {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: 0 18px 48px rgba(31,44,46,.055);
+  display: flex;
+  flex-direction: column;
+  font-size: .875rem;
+  gap: 1em;
+  line-height: 1.65;
+  padding: 1.6rem 1.75rem;
+}
+.email-body-plain p, .email-body-plain blockquote {
+  margin: 0;
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+  /* The sender's line breaks are often deliberate; only the wrap is ours. */
+  white-space: pre-wrap;
+}
+.email-body-plain blockquote {
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+  padding-left: 1rem;
+}
+.dark .email-body-plain { box-shadow: 0 22px 54px rgba(0,0,0,.22); }
+
+/* Three bands as one object, matching the mock's composer. */
+.reply-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: .9rem;
+  box-shadow: 0 18px 48px rgba(31,44,46,.055);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.reply-panel__identity {
+  align-items: center;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: .5rem;
+  padding: .6rem .9rem;
+}
+.reply-panel__identity span { color: var(--muted-foreground); font-size: .68rem; }
+.reply-panel__identity strong { align-items: center; display: inline-flex; font-size: .74rem; gap: .4rem; }
+.reply-panel__identity strong i { background: var(--orange); border-radius: 50%; height: 6px; width: 6px; }
+.reply-panel__body {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-size: .82rem;
+  line-height: 1.6;
+  min-height: 7.5rem;
+  padding: .9rem !important;
+  resize: vertical;
+}
+.reply-panel__body:focus-visible { outline: 0 !important; }
+.reply-panel__footer {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: .55rem .6rem .55rem .9rem;
+}
+.reply-panel__status { color: var(--muted-foreground); font-size: .68rem; }
+.dark .reply-panel { box-shadow: 0 22px 54px rgba(0,0,0,.22); }
+
 @media (max-width: 1000px) {
   .overview-control-grid { grid-template-columns: 1fr; }
   .overview-readiness h2 { max-width: none; }
 }
 @media (max-width: 760px) {
   .dashboard-shell { --sidebar-width: 3.75rem; }
-  .dashboard-shell .sidebar-brand, .dashboard-shell .sidebar-group-label { display: none; }
+  .dashboard-shell .sidebar-brand .brand-word, .dashboard-shell .sidebar-group-label { display: none; }
   .dashboard-shell .sidebar-head, .dashboard-shell .sidebar-link { justify-content: center; }
   .dashboard-shell .sidebar-label { display: none; }
   .dashboard-topbar .theme-toggle, .dashboard-health { display: none; }
@@ -143,4 +239,239 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .dashboard-shell .sidebar-link { transition: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Mail workspace: a list column beside a reading pane.
+
+   The shape the product mock has been showing on the landing page all along —
+   scan on the left, read on the right, no round trip to a separate page per
+   message. Selection lives in the query string, so the pane is server-rendered
+   and a chosen conversation is still a URL.
+   --------------------------------------------------------------------------- */
+/* One panel, divided — not two cards with a gutter. The border and radius live
+   here so the halves share an edge. Nothing in this subtree may set
+   `overflow: hidden`: that would make the sticky column stick to a clipping box
+   instead of to the viewport. */
+.mail-split {
+  --mail-head: 5.5rem;
+  align-items: stretch;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: 0 18px 48px rgba(31,44,46,.055);
+  display: grid;
+  grid-template-columns: minmax(19rem, 23rem) minmax(0, 1fr);
+}
+.dark .mail-split { box-shadow: 0 22px 54px rgba(0,0,0,.22); }
+
+.mail-list-col {
+  background: color-mix(in srgb, var(--foreground) 3%, var(--card));
+  border-radius: 1rem 0 0 1rem;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.mail-read-col {
+  background: var(--card);
+  border-radius: 0 1rem 1rem 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The sticky sits on an inner box, not the column: the column has to stretch
+   for the divider to run the full shared height, and a stretched box has
+   nothing left to stick to. No fixed height either — `max-height` lets a short
+   list stay short instead of leaving dead space, and caps it only once it would
+   outgrow the viewport. */
+.mail-list-sticky {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2.5rem);
+  position: sticky;
+  top: 1.25rem;
+}
+
+/* Both heads are the same height, so the hairline runs straight across the join. */
+.mail-list-head, .reading-pane__head {
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+  min-height: var(--mail-head);
+}
+.mail-list-head {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  justify-content: center;
+  padding: .7rem 1.1rem 0;
+}
+.mail-list-title { align-items: baseline; display: flex; gap: .55rem; }
+.mail-list-title strong { font-family: var(--serif); font-size: 1.35rem; font-weight: 500; letter-spacing: -.02em; }
+.mail-list-title span { color: var(--muted-foreground); font-size: .68rem; }
+/* Underlined text, not pills: the filter row in the mock is quiet enough that
+   the conversation rows stay the loudest thing in the column. */
+.mail-list-filters { display: flex; flex-wrap: wrap; gap: .1rem .95rem; }
+.mail-list-filters a {
+  border-bottom: 2px solid transparent;
+  color: var(--muted-foreground);
+  font-size: .72rem;
+  font-weight: 500;
+  padding-bottom: .4rem;
+  transition: color .16s ease, border-color .16s ease;
+}
+.mail-list-filters a:hover { color: var(--foreground); }
+.mail-list-filters a[data-active] { border-bottom-color: var(--orange); color: var(--foreground); font-weight: 650; }
+
+.mail-list-scroll {
+  border-bottom-left-radius: 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Hidden rather than permanently painted. On Windows the classic scrollbar is
+     always drawn, which put a grey rail down the middle of the panel even when
+     the list fitted. Wheel and trackpad scrolling are unaffected. */
+  scrollbar-width: none;
+}
+.mail-list-scroll::-webkit-scrollbar { height: 0; width: 0; }
+.mail-list-more { color: var(--muted-foreground); font-size: .7rem; padding: .7rem 1rem; }
+
+.conversation-row {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: .85rem 1rem;
+  position: relative;
+  transition: background-color .16s ease;
+}
+.conversation-row:last-child { border-bottom: 0; }
+.conversation-row:hover { background: var(--muted-bg, color-mix(in srgb, var(--foreground) 4%, transparent)); }
+.conversation-row[data-selected] { background: var(--card); }
+.conversation-row[data-selected]::before {
+  background: var(--orange); bottom: .55rem; content: ""; left: 0; position: absolute; top: .55rem; width: 2px;
+}
+.conversation-row__avatar {
+  align-items: center;
+  background: color-mix(in srgb, var(--blue) 45%, var(--card));
+  border-radius: .6rem;
+  display: flex;
+  font-size: .62rem;
+  font-weight: 700;
+  height: 2rem;
+  justify-content: center;
+  letter-spacing: .02em;
+  width: 2rem;
+}
+.conversation-row__body { display: flex; flex-direction: column; gap: .18rem; min-width: 0; }
+.conversation-row__top { align-items: baseline; display: flex; gap: .6rem; justify-content: space-between; }
+.conversation-row__top strong { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-row__top time { color: var(--muted-foreground); flex: 0 0 auto; font-size: .65rem; }
+.conversation-row__subject { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-row__subject em { color: var(--muted-foreground); font-style: normal; }
+.conversation-row__preview {
+  color: var(--muted-foreground);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: .71rem;
+  line-height: 1.45;
+  overflow: hidden;
+}
+.conversation-row__meta { align-items: center; display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .3rem; }
+.conversation-row__tag {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-radius: .3rem;
+  color: var(--muted-foreground);
+  font-size: .6rem;
+  max-width: 14rem;
+  overflow: hidden;
+  padding: .12rem .34rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversation-row__clip { align-items: center; color: var(--muted-foreground); display: inline-flex; font-size: .62rem; gap: .18rem; }
+
+.mail-read-back { display: none; }
+.reading-pane { display: flex; flex-direction: column; flex: 1; min-height: 28rem; }
+.reading-pane__head { display: flex; flex-direction: column; gap: .45rem; justify-content: center; padding: .7rem 1.4rem; }
+.reading-pane__toolbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; }
+.reading-pane__crumbs { color: var(--muted-foreground); font-size: .64rem; letter-spacing: .07em; text-transform: uppercase; }
+.reading-pane__tools { align-items: center; display: flex; gap: .4rem; }
+.reading-pane__expand {
+  align-items: center; border-radius: .4rem; color: var(--muted-foreground); display: inline-flex;
+  height: 1.7rem; justify-content: center; width: 1.7rem;
+}
+.reading-pane__expand:hover { background: color-mix(in srgb, var(--foreground) 7%, transparent); color: var(--foreground); }
+.reading-pane__head h2 {
+  font-family: var(--font-geist-sans), var(--sans);
+  font-size: 1.15rem;
+  font-weight: 620;
+  letter-spacing: -.026em;
+  line-height: 1.2;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reading-pane__from { align-items: center; display: flex; gap: .65rem; }
+.reading-pane__avatar {
+  align-items: center; background: color-mix(in srgb, var(--orange) 34%, var(--card)); border-radius: 50%;
+  display: flex; flex: 0 0 auto; font-size: .62rem; font-weight: 700; height: 2.1rem; justify-content: center; width: 2.1rem;
+}
+.reading-pane__from > span:nth-child(2) { display: flex; flex-direction: column; min-width: 0; }
+.reading-pane__from strong { font-size: .79rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reading-pane__from small { color: var(--muted-foreground); font-size: .67rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reading-pane__from time { color: var(--muted-foreground); flex: 0 0 auto; font-size: .65rem; margin-left: auto; }
+.reading-pane__flag { align-items: center; color: var(--muted-foreground); display: flex; flex-wrap: wrap; font-size: .71rem; gap: .5rem; margin: 0; }
+.reading-pane__body { display: flex; flex-direction: column; gap: 1.1rem; padding: 1.3rem 1.4rem 1.5rem; }
+/* Inside the pane the body already sits on a card, so it drops its own chrome. */
+.reading-pane__body .email-body-plain,
+.reading-pane__body iframe[title="Message body"],
+.reading-pane__body .reply-panel { box-shadow: none; }
+.reading-pane__attachments h3 { font-size: .74rem; font-weight: 600; margin: 0 0 .5rem; }
+.reading-pane__attachments ul { border: 1px solid var(--border); border-radius: .7rem; list-style: none; margin: 0; overflow: hidden; padding: 0; }
+.reading-pane__attachments li { align-items: center; border-top: 1px solid var(--border); display: flex; gap: .6rem; padding: .55rem .8rem; }
+.reading-pane__attachments li:first-child { border-top: 0; }
+.reading-pane__attachments li span { flex: 1; font-size: .74rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reading-pane__attachments li small { color: var(--muted-foreground); font-size: .66rem; }
+.reading-pane__attachments li a { color: var(--primary); font-size: .7rem; }
+
+.reading-pane--empty {
+  align-items: center; color: var(--muted-foreground); flex: 1; gap: .5rem; justify-content: center;
+  padding: 2rem; text-align: center;
+}
+.reading-pane--empty p { font-size: .84rem; margin: 0; }
+.reading-pane--empty small { font-size: .7rem; }
+.reading-pane__placeholder-mark {
+  align-items: center; background: color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 50%;
+  display: flex; height: 2.9rem; justify-content: center; margin-bottom: .3rem; width: 2.9rem;
+}
+
+/* One pane at a time once there is no room for two. */
+@media (max-width: 62rem) {
+  .mail-split { grid-template-columns: minmax(0, 1fr); }
+  .mail-list-col { border-radius: 1rem; border-right: 0; }
+  .mail-read-col { border-radius: 1rem; }
+  .mail-list-sticky { max-height: none; position: static; }
+  .mail-split[data-reading] .mail-list-col { display: none; }
+  .mail-split:not([data-reading]) .mail-read-col { display: none; }
+  .mail-read-back {
+    align-items: center; border-bottom: 1px solid var(--border); color: var(--muted-foreground);
+    display: flex; font-size: .74rem; gap: .4rem; padding: .7rem 1.1rem;
+  }
+}
+
+/* Loading shapes for the reading pane. */
+.skeleton-bar, .skeleton-avatar {
+  animation: mail-skeleton 1.4s ease-in-out infinite;
+  background: color-mix(in srgb, var(--foreground) 9%, transparent);
+  border-radius: .35rem;
+  display: block;
+  height: .62rem;
+}
+.skeleton-avatar { border-radius: 50%; height: 2.1rem; width: 2.1rem; }
+@keyframes mail-skeleton { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar, .skeleton-avatar { animation: none; }
 }

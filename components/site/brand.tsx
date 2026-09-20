@@ -1,13 +1,33 @@
 import Image from "next/image";
 
-import logo from "@/public/mailpistonlogo.png";
+import mark from "@/public/mailpistonlogo-2.png";
 
-export function Brand({ href = "#top", label = "MailPiston home" }: { href?: string; label?: string }) {
+export type BrandSize = "sm" | "md" | "lg";
+
+export function Brand({
+  href = "#top",
+  label = "MailPiston home",
+  size = "md",
+  wordmark = true,
+}: {
+  href?: string;
+  label?: string;
+  size?: BrandSize;
+  /** False for a collapsed rail, where only the mark fits. */
+  wordmark?: boolean;
+}) {
   return (
-    <a className="brand" href={href} aria-label={label}>
-      {/* The logo is the wordmark, so it carries the name on its own — the
-          alt text is the only place "MailPiston" needs to be written out. */}
-      <Image className="brand-logo" src={logo} alt="MailPiston" priority />
+    <a className="brand" data-size={size} href={href} aria-label={label}>
+      <Image className="brand-mark" src={mark} alt="" aria-hidden priority />
+      {wordmark ? <BrandWordmark /> : null}
     </a>
+  );
+}
+
+export function BrandWordmark() {
+  return (
+    <span className="brand-word" aria-hidden>
+      Mail<span className="brand-word__accent">Piston</span>
+    </span>
   );
 }

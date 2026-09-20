@@ -15,7 +15,8 @@ import {
 } from '@/components/ui/tooltip';
 import { usePersistedFlag } from '@/hooks/use-persisted-flag';
 import { cn } from '@/lib/utils';
-import logo from '@/public/mailpistonlogo.png';
+import { BrandWordmark } from '@/components/site/brand';
+import mark from '@/public/mailpistonlogo-2.png';
 
 import { NAV_ITEMS, type NavItem } from './nav';
 
@@ -68,13 +69,9 @@ export function Sidebar() {
     <nav data-slot="sidebar" aria-label="Dashboard">
       <div className="sidebar-head">
         <Link href="/overview" className="sidebar-brand" aria-label="Overview">
-          {/* Wordmark: the logo already says the name. */}
-          <Image
-            src={logo}
-            alt="MailPiston"
-            className="h-9 w-auto rounded-lg"
-            priority
-          />
+          <Image src={mark} alt="" aria-hidden className="brand-mark" priority />
+          {/* Hidden by CSS on the collapsed rail, where only the mark fits. */}
+          <BrandWordmark />
         </Link>
 
         <Tooltip>

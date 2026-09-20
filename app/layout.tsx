@@ -47,7 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // `suppressHydrationWarning` because the script below edits this element
     // before React sees it — which is the entire point of it running there.
-    <html lang="en" className={GeistSans.variable} suppressHydrationWarning>
+    <html lang="en" className={GeistSans.variable} data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {/* Blocking, in <head>, and inline: a theme applied from a component
             paints the wrong colours first and snaps after hydration. */}

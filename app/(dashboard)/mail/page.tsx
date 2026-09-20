@@ -1,18 +1,19 @@
+import { Suspense } from 'react';
+
 import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
-import { NavTabs } from '@/components/layout/nav-tabs';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import { ComposeForm } from '@/components/mail/compose';
+import { ConversationRow } from '@/components/mail/conversation-row';
 import {
-  EmptyBinButton,
-  MessageActions,
-} from '@/components/mail/message-actions';
+  ReadingPane,
+  ReadingPanePlaceholder,
+  ReadingPaneSkeleton,
+} from '@/components/mail/reading-pane';
+import { EmptyBinButton } from '@/components/mail/message-actions';
 import { QuotaBar } from '@/components/mail/quota-bar';
-import { Card } from '@/components/ui/card';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { formatWhen, previewOf } from '@/lib/format';
-import type { EmailListItem, EmailStatus, SpamCategory } from '@/server/core/types';
+import type { EmailStatus } from '@/server/core/types';
 import { getOutboundQuota } from '@/server/mail/emails/quota';
 import type { EmailFilter } from '@/server/repositories';
 import { repositories } from '@/server/repositories';
@@ -73,6 +74,16 @@ export default async function MailPage({
   const params = await searchParams;
   const raw = Array.isArray(params.show) ? params.show[0] : params.show;
   const active: FilterKey = raw && raw in FILTERS ? (raw as FilterKey) : 'all';
+  const selectedId = Array.isArray(params.id) ? params.id[0] : params.id;
+
+  /** Selection is a query parameter, so it survives a filter change and a refresh. */
+  const hrefFor = (id?: string) => {
+    const query = new URLSearchParams();
+    if (active !== 'all') query.set('show', active);
+    if (id) query.set('id', id);
+    const suffix = query.toString();
+    return suffix ? `/mail?${suffix}` : '/mail';
+  };
 
   const [page, addresses, quota] = await Promise.all([
     repositories.emails.list({ ...FILTERS[active].query, limit: PAGE_SIZE }),
@@ -99,17 +110,7 @@ export default async function MailPage({
             <ComposeForm addresses={sendable} />
           )
         }
-        toolbar={
-          <NavTabs
-            aria-label="Filter mail"
-            active={active}
-            tabs={(Object.keys(FILTERS) as FilterKey[]).map((key) => ({
-              key,
-              label: FILTERS[key].label,
-              href: key === 'all' ? '/mail' : `/mail?show=${key}`,
-            }))}
-          />
-        }
+
       />
 
       {showQuota ? <QuotaBar quota={quota} /> : null}
@@ -137,146 +138,79 @@ export default async function MailPage({
             description={emptyDescription(active)}
           />
         ) : (
-          <Card className="mail-list-card gap-0 overflow-hidden py-0">
-            {page.items.map((email) => (
-              <MailRow key={email.id} email={email} />
-            ))}
-          </Card>
-        )}
+          <div className="mail-split" data-reading={selectedId ? '' : undefined}>
+            <div className="mail-list-col">
+              {/* The sticky lives on an inner box, not on the column itself:
+                  the column has to stretch for the divider between the halves to
+                  run their full shared height, and a stretched box has nothing
+                  left to stick to. */}
+              <div className="mail-list-sticky">
+              <div className="mail-list-head">
+                <div className="mail-list-title">
+                  <strong>{FILTERS[active].label}</strong>
+                  <span>
+                    {page.items.length}
+                    {page.nextCursor ? '+' : ''} message
+                    {page.items.length === 1 ? '' : 's'}
+                  </span>
+                </div>
 
-        {page.nextCursor ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Showing the most recent {PAGE_SIZE}.
-          </p>
-        ) : null}
+                <nav className="mail-list-filters" aria-label="Filter mail">
+                  {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
+                    <Link
+                      key={key}
+                      href={key === 'all' ? '/mail' : `/mail?show=${key}`}
+                      aria-current={key === active ? 'page' : undefined}
+                      data-active={key === active ? '' : undefined}
+                    >
+                      {FILTERS[key].label}
+                    </Link>
+                  ))}
+                </nav>
+              </div>
+
+              <div className="mail-list-scroll">
+                {page.items.map((email) => (
+                  <ConversationRow
+                    key={email.id}
+                    email={email}
+                    href={hrefFor(email.id)}
+                    selected={email.id === selectedId}
+                  />
+                ))}
+              </div>
+
+              {page.nextCursor ? (
+                <p className="mail-list-more">
+                  Showing the most recent {PAGE_SIZE}.
+                </p>
+              ) : null}
+              </div>
+            </div>
+
+            <div className="mail-read-col">
+              {/* A back affordance only where the panes are stacked. */}
+              {selectedId ? (
+                <Link href={hrefFor()} className="mail-read-back">
+                  <Icon name="arrowLeft" size={13} />
+                  All mail
+                </Link>
+              ) : null}
+
+              {selectedId ? (
+                <Suspense key={selectedId} fallback={<ReadingPaneSkeleton />}>
+                  <ReadingPane emailId={selectedId} />
+                </Suspense>
+              ) : (
+                <ReadingPanePlaceholder />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
 }
-
-/**
- * One row shape for both directions.
- *
- * The counterparty is what the operator scans for, so it takes the fixed
- * column: the sender on inbound, the recipient on outbound. The arrow is what
- * tells the two apart at a glance, which matters most in the unfiltered view
- * where they interleave.
- */
-function MailRow({ email }: { email: EmailListItem }) {
-  const outbound = email.direction === 'outbound';
-  const when = outbound
-    ? (email.sentAt ?? email.createdAt)
-    : (email.receivedAt ?? email.createdAt);
-
-  const counterparty = outbound ? email.to.join(', ') : email.from;
-  const preview = previewOf(email.text);
-
-  return (
-    <div className="mail-list-row group relative flex items-center gap-3.5 border-b border-border px-4 py-3.5 transition-colors last:border-0 hover:bg-muted/40">
-      <Link
-        href={`/mail/${email.id}`}
-        className="absolute inset-0"
-        aria-label={email.subject || '(no subject)'}
-      />
-
-      <span
-        aria-label={outbound ? 'Sent' : 'Received'}
-        className={`w-3 shrink-0 text-xs ${outbound ? 'text-muted-foreground' : 'text-transparent'}`}
-      >
-        →
-      </span>
-
-      {/* The counterparty is the scan target, so it gets the weight. The
-          subject sits one step down and the preview one below that — three
-          levels in a row that previously had one. */}
-      <span className="mail-list-counterparty w-48 shrink-0 truncate text-sm font-medium">
-        {counterparty || <span className="text-muted-foreground">—</span>}
-      </span>
-
-      <span className="mail-list-subject min-w-0 flex-1 truncate text-sm text-foreground/90">
-        {email.subject || (
-          <span className="text-muted-foreground">(no subject)</span>
-        )}
-        {preview ? (
-          <span className="ml-2 text-xs text-muted-foreground">
-            {preview}
-          </span>
-        ) : null}
-      </span>
-
-      <SpamBadge email={email} />
-
-      {email.attachmentCount > 0 ? (
-        <Icon
-          name="attachment"
-          size={13}
-          className="shrink-0 text-muted-foreground"
-          aria-label={`${email.attachmentCount} attachments`}
-        />
-      ) : null}
-
-      {/* Inbound status is always `received`, which says nothing worth a pill. */}
-      {outbound ? <StatusBadge status={email.status} /> : null}
-
-      <span className="hidden shrink-0 font-mono text-[11px] text-muted-foreground md:inline">
-        {outbound ? email.from : (email.addressEmail ?? '—')}
-      </span>
-
-      <time
-        dateTime={when.toISOString()}
-        title={`${when.toISOString().replace('T', ' ').slice(0, 19)} UTC`}
-        className="w-24 shrink-0 text-right text-xs text-muted-foreground"
-      >
-        {formatWhen(when)}
-      </time>
-
-      {/* Sits above the overlay link so acting on a row does not open it. */}
-      <span className="relative z-10 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        <MessageActions
-          emailId={email.id}
-          verdict={email.spamVerdict}
-          binned={Boolean(email.deletedAt)}
-          outbound={outbound}
-          compact
-        />
-      </span>
-    </div>
-  );
-}
-
-/**
- * Why a message was classified, in one word.
- *
- * `suspicious` is shown as well as `spam`, and that is the point of having
- * three states: the operator can see what the engine nearly hid without it
- * having been hidden.
- */
-function SpamBadge({ email }: { email: EmailListItem }) {
-  if (email.spamVerdict === 'clean') return null;
-
-  return (
-    <StatusBadge
-      status={email.spamVerdict}
-      label={
-        email.spamCategory ? CATEGORY_LABEL[email.spamCategory] : undefined
-      }
-      // The rules that fired, so hovering a badge answers "why" without
-      // opening the message.
-      title={email.spamSignals.map((signal) => signal.rule).join(', ')}
-    />
-  );
-}
-
-export const CATEGORY_LABEL: Record<SpamCategory, string> = {
-  authentication: 'forged',
-  phishing: 'phishing',
-  malware: 'malware',
-  promotional: 'promo',
-  gibberish: 'gibberish',
-  cold_outreach: 'pitch',
-  empty: 'empty',
-};
-
 
 const EMPTY_ICON: Record<FilterKey, 'inbox' | 'spam' | 'delete'> = {
   all: 'inbox',
