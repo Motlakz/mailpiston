@@ -83,7 +83,7 @@ export function EventTimeline({
   showMessageLink?: boolean;
 }) {
   return (
-    <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+    <ul className="divide-y divide-border overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10">
       {events.map((event) => {
         const detail = detailOf(event);
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
 import { PageHeader } from '@/components/layout/page-shell';
+import { Card } from '@/components/ui/card';
 import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Overview · MailPiston' };
@@ -47,7 +48,7 @@ export default async function OverviewPage() {
         />
       </div>
 
-      <section className="rounded-lg border border-border bg-card p-5">
+      <Card className="p-5">
         <h2 className="text-sm font-medium">Next steps</h2>
         <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
           <li>1. Add a domain and publish the DNS records it shows you.</li>
@@ -57,7 +58,7 @@ export default async function OverviewPage() {
             <code className="font-mono text-xs">From:</code> at the provider.
           </li>
         </ol>
-      </section>
+      </Card>
     </>
   );
 }
@@ -76,7 +77,7 @@ function Stat({
   return (
     <Link
       href={href}
-      className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 transition-colors hover:border-ring/40"
+      className="flex flex-col gap-2 rounded-lg bg-card p-4 ring-1 ring-foreground/10 transition-colors hover:ring-ring/40"
     >
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Icon name={icon} size={13} />

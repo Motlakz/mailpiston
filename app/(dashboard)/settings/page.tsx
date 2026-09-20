@@ -29,7 +29,7 @@ export default async function SettingsPage() {
         description="Configuration is read-only here — it is parsed from the environment at boot. This page shows what is in force, and who changed what."
       />
 
-      <section className="mt-4 rounded-lg border border-border bg-card">
+      <section className="rounded-lg bg-card ring-1 ring-foreground/10">
         <header className="border-b border-border px-5 py-3">
           <h2 className="text-sm font-medium">In force</h2>
         </header>
@@ -94,7 +94,7 @@ export default async function SettingsPage() {
         <FilterLists entries={filters} />
       </section>
 
-      <section className="mt-4 rounded-lg border border-border bg-card">
+      <section className="rounded-lg bg-card ring-1 ring-foreground/10">
         <header className="border-b border-border px-5 py-3">
           <h2 className="text-sm font-medium">Audit trail</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">

@@ -96,7 +96,7 @@ export default async function EndpointsPage() {
             {detail.map(({ endpoint, recipients, bound, webhookUrl, deliveries }) => (
               <section
                 key={endpoint.id}
-                className="rounded-lg border border-border bg-card"
+                className="rounded-lg bg-card ring-1 ring-foreground/10"
               >
                 <header className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3">
                   <h2 className="text-sm font-medium">{endpoint.name}</h2>

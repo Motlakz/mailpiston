@@ -47,7 +47,7 @@ export default async function ThreadPage({
         {messages.map((message) => (
           <article
             key={message.id}
-            className="overflow-hidden rounded-lg border border-border bg-card"
+            className="overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10"
           >
             <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
               <span

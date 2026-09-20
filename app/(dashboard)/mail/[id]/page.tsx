@@ -53,7 +53,7 @@ export default async function EmailPage({
 
       <ClassificationPanel email={email} />
 
-      <dl className="mb-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-lg border border-border bg-card p-4 text-sm">
+      <dl className="mb-6 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 rounded-lg bg-card p-5 text-sm ring-1 ring-foreground/10">
         <Field label="To">{email.to.join(', ') || '—'}</Field>
         {email.cc.length > 0 ? <Field label="Cc">{email.cc.join(', ')}</Field> : null}
         <Field label="Received">
@@ -83,7 +83,7 @@ export default async function EmailPage({
           <h2 className="mb-2 text-sm font-medium">
             Attachments ({attachments.length})
           </h2>
-          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+          <ul className="divide-y divide-border overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10">
             {attachments.map((attachment) => (
               <li key={attachment.id} className="flex items-center gap-3 px-4 py-2.5">
                 <Icon name="attachment" size={14} className="text-muted-foreground" />

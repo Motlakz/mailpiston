@@ -6,6 +6,7 @@ import { OwnershipSection } from "@/components/landing/ownership-section";
 import { PrivacySection } from "@/components/landing/privacy-section";
 import { ProductSection } from "@/components/landing/product-section";
 import { PricingSection } from "@/components/landing/pricing-section";
+import { Reveal } from "@/components/landing/reveal";
 import { TrustRail } from "@/components/landing/trust-rail";
 import { landingPageStructuredData } from "@/components/landing/content";
 import { SiteFooter } from "@/components/site/site-footer";
@@ -26,13 +27,27 @@ export default function Home() {
         <main id="top">
           <HeroSection />
           <TrustRail />
-          <ProductSection />
-          <FlowSection />
-          <OwnershipSection />
-          <PrivacySection />
-          <PricingSection />
-          <FaqSection />
-          <FinalCta />
+          <Reveal>
+            <ProductSection />
+          </Reveal>
+          <Reveal>
+            <FlowSection />
+          </Reveal>
+          <Reveal>
+            <OwnershipSection />
+          </Reveal>
+          <Reveal>
+            <PrivacySection />
+          </Reveal>
+          <Reveal>
+            <PricingSection />
+          </Reveal>
+          <Reveal>
+            <FaqSection />
+          </Reveal>
+          <Reveal>
+            <FinalCta />
+          </Reveal>
         </main>
         <SiteFooter />
       </div>
