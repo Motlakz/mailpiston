@@ -5,6 +5,8 @@ import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 import type { MailFilterEntry } from '@/server/core/types';
 
@@ -91,25 +93,27 @@ function FilterList({
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card">
-      <header className="border-b border-border px-5 py-3">
+    <Card className="gap-0 py-0">
+      <CardHeader className="border-b px-5 py-3.5">
         <h3 className="text-sm font-medium">{title}</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{caption}</p>
-      </header>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{caption}</p>
+      </CardHeader>
 
-      <form onSubmit={add} className="flex flex-wrap gap-2 border-b border-border px-5 py-3">
-        <input
+      <form onSubmit={add} className="flex flex-wrap gap-2 border-b border-border px-5 py-3.5">
+        <Input
           value={pattern}
           onChange={(event) => setPattern(event.target.value)}
           placeholder="name@example.com or example.com"
+          aria-label="Address or domain"
           required
-          className="h-7 min-w-0 flex-1 rounded-md border border-input bg-card px-2 font-mono text-xs outline-none focus-visible:border-ring"
+          className="min-w-0 flex-1 font-mono"
         />
-        <input
+        <Input
           value={note}
           onChange={(event) => setNote(event.target.value)}
           placeholder="why (optional)"
-          className="h-7 w-32 rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring"
+          aria-label="Note"
+          className="w-32"
         />
         <Button type="submit" disabled={pending}>
           <Icon name="add" size={13} />
@@ -153,7 +157,7 @@ function FilterList({
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }
 

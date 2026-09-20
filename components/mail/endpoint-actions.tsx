@@ -5,11 +5,26 @@ import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { StatusBadge } from '@/components/ui/status-badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Dialog } from '@/components/ui/dialog';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
-
-const inputClass =
-  'h-7 rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring';
 
 function messageFor(error: unknown): string {
   return error instanceof ApiRequestError
@@ -18,11 +33,6 @@ function messageFor(error: unknown): string {
 }
 
 type EndpointType = 'email' | 'email_group' | 'webhook';
-
-const labelClass = 'text-[11px] font-medium tracking-wide text-muted-foreground';
-
-const fieldClass =
-  'h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs outline-none transition-colors focus-visible:border-ring';
 
 const TYPE_HELP: Record<EndpointType, string> = {
   email: 'One verified mailbox. Mail arrives as a constructed notification.',
@@ -110,58 +120,55 @@ export function AddEndpointForm() {
             </div>
           </div>
         ) : (
-          <form onSubmit={submit} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className={labelClass} htmlFor="endpoint-name">
-                Name
-              </label>
-              <input
+          <form onSubmit={submit} className="flex flex-col gap-3.5">
+            <Field>
+              <FieldLabel htmlFor="endpoint-name">Name</FieldLabel>
+              <Input
                 id="endpoint-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="My inbox"
                 required
-                className={fieldClass}
               />
-            </div>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <label className={labelClass} htmlFor="endpoint-type">
-                Type
-              </label>
-              <select
-                id="endpoint-type"
+            <Field>
+              <FieldLabel htmlFor="endpoint-type">Type</FieldLabel>
+              <Select
                 value={type}
-                onChange={(event) => setType(event.target.value as EndpointType)}
-                className={fieldClass}
+                onValueChange={(value) => setType(value as EndpointType)}
               >
-                <option value="email">email</option>
-                <option value="email_group">email_group</option>
-                <option value="webhook">webhook</option>
-              </select>
-              <p className="text-xs text-muted-foreground">{TYPE_HELP[type]}</p>
-            </div>
+                <SelectTrigger id="endpoint-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">email</SelectItem>
+                  <SelectItem value="email_group">email_group</SelectItem>
+                  <SelectItem value="webhook">webhook</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>{TYPE_HELP[type]}</FieldDescription>
+            </Field>
 
             {type === 'webhook' ? (
-              <div className="flex flex-col gap-1.5">
-                <label className={labelClass} htmlFor="endpoint-url">
-                  URL
-                </label>
-                <input
+              <Field>
+                <FieldLabel htmlFor="endpoint-url">URL</FieldLabel>
+                <Input
                   id="endpoint-url"
                   type="url"
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder="https://app.example/api/mail"
                   required
-                  className={`${fieldClass} font-mono`}
+                  className="font-mono"
                 />
-                <p className="text-xs text-muted-foreground">
+                <FieldDescription>
                   HTTPS only, and never an address inside this deployment&apos;s
                   own network — checked again before every delivery.
-                </p>
-              </div>
+                </FieldDescription>
+              </Field>
             ) : null}
+
 
             {error ? (
               <p className="rounded-md border border-destructive/40 px-2.5 py-1.5 text-xs text-destructive">
@@ -320,13 +327,14 @@ export function RecipientList({
       ))}
 
       <form onSubmit={add} className="flex flex-wrap items-center gap-2">
-        <input
+        <Input
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@personal.example"
+          aria-label="Recipient email"
           required
-          className={`${inputClass} w-56`}
+          className="w-56"
         />
         <Button type="submit" variant="outline" size="sm" disabled={pending}>
           Add recipient
@@ -394,18 +402,17 @@ function VerifyRecipient({
 
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <span className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] text-warning">
-        unverified
-      </span>
+      <StatusBadge status="pending" label="unverified" />
 
       {challengeSent ? (
         <form onSubmit={confirm} className="flex items-center gap-2">
-          <input
+          <Input
             value={token}
             onChange={(event) => setToken(event.target.value)}
             placeholder="Code from the email"
+            aria-label="Verification code"
             required
-            className={`${inputClass} w-44 font-mono`}
+            className="w-44 font-mono"
           />
           <Button type="submit" size="sm" disabled={pending}>
             Confirm
@@ -413,17 +420,21 @@ function VerifyRecipient({
         </form>
       ) : (
         <>
-          <select
+          <Select
             value={addressId}
-            onChange={(event) => setAddressId(event.target.value)}
-            className={inputClass}
+            onValueChange={(value) => setAddressId(String(value))}
           >
-            {addresses.map((address) => (
-              <option key={address.id} value={address.id}>
-                from {address.email}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label="Send the challenge from" className="w-auto min-w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {addresses.map((address) => (
+                <SelectItem key={address.id} value={address.id}>
+                  from {address.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button type="button" variant="outline" size="sm" onClick={sendChallenge}>
             Send code
           </Button>
@@ -512,12 +523,13 @@ export function WebhookPanel({
       <p className="text-xs text-muted-foreground">Destination</p>
 
       <form onSubmit={save} className="flex flex-wrap items-center gap-2">
-        <input
+        <Input
           type="url"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          aria-label="Webhook URL"
           required
-          className={`${inputClass} w-80 font-mono`}
+          className="w-80 font-mono"
         />
         <Button type="submit" variant="outline" size="sm" disabled={pending}>
           Save
@@ -565,13 +577,6 @@ export interface DeliveryRow {
   createdAt: string | Date;
 }
 
-const STATUS_CLASS: Record<string, string> = {
-  delivered: 'border-success/40 text-success',
-  failed: 'border-destructive/40 text-destructive',
-  pending: 'border-warning/40 text-warning',
-  delivering: 'border-border text-muted-foreground',
-};
-
 /** Status, response code, last error, attempt count — plan §13's delivery log. */
 export function DeliveryLog({ deliveries }: { deliveries: DeliveryRow[] }) {
   const router = useRouter();
@@ -618,57 +623,51 @@ export function DeliveryLog({ deliveries }: { deliveries: DeliveryRow[] }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead className="text-muted-foreground">
-            <tr>
-              <th className="py-1 pr-4 font-normal">When</th>
-              <th className="py-1 pr-4 font-normal">Status</th>
-              <th className="py-1 pr-4 font-normal">Code</th>
-              <th className="py-1 pr-4 font-normal">Attempts</th>
-              <th className="py-1 pr-4 font-normal">Last error</th>
-              <th className="py-1 font-normal" />
-            </tr>
-          </thead>
-          <tbody>
-            {deliveries.map((delivery) => (
-              <tr key={delivery.id} className="border-t border-border align-top">
-                <td className="py-1.5 pr-4 whitespace-nowrap text-muted-foreground">
-                  {new Date(delivery.createdAt).toLocaleString()}
-                </td>
-                <td className="py-1.5 pr-4">
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                      STATUS_CLASS[delivery.status] ?? 'border-border'
-                    }`}
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-8 ps-0">When</TableHead>
+            <TableHead className="h-8">Status</TableHead>
+            <TableHead className="h-8">Code</TableHead>
+            <TableHead className="h-8">Attempts</TableHead>
+            <TableHead className="h-8">Last error</TableHead>
+            <TableHead className="h-8 text-right">Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {deliveries.map((delivery) => (
+            <TableRow key={delivery.id}>
+              <TableCell className="py-2.5 ps-0 align-top whitespace-nowrap text-muted-foreground tabular-nums">
+                {new Date(delivery.createdAt).toLocaleString()}
+              </TableCell>
+              <TableCell className="py-2.5 align-top">
+                <StatusBadge status={delivery.status} />
+              </TableCell>
+              <TableCell className="py-2.5 align-top font-mono tabular-nums">
+                {delivery.responseCode ?? '—'}
+              </TableCell>
+              <TableCell className="py-2.5 align-top font-mono tabular-nums">
+                {delivery.attempt}
+              </TableCell>
+              <TableCell className="max-w-md py-2.5 align-top break-all text-muted-foreground">
+                {delivery.lastError ?? '—'}
+              </TableCell>
+              <TableCell className="py-2.5 text-right align-top">
+                {delivery.status === 'delivered' ? null : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => retry(delivery.id)}
+                    disabled={pending}
                   >
-                    {delivery.status}
-                  </span>
-                </td>
-                <td className="py-1.5 pr-4 font-mono">
-                  {delivery.responseCode ?? '—'}
-                </td>
-                <td className="py-1.5 pr-4 font-mono">{delivery.attempt}</td>
-                <td className="max-w-md py-1.5 pr-4 break-all text-muted-foreground">
-                  {delivery.lastError ?? '—'}
-                </td>
-                <td className="py-1.5">
-                  {delivery.status === 'delivered' ? null : (
-                    <button
-                      type="button"
-                      onClick={() => retry(delivery.id)}
-                      disabled={pending}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Retry
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                    Retry
+                  </Button>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
@@ -742,7 +741,7 @@ export function EndpointBindings({
                 aria-label="Unbind"
                 className="text-muted-foreground hover:text-destructive"
               >
-                ×
+                <Icon name="close" size={11} />
               </button>
             </span>
           );
@@ -751,17 +750,21 @@ export function EndpointBindings({
 
       {unbound.length > 0 ? (
         <>
-          <select
+          <Select
             value={addressId}
-            onChange={(event) => setAddressId(event.target.value)}
-            className={inputClass}
+            onValueChange={(value) => setAddressId(String(value))}
           >
-            {unbound.map((address) => (
-              <option key={address.id} value={address.id}>
-                {address.email}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label="Address to bind" className="w-auto min-w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {unbound.map((address) => (
+                <SelectItem key={address.id} value={address.id}>
+                  {address.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button type="button" variant="outline" size="sm" onClick={bind}>
             Bind
           </Button>

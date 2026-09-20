@@ -5,6 +5,16 @@ import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
@@ -12,11 +22,6 @@ export interface SendableAddress {
   id: string;
   email: string;
 }
-
-const inputClass =
-  'h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs outline-none transition-colors focus-visible:border-ring';
-
-const labelClass = 'text-[11px] font-medium tracking-wide text-muted-foreground';
 
 /**
  * Compose, as a modal rather than an expanding panel.
@@ -86,67 +91,60 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
         title="New message"
         description="Sent from a managed address, and recorded in Sent before it leaves."
       >
-        <form onSubmit={submit} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label className={labelClass} htmlFor="compose-from">
-              From
-            </label>
-            <select
-              id="compose-from"
+        <form onSubmit={submit} className="flex flex-col gap-3.5">
+          <Field>
+            <FieldLabel htmlFor="compose-from">From</FieldLabel>
+            <Select
               value={addressId}
-              onChange={(event) => setAddressId(event.target.value)}
-              className={inputClass}
+              onValueChange={(value) => setAddressId(String(value))}
             >
-              {addresses.map((address) => (
-                <option key={address.id} value={address.id}>
-                  {address.email}
-                </option>
-              ))}
-            </select>
-          </div>
+              <SelectTrigger id="compose-from" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {addresses.map((address) => (
+                  <SelectItem key={address.id} value={address.id}>
+                    {address.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
-          <div className="flex flex-col gap-1.5">
-            <label className={labelClass} htmlFor="compose-to">
-              To
-            </label>
-            <input
+          <Field>
+            <FieldLabel htmlFor="compose-to">To</FieldLabel>
+            <Input
               id="compose-to"
               value={to}
               onChange={(event) => setTo(event.target.value)}
               placeholder="customer@example.com, another@example.com"
               required
-              className={inputClass}
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5">
-            <label className={labelClass} htmlFor="compose-subject">
-              Subject
-            </label>
-            <input
+          <Field>
+            <FieldLabel htmlFor="compose-subject">Subject</FieldLabel>
+            <Input
               id="compose-subject"
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
               placeholder="What this is about"
               required
-              className={inputClass}
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5">
-            <label className={labelClass} htmlFor="compose-body">
-              Message
-            </label>
-            <textarea
+          <Field>
+            <FieldLabel htmlFor="compose-body">Message</FieldLabel>
+            <Textarea
               id="compose-body"
               value={text}
               onChange={(event) => setText(event.target.value)}
               placeholder="Plain text. Attachments are not carried on outbound mail yet."
               required
               rows={8}
-              className="w-full resize-y rounded-md border border-input bg-background px-2.5 py-2 text-xs leading-relaxed outline-none transition-colors focus-visible:border-ring"
+              className="resize-y leading-relaxed"
             />
-          </div>
+          </Field>
 
           {error ? (
             <p className="rounded-md border border-destructive/40 px-2.5 py-1.5 text-xs text-destructive">
@@ -155,16 +153,12 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
           ) : null}
 
           <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
-            </button>
+            </Button>
             <Button type="submit" disabled={pending}>
               <Icon name="sent" size={13} />
-              Send
+              {pending ? 'Sending…' : 'Send'}
             </Button>
           </div>
         </form>
@@ -211,23 +205,26 @@ export function ReplyForm({ emailId }: { emailId: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="mt-5 flex flex-col gap-2">
-      <label className="text-sm font-medium">Reply</label>
-      <textarea
-        value={text}
-        onChange={(event) => {
-          setText(event.target.value);
-          setSent(false);
-        }}
-        rows={5}
-        required
-        placeholder="Your reply. Threading headers are set from this message."
-        className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-xs outline-none focus-visible:border-ring"
-      />
+    <form onSubmit={submit} className="mt-6 flex flex-col gap-2">
+      <Field>
+        <FieldLabel htmlFor="reply-body">Reply</FieldLabel>
+        <Textarea
+          id="reply-body"
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            setSent(false);
+          }}
+          rows={5}
+          required
+          placeholder="Your reply. Threading headers are set from this message."
+          className="resize-y leading-relaxed"
+        />
+      </Field>
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={pending}>
           <Icon name="sent" size={13} />
-          Send reply
+          {pending ? 'Sending…' : 'Send reply'}
         </Button>
         {sent ? <span className="text-xs text-success">Sent.</span> : null}
         {error ? <span className="text-xs text-destructive">{error}</span> : null}

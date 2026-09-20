@@ -1,6 +1,5 @@
-import Link from 'next/link';
-
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import { LogFilters } from '@/components/mail/log-filters';
 import { EventTimeline } from '@/components/mail/event-timeline';
 import { MAIL_EVENT_TYPES, type MailEventType } from '@/server/core/types';
 import { repositories } from '@/server/repositories';
@@ -59,53 +58,24 @@ export default async function LogsPage({
         description="One unified event stream, from receipt to final endpoint delivery."
       />
 
-      <form method="get" className="mt-4 flex flex-wrap items-center gap-2">
-        <Select name="type" value={type} placeholder="All event types">
-          {MAIL_EVENT_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </Select>
-
-        <Select name="addressId" value={addressId} placeholder="All addresses">
-          {addresses.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.email}
-            </option>
-          ))}
-        </Select>
-
-        <Select name="endpointId" value={endpointId} placeholder="All endpoints">
-          {endpoints.map((endpoint) => (
-            <option key={endpoint.id} value={endpoint.id}>
-              {endpoint.name}
-            </option>
-          ))}
-        </Select>
-
-        <Select name="since" value={since} placeholder="All time">
-          <option value="1h">Last hour</option>
-          <option value="24h">Last 24 hours</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-        </Select>
-
-        <button
-          type="submit"
-          className="h-7 rounded-md border border-border px-3 text-xs hover:bg-muted/40"
-        >
-          Filter
-        </button>
-
-        {filtered ? (
-          <Link href="/logs" className="text-xs text-muted-foreground hover:text-foreground">
-            Clear
-          </Link>
-        ) : null}
-      </form>
-
-      <div className="mt-4">
+      <div>
+        <LogFilters
+          current={{ type, addressId, endpointId, since }}
+          eventTypes={MAIL_EVENT_TYPES.map((value) => ({
+            value,
+            label: value,
+          }))}
+          addresses={addresses.map((candidate) => ({
+            value: candidate.id,
+            label: candidate.email,
+          }))}
+          endpoints={endpoints.map((endpoint) => ({
+            value: endpoint.id,
+            label: endpoint.name,
+          }))}
+        />
+      </div>
+      <div>
         {page.items.length === 0 ? (
           <EmptyState
             icon="logs"
@@ -130,29 +100,6 @@ export default async function LogsPage({
         )}
       </div>
     </>
-  );
-}
-
-function Select({
-  name,
-  value,
-  placeholder,
-  children,
-}: {
-  name: string;
-  value: string | undefined;
-  placeholder: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <select
-      name={name}
-      defaultValue={value ?? ''}
-      className="h-7 rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring"
-    >
-      <option value="">{placeholder}</option>
-      {children}
-    </select>
   );
 }
 

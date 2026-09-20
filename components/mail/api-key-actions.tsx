@@ -5,10 +5,19 @@ import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { ConfirmDialog, useConfirm } from '@/components/ui/confirm-dialog';
+import { Input } from '@/components/ui/input';
+import { StatusBadge } from '@/components/ui/status-badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
-
-const inputClass =
-  'h-7 rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring';
 
 function messageFor(error: unknown): string {
   return error instanceof ApiRequestError
@@ -40,6 +49,7 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
   const [created, setCreated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const { confirmProps, ask } = useConfirm();
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -73,12 +83,13 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
   return (
     <div className="flex flex-col gap-4">
       <form onSubmit={create} className="flex flex-wrap items-center gap-2">
-        <input
+        <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Deploy script"
+          aria-label="Key name"
           required
-          className={`${inputClass} w-56`}
+          className="w-56"
         />
         <Button type="submit" disabled={pending}>
           <Icon name="add" size={13} />
@@ -117,50 +128,66 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
       ) : null}
 
       {keys.length === 0 ? null : (
-        <div className="overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full text-left text-xs">
-            <thead className="text-muted-foreground">
-              <tr className="border-b border-border">
-                <th className="px-4 py-2 font-normal">Name</th>
-                <th className="px-4 py-2 font-normal">Key</th>
-                <th className="px-4 py-2 font-normal">Created</th>
-                <th className="px-4 py-2 font-normal">Last used</th>
-                <th className="px-4 py-2 font-normal" />
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="gap-0 overflow-hidden py-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10 px-4">Name</TableHead>
+                <TableHead className="h-10 px-4">Key</TableHead>
+                <TableHead className="h-10 px-4">Created</TableHead>
+                <TableHead className="h-10 px-4">Last used</TableHead>
+                <TableHead className="h-10 px-4 text-right">State</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {keys.map((key) => (
-                <tr key={key.id} className="border-t border-border">
-                  <td className="px-4 py-2">{key.name}</td>
-                  <td className="px-4 py-2 font-mono">{key.keyPrefix}…</td>
-                  <td className="px-4 py-2 text-muted-foreground">
+                <TableRow key={key.id}>
+                  <TableCell className="px-4 py-3.5 text-sm font-medium">
+                    {key.name}
+                  </TableCell>
+                  <TableCell className="px-4 py-3.5 font-mono text-muted-foreground">
+                    {key.keyPrefix}…
+                  </TableCell>
+                  <TableCell className="px-4 py-3.5 text-muted-foreground tabular-nums">
                     {new Date(key.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="px-4 py-3.5 text-muted-foreground tabular-nums">
                     {key.lastUsedAt
                       ? new Date(key.lastUsedAt).toLocaleString()
                       : 'never'}
-                  </td>
-                  <td className="px-4 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="px-4 py-3.5 text-right">
                     {key.revokedAt ? (
-                      <span className="text-muted-foreground">revoked</span>
+                      <StatusBadge status="disabled" label="revoked" />
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => revoke(key.id)}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          ask({
+                            title: `Revoke "${key.name}"?`,
+                            description:
+                              'Anything still using this key stops working immediately. Revoking cannot be undone — issue a new key instead.',
+                            confirmLabel: 'Revoke key',
+                            destructive: true,
+                            onConfirm: () => revoke(key.id),
+                          })
+                        }
                         disabled={pending}
                         className="text-muted-foreground hover:text-destructive"
                       >
                         Revoke
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
+
+      <ConfirmDialog {...confirmProps} />
     </div>
   );
 }
