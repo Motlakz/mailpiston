@@ -33,20 +33,20 @@ button, input, textarea { font: inherit; }
 button, summary, a { -webkit-tap-highlight-color: transparent; }
 ::selection { background: var(--blue); color: var(--ink); }
 
-.site-shell { min-height: 100vh; overflow: hidden; }
+.site-shell { min-height: 100dvh; overflow: hidden; }
 .section-pad { padding: 124px max(24px, calc((100vw - 1240px) / 2)); }
 .glass-panel {
-  background: linear-gradient(140deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .48));
-  border: 1px solid rgba(255, 255, 255, .75);
-  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.9);
+  background: linear-gradient(140deg, var(--glass-from), var(--glass-to));
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-inner);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
 }
 
 .site-header {
   align-items: center;
-  background: rgba(248, 244, 234, .72);
-  border: 1px solid rgba(255,255,255,.7);
+  background: var(--header-bg);
+  border: 1px solid var(--header-edge);
   border-radius: 18px;
   box-shadow: 0 10px 35px rgba(24, 40, 44, .08);
   display: grid;
@@ -65,9 +65,16 @@ button, summary, a { -webkit-tap-highlight-color: transparent; }
 .brand { align-items: center; display: inline-flex; font-size: 17px; font-weight: 700; gap: 10px; letter-spacing: -.03em; width: max-content; }
 .brand-logo { border-radius: 12px; display: block; height: 46px; object-fit: contain; width: auto; }
 .site-nav { align-items: center; display: flex; gap: 30px; }
-.site-nav a { color: #48565a; font-size: 13px; font-weight: 650; transition: color .2s ease; }
+.site-nav a { color: var(--nav-ink); font-size: 13px; font-weight: 650; transition: color .2s ease; }
 .site-nav a:hover { color: var(--orange-dark); }
 .site-header > .button { justify-self: end; }
+.site-header__actions { align-items: center; display: flex; gap: 10px; justify-self: end; }
+@media (max-width: 720px) {
+  /* The toggle is the least important thing in a 320px header, and it is
+     reachable again in the footer. */
+  .site-header__actions .theme-toggle { display: none; }
+}
+.site-footer__legal { color: var(--muted); font-size: 11px; }
 
 .button {
   align-items: center;
@@ -87,8 +94,8 @@ button, summary, a { -webkit-tap-highlight-color: transparent; }
 .button--nav, .button--dark { background: var(--ink); box-shadow: 0 8px 20px rgba(16,25,28,.18); color: white; }
 .button--primary { background: var(--orange); box-shadow: 0 10px 28px rgba(242,107,58,.28); color: #1a120e; }
 .button--primary:hover { box-shadow: 0 14px 34px rgba(242,107,58,.36); }
-.button--ghost { background: rgba(255,255,255,.35); border-color: rgba(16,25,28,.15); }
-.button--ghost:hover { background: white; border-color: rgba(16,25,28,.24); }
+.button--ghost { background: var(--sheet); border-color: var(--line); }
+.button--ghost:hover { background: var(--sheet-hover); border-color: var(--line); }
 .button--cream { background: var(--cream); color: var(--ink); }
 .button--wide { width: 100%; }
 .text-link { align-items: center; display: inline-flex; font-size: 13px; font-weight: 700; gap: 7px; }
@@ -228,7 +235,7 @@ em { color: var(--orange-dark); font-weight: 400; }
 
 .flow-section { background: linear-gradient(180deg, #edf5f5, #e6f1f1); }
 .section-kicker { align-items: end; display: grid; gap: 80px; grid-template-columns: 1.35fr .65fr; margin-bottom: 54px; }.section-kicker h2 { margin-bottom: 0; }.section-kicker > p { margin-bottom: 5px; }
-.flow-demo { background: rgba(255,255,255,.52); border: 1px solid rgba(255,255,255,.8); border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
+.flow-demo { background: var(--sheet-soft); border: 1px solid var(--glass-edge); border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
 .flow-demo__tabs { border-bottom: 1px solid var(--line); display: flex; gap: 4px; padding: 14px; }.flow-tab { background: transparent; border: 0; border-radius: 9px; color: #6d7b80; cursor: pointer; font-size: 12px; font-weight: 700; min-width: 90px; padding: 10px 15px; }.flow-tab.is-active { background: var(--ink); color: white; }
 .flow-demo__body { display: grid; grid-template-columns: .76fr 1.24fr; min-height: 445px; }.flow-demo__copy { align-self: center; max-width: 450px; padding: 58px; }.flow-demo__copy h3 { font-size: 41px; line-height: 1.05; margin: 19px 0 17px; }.flow-demo__copy > p { color: var(--muted); font-size: 15px; line-height: 1.65; }.flow-status { align-items: center; color: #416a59; display: flex; font-size: 11px; font-weight: 700; gap: 7px; margin-top: 25px; }
 .route-map { background: linear-gradient(135deg, rgba(191,225,238,.34), rgba(255,255,255,.54)); border-left: 1px solid var(--line); min-height: 445px; overflow: hidden; position: relative; }.route-map::before { background-image: radial-gradient(rgba(16,25,28,.12) 1px, transparent 1px); background-size: 18px 18px; content: ""; inset: 0; opacity: .55; position: absolute; }.route-node { align-items: center; background: rgba(255,255,255,.92); border: 1px solid rgba(255,255,255,.9); border-radius: 13px; box-shadow: 0 15px 35px rgba(28,46,50,.12); display: flex; gap: 10px; padding: 12px 15px; position: absolute; z-index: 2; }.route-node small { color: #869195; display: block; font-size: 8px; margin-bottom: 4px; }.route-node > span:last-child { font-size: 10px; font-weight: 700; }.route-node__icon { align-items: center; border-radius: 9px; display: flex; height: 36px; justify-content: center; width: 36px; }.route-node__icon--blue { background: var(--blue); }.route-node__icon--orange { background: #f6b18d; }.route-node__icon--pink { background: var(--pink); }.route-node--sender { left: 7%; top: 47px; }.route-node--core { left: 39%; top: 180px; }.route-node--store { bottom: 43px; right: 7%; }.route-map__line { border-color: rgba(16,25,28,.28); border-style: dashed; border-width: 0 0 1px 1px; position: absolute; transform-origin: left; }.route-map__line--one { height: 132px; left: 24%; top: 90px; transform: rotate(-11deg); width: 32%; }.route-map__line--two { bottom: 85px; height: 114px; left: 55%; transform: rotate(-5deg); width: 28%; }.route-pulse { background: var(--orange); border-radius: 50%; box-shadow: 0 0 0 5px rgba(242,107,58,.15); height: 7px; position: absolute; top: 201px; width: 7px; z-index: 3; }
@@ -241,7 +248,7 @@ em { color: var(--orange-dark); font-weight: 400; }
 
 .pricing-section { background: linear-gradient(180deg, #f5eee5, #f8f4ea); }
 .pricing-grid { align-items: stretch; display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }.pricing-preview { display: flex; flex-direction: column; position: relative; }.pricing-toggle { align-items: center; background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 10px; display: flex; left: 50%; padding: 3px; position: absolute; top: -55px; transform: translateX(-50%); white-space: nowrap; }.pricing-toggle button { background: transparent; border: 0; border-radius: 7px; color: var(--muted); cursor: pointer; font-size: 9px; font-weight: 700; padding: 7px 9px; }.pricing-toggle button.is-active { background: var(--ink); color: white; }.pricing-toggle button span { color: var(--orange); margin-left: 3px; }
-.price-card { background: rgba(255,255,255,.7); border: 1px solid rgba(16,25,28,.1); border-radius: 18px; display: flex; flex: 1; flex-direction: column; overflow: hidden; padding: 30px; position: relative; }.price-card--featured { background: var(--ink); box-shadow: 0 24px 60px rgba(16,25,28,.2); color: white; transform: translateY(-9px); }.price-card__glow { background: radial-gradient(circle, rgba(242,107,58,.2), transparent 70%); height: 350px; position: absolute; right: -160px; top: -170px; width: 350px; }.price-card--featured .eyebrow { color: var(--blue); }.price-line { align-items: baseline; display: flex; gap: 9px; margin: 29px 0 22px; min-height: 59px; }.price-line strong { font-family: var(--serif); font-size: 52px; font-weight: 500; letter-spacing: -.05em; }.price-line > span { color: var(--muted); font-size: 10px; }.price-card--featured .price-line > span { color: #99a8ab; }.price-card > p { color: var(--muted); font-size: 13px; line-height: 1.65; min-height: 65px; }.price-card--featured > p { color: #aab6b8; }.price-card ul { margin-bottom: 30px; }.price-card li { align-items: center; border-top: 1px solid var(--line); color: #4d5b60; display: flex; font-size: 11px; gap: 8px; padding: 12px 0; }.price-card li svg { color: var(--orange-dark); }.price-card--featured li { border-color: rgba(255,255,255,.1); color: #dce2e3; }.price-card--featured li svg { color: var(--blue); }.price-card > .button { margin-top: auto; }.price-card > small { color: #909b9e; display: block; font-size: 8px; line-height: 1.4; margin-top: 14px; text-align: center; }.access-note { align-items: flex-start; background: rgba(255,255,255,.58); border: 1px solid var(--line); border-radius: 14px; display: flex; gap: 16px; margin-top: 28px; padding: 20px 24px; }.access-note > svg { color: var(--orange-dark); flex: 0 0 auto; }.access-note strong { display: block; font-family: var(--serif); font-size: 16px; margin-bottom: 5px; }.access-note p { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0; }
+.price-card { background: var(--sheet); border: 1px solid var(--line); border-radius: 18px; display: flex; flex: 1; flex-direction: column; overflow: hidden; padding: 30px; position: relative; }.price-card--featured { background: var(--ink); box-shadow: 0 24px 60px rgba(16,25,28,.2); color: white; transform: translateY(-9px); }.price-card__glow { background: radial-gradient(circle, rgba(242,107,58,.2), transparent 70%); height: 350px; position: absolute; right: -160px; top: -170px; width: 350px; }.price-card--featured .eyebrow { color: var(--blue); }.price-line { align-items: baseline; display: flex; gap: 9px; margin: 29px 0 22px; min-height: 59px; }.price-line strong { font-family: var(--serif); font-size: 52px; font-weight: 500; letter-spacing: -.05em; }.price-line > span { color: var(--muted); font-size: 10px; }.price-card--featured .price-line > span { color: #99a8ab; }.price-card > p { color: var(--muted); font-size: 13px; line-height: 1.65; min-height: 65px; }.price-card--featured > p { color: #aab6b8; }.price-card ul { margin-bottom: 30px; }.price-card li { align-items: center; border-top: 1px solid var(--line); color: #4d5b60; display: flex; font-size: 11px; gap: 8px; padding: 12px 0; }.price-card li svg { color: var(--orange-dark); }.price-card--featured li { border-color: rgba(255,255,255,.1); color: #dce2e3; }.price-card--featured li svg { color: var(--blue); }.price-card > .button { margin-top: auto; }.price-card > small { color: #909b9e; display: block; font-size: 8px; line-height: 1.4; margin-top: 14px; text-align: center; }.access-note { align-items: flex-start; background: rgba(255,255,255,.58); border: 1px solid var(--line); border-radius: 14px; display: flex; gap: 16px; margin-top: 28px; padding: 20px 24px; }.access-note > svg { color: var(--orange-dark); flex: 0 0 auto; }.access-note strong { display: block; font-family: var(--serif); font-size: 16px; margin-bottom: 5px; }.access-note p { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0; }
 
 .faq-section { background: var(--paper); display: grid; gap: 100px; grid-template-columns: .75fr 1.25fr; }.faq-intro { max-width: 460px; }.faq-intro h2 { font-size: clamp(42px, 4.6vw, 64px); }.faq-list details { border-top: 1px solid var(--line); }.faq-list details:last-child { border-bottom: 1px solid var(--line); }.faq-list summary { align-items: center; cursor: pointer; display: flex; font-family: var(--serif); font-size: 19px; justify-content: space-between; list-style: none; padding: 22px 0; }.faq-list summary::-webkit-details-marker { display: none; }.faq-list summary i { height: 16px; position: relative; width: 16px; }.faq-list summary i::before, .faq-list summary i::after { background: var(--ink); content: ""; height: 1px; left: 2px; position: absolute; top: 8px; transition: transform .2s ease; width: 12px; }.faq-list summary i::after { transform: rotate(90deg); }.faq-list details[open] summary i::after { transform: rotate(0); }.faq-list details p { color: var(--muted); font-size: 13px; line-height: 1.7; margin: -4px 40px 23px 0; }
 
@@ -281,6 +288,190 @@ em { color: var(--orange-dark); font-weight: 400; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+
+/* ---------------------------------------------------------------------------
+   Dark theme for the marketing surface.
+
+   Everything above is written against the brand palette, so overriding the
+   palette here carries most of the page without touching a single rule. What
+   it cannot carry is the glass: the panels, header and cards are built from
+   `rgba(255,255,255,…)`, and white at 82% over a dark ground is not a dark
+   panel, it is a light one. Those surfaces are tokenised below and flipped to
+   a light-on-dark tint whose *alpha* changes too, which is the part a simple
+   colour swap gets wrong.
+
+   The product mock in the hero deliberately stays light. It is a screenshot of
+   an application — a screen — and a screen reads as a lit object inside a dark
+   room. Inverting it would remove the one thing on the page that looks like
+   the product.
+
+   `.dark` is set on <html> by the inline script in the layout before first
+   paint, so there is no flash of the wrong theme.
+--------------------------------------------------------------------------- */
+
+:root {
+  /* Glass, as tokens rather than literals, so the alpha can change with the
+     theme and not only the hue. */
+  --glass-from: rgba(255, 255, 255, 0.82);
+  --glass-to: rgba(255, 255, 255, 0.48);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --glass-inner: rgba(255, 255, 255, 0.9);
+  --header-bg: rgba(248, 244, 234, 0.72);
+  --header-edge: rgba(255, 255, 255, 0.7);
+  --sheet: rgba(255, 255, 255, 0.7);
+  --sheet-soft: rgba(255, 255, 255, 0.52);
+  --sheet-hover: #ffffff;
+  --nav-ink: #48565a;
+  --orb-blue: rgba(139, 204, 225, 0.55);
+  --orb-coral: rgba(242, 107, 58, 0.28);
+}
+
+.dark {
+  --ink: #eef2f1;
+  --ink-soft: #c9d3d4;
+  --muted: #94a2a6;
+  --cream: #0c1315;
+  --paper: #141d20;
+  /* The dark counterpart of a dark accent has to get lighter, not darker:
+     `--orange-dark` is used as a text colour, and #c9461d on #0c1315 is under
+     3:1. */
+  --orange-dark: #ff9163;
+  --blue: #2c4d59;
+  --blue-bright: #74b6ce;
+  --pink: #7d4a50;
+  --line: rgba(255, 255, 255, 0.13);
+  --shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+
+  --glass-from: rgba(255, 255, 255, 0.07);
+  --glass-to: rgba(255, 255, 255, 0.03);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --glass-inner: rgba(255, 255, 255, 0.07);
+  --header-bg: rgba(18, 26, 29, 0.74);
+  --header-edge: rgba(255, 255, 255, 0.1);
+  --sheet: rgba(255, 255, 255, 0.05);
+  --sheet-soft: rgba(255, 255, 255, 0.04);
+  --sheet-hover: rgba(255, 255, 255, 0.1);
+  --nav-ink: #a7b4b7;
+  /* Ambient light, not a coloured blob: the orbs sit behind content, and at
+     light-mode opacity they wash out text on a dark ground. */
+  --orb-blue: rgba(93, 158, 183, 0.22);
+  --orb-coral: rgba(242, 107, 58, 0.16);
+}
+
+/* The one place the two halves of the product must agree: the dashboard tokens
+   are defined against this same palette further down, so a single `.dark` on
+   <html> themes the marketing page and the application together. */
+
+.dark .button--primary { color: #1a120e; }
+.dark .button--nav,
+.dark .button--dark {
+  background: var(--ink);
+  color: #0c1315;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+.dark .button--cream { background: var(--paper); color: var(--ink); }
+
+/* Product mock: pinned to the light palette on purpose — see the note above. */
+.dark .inbox-window,
+.dark .browser-frame,
+.dark .privacy-visual,
+.dark .flow-demo__screen {
+  color-scheme: light;
+}
+
+/* Ambient light behind the hero, tuned per theme: at light-mode opacity these
+   wash out text on a dark ground. */
+.dark .hero-orb--blue {
+  background: radial-gradient(circle at 35% 35%, var(--orb-blue), transparent 70%);
+}
+.dark .hero-orb--coral {
+  background: radial-gradient(circle, var(--orb-coral), transparent 68%);
+}
+.dark .hero-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+.dark ::selection { background: var(--blue-bright); color: #0c1315; }
+
+/* A visible focus ring everywhere, not only where a component remembered one.
+   `:focus-visible` rather than `:focus` so a mouse click does not leave a ring
+   behind on a button that was merely pressed. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Keyboard users land here first; it stays out of the way until focused. */
+.skip-link {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  left: 16px;
+  padding: 10px 16px;
+  position: fixed;
+  top: 16px;
+  transform: translateY(-160%);
+  transition: transform .2s ease;
+  z-index: 200;
+}
+.skip-link:focus-visible { transform: translateY(0); }
+
+/* Theme toggle. Not a sun/moon switch: it is a three-way control including
+   "follow the system", because a two-state toggle silently overrides the
+   preference the visitor already expressed to their OS. */
+.theme-toggle {
+  align-items: center;
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+}
+.theme-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 650;
+  padding: 5px 10px;
+  transition: background .2s ease, color .2s ease;
+}
+.theme-toggle button:hover { color: var(--ink); }
+.theme-toggle button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--cream);
+}
+
+@media (max-width: 860px) {
+  /* The header is already tight on mobile; the label is the first thing to go. */
+  .theme-toggle button { padding: 5px 8px; }
+}
+
+/* Honour the visitor's reduced-motion setting. The page animates floating
+   chips and orbs indefinitely, which is exactly what the setting is for. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ---------------------------------------------------------------------------

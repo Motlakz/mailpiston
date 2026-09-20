@@ -2,6 +2,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Login03Icon } from "@hugeicons/core-free-icons";
 import Link from "next/link";
 import { Brand } from "./brand";
+import { ThemeToggle } from "./theme-toggle";
 
 export function SiteHeader() {
   return (
@@ -13,10 +14,13 @@ export function SiteHeader() {
         <a href="#ownership">Ownership</a>
         <a href="#pricing">Access</a>
       </nav>
-      <Link className="button button--nav" href="/sign-in">
-        Sign in
-        <HugeiconsIcon icon={Login03Icon} size={17} strokeWidth={1.8} />
-      </Link>
+      <div className="site-header__actions">
+        <ThemeToggle />
+        <Link className="button button--nav" href="/sign-in">
+          Sign in
+          <HugeiconsIcon icon={Login03Icon} size={17} strokeWidth={1.8} />
+        </Link>
+      </div>
     </header>
   );
 }

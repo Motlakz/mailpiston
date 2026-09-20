@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+
+import { THEME_INIT_SCRIPT } from "@/components/site/theme-toggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -40,7 +42,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en">
+    // `suppressHydrationWarning` because the script below edits this element
+    // before React sees it — which is the entire point of it running there.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Blocking, in <head>, and inline: a theme applied from a component
+            paints the wrong colours first and snaps after hydration. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );

@@ -19,6 +19,9 @@ export default function Home() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(landingPageStructuredData) }}
       />
       <div className="site-shell">
+        {/* First tab stop on the page. The header is a fixed grid of links, so
+            without this a keyboard user walks the whole nav on every visit. */}
+        <a className="skip-link" href="#top">Skip to content</a>
         <SiteHeader />
         <main id="top">
           <HeroSection />
