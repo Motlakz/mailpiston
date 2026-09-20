@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
 
 import { SIDEBAR_INIT_SCRIPT } from "@/components/layout/sidebar";
 import { THEME_INIT_SCRIPT } from "@/components/site/theme-toggle";
@@ -46,7 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // `suppressHydrationWarning` because the script below edits this element
     // before React sees it — which is the entire point of it running there.
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={GeistSans.variable} suppressHydrationWarning>
       <head>
         {/* Blocking, in <head>, and inline: a theme applied from a component
             paints the wrong colours first and snaps after hydration. */}

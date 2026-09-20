@@ -3,7 +3,7 @@ import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 
 export function FinalCta() {
   return (
-    <section className="final-cta section-pad">
+    <section className="final-cta section-pad" data-motion-section>
       <div className="final-cta__glow" aria-hidden="true" />
       <span className="eyebrow eyebrow--light">Mail, on your terms</span>
       <h2>The identity is yours.<br />The history is yours.<br /><em>The mail server does not have to be.</em></h2>

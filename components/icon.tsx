@@ -19,6 +19,7 @@ import {
   Loading03Icon,
   Mail01Icon,
   MailSend01Icon,
+  MoreHorizontalIcon,
   Message01Icon,
   PlusSignIcon,
   RefreshIcon,
@@ -74,6 +75,7 @@ const ICONS = {
   restore: DeletePutBackIcon,
   docs: Book02Icon,
   panelLeft: PanelLeftIcon,
+  more: MoreHorizontalIcon,
 } as const;
 
 export type IconName = keyof typeof ICONS;

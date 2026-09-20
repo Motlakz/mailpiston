@@ -4,8 +4,10 @@ import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { PageTransition } from '@/components/layout/page-transition';
 import { Sidebar } from '@/components/layout/sidebar';
 import { SignOutButton } from '@/components/layout/sign-out-button';
+import { ThemeToggle } from '@/components/site/theme-toggle';
 import { Separator } from '@/components/ui/separator';
 import { requireOperatorPage } from '@/server/core/auth';
+import './dashboard.css';
 
 /**
  * The authenticated shell.
@@ -28,14 +30,19 @@ export default async function DashboardLayout({
   const operator = await requireOperatorPage();
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="dashboard-shell flex min-h-screen bg-background text-foreground">
       <Sidebar />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-6 backdrop-blur-sm">
+      <div className="dashboard-workspace flex min-w-0 flex-1 flex-col">
+        <header className="dashboard-topbar sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-6 backdrop-blur-sm">
           <Breadcrumbs />
 
           <div className="ml-auto flex items-center gap-3">
+            <span className="dashboard-health hidden items-center gap-2 text-[11px] text-muted-foreground lg:inline-flex">
+              <i aria-hidden="true" /> Control plane online
+            </span>
+            <ThemeToggle />
+            <Separator orientation="vertical" className="hidden h-4 sm:block" />
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {operator.email}
             </span>
@@ -44,7 +51,7 @@ export default async function DashboardLayout({
           </div>
         </header>
 
-        <main className="flex min-w-0 flex-1 flex-col px-6 py-6">
+        <main className="dashboard-content flex min-w-0 flex-1 flex-col px-6 py-6">
           <PageTransition>{children}</PageTransition>
         </main>
       </div>

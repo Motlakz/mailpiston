@@ -3,9 +3,9 @@ import { NavTabs } from '@/components/layout/nav-tabs';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import {
   AddAddressForm,
-  DeleteAddressButton,
   RepairAliasButton,
 } from '@/components/mail/address-actions';
+import { AddressMenu } from '@/components/mail/address-menu';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
@@ -162,7 +162,7 @@ function AddressTable({
 }) {
   return (
     <Card className="gap-0 overflow-hidden py-0">
-      <Table className="min-w-[640px]">
+      <Table className="min-w-160">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="h-10 px-4">
@@ -213,9 +213,11 @@ function AddressTable({
                   {address.providerAliasId ? (
                     <RepairAliasButton addressId={address.id} />
                   ) : null}
-                  <DeleteAddressButton
+                  <AddressMenu
                     addressId={address.id}
                     email={address.email}
+                    enabled={address.enabled}
+                    canSend={address.canSend}
                   />
                 </span>
               </TableCell>

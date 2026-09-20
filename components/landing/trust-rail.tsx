@@ -4,10 +4,16 @@ import { AiMail01Icon, Database01Icon, Globe02Icon, ShieldKeyIcon } from "@hugei
 export function TrustRail() {
   return (
     <section className="trust-rail" aria-label="MailPiston ownership principles">
-      <span><HugeiconsIcon icon={Globe02Icon} size={18} /> Your domains</span><i aria-hidden="true" />
-      <span><HugeiconsIcon icon={Database01Icon} size={18} /> Your data model</span><i aria-hidden="true" />
-      <span><HugeiconsIcon icon={ShieldKeyIcon} size={18} /> Your reply identity</span><i aria-hidden="true" />
-      <span><HugeiconsIcon icon={AiMail01Icon} size={18} /> Proven delivery underneath</span>
+      <div className="trust-rail__track">
+        {[0, 1].map((copy) => (
+          <div className="trust-rail__set" aria-hidden={copy === 1} key={copy}>
+            <span><HugeiconsIcon icon={Globe02Icon} size={18} /> Your domains</span><i aria-hidden="true" />
+            <span><HugeiconsIcon icon={Database01Icon} size={18} /> Your data model</span><i aria-hidden="true" />
+            <span><HugeiconsIcon icon={ShieldKeyIcon} size={18} /> Your reply identity</span><i aria-hidden="true" />
+            <span><HugeiconsIcon icon={AiMail01Icon} size={18} /> Proven delivery underneath</span><i aria-hidden="true" />
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

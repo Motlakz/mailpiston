@@ -8,6 +8,7 @@ import {
   VerifyDomainButton,
   WebhookKeyForm,
 } from '@/components/mail/domain-actions';
+import { DomainMenu } from '@/components/mail/domain-menu';
 import {
   Card,
   CardContent,
@@ -152,7 +153,14 @@ function DomainCard({
           <VerificationIssues issues={domain.verificationErrors} />
         </div>
 
-        <VerifyDomainButton domainId={domain.id} />
+        <div className="flex items-center gap-1.5">
+          <VerifyDomainButton domainId={domain.id} />
+          <DomainMenu
+            domainId={domain.id}
+            name={domain.name}
+            hasCatchAll={Boolean(domain.catchAllAliasId)}
+          />
+        </div>
       </CardHeader>
 
       <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b px-5 py-3.5">

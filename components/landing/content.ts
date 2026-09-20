@@ -1,4 +1,4 @@
-import { Database01Icon, ShieldKeyIcon, WorkflowCircle01Icon } from "@hugeicons/core-free-icons";
+import { Database01Icon, Exchange01Icon, ShieldKeyIcon, WorkflowCircle01Icon } from "@hugeicons/core-free-icons";
 
 export const benefits = [
   {
@@ -15,6 +15,11 @@ export const benefits = [
     icon: WorkflowCircle01Icon,
     title: "Route on your terms",
     copy: "Send each address to a webhook, a private inbox, a group, or a combination - without changing the underlying conversation.",
+  },
+  {
+    icon: Exchange01Icon,
+    title: "Swap the transport layer",
+    copy: "Move between delivery providers at the adapter boundary. Your routes, message history, and product workflow do not move with it.",
   },
 ];
 

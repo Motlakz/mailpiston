@@ -1,6 +1,9 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useId, useSyncExternalStore } from 'react';
+import { LayoutGroup, motion, useReducedMotion } from 'framer-motion';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { ComputerIcon, Moon02Icon, Sun03Icon } from '@hugeicons/core-free-icons';
 
 export type ThemeChoice = 'light' | 'dark' | 'system';
 
@@ -17,9 +20,12 @@ const THEME_EVENT = 'mailpiston:theme';
  * including after they change it. "Auto" is the default and stays available, so
  * the control can be given back.
  *
- * Labels rather than a sun and a moon. The sun/moon switch is ambiguous by
- * construction: it never says whether the icon is the current state or the one
- * pressing it would produce.
+ * The three sit side by side as icons rather than as a single button that
+ * cycles: the usual sun/moon switch is ambiguous by construction, since it
+ * never says whether the icon is the current state or the one pressing it
+ * would produce. Here the lit segment is the current state, and every
+ * destination is one click away. The words each segment would otherwise carry
+ * live in `aria-label` and the native tooltip instead of on the surface.
  */
 export function ThemeToggle() {
   /**
@@ -30,6 +36,11 @@ export function ThemeToggle() {
    * the real value arrives on the client's first commit.
    */
   const choice = useSyncExternalStore(subscribe, readChoice, () => 'system' as const);
+  const reduceMotion = useReducedMotion();
+  // The page renders this control more than once (header and footer). A shared
+  // layout id would make framer-motion treat those as one element and slide the
+  // lit segment between them, so each instance gets its own group.
+  const group = useId();
 
   // Following the system means following it as it changes, not only as it was
   // when the page loaded. No state is set here — only the document class.
@@ -61,26 +72,39 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="theme-toggle" role="group" aria-label="Colour theme">
-      {(['light', 'dark', 'system'] as const).map((option) => (
-        <button
-          key={option}
-          type="button"
-          aria-pressed={choice === option}
-          onClick={() => select(option)}
-        >
-          {LABELS[option]}
-        </button>
-      ))}
-    </div>
+    <LayoutGroup id={group}>
+      <div className="theme-toggle" data-choice={choice} role="group" aria-label="Colour theme">
+        {OPTIONS.map(({ value, label, icon }) => (
+          <button
+            key={value}
+            type="button"
+            className="theme-toggle__option"
+            aria-pressed={choice === value}
+            aria-label={label}
+            title={label}
+            onClick={() => select(value)}
+          >
+            {choice === value && (
+              <motion.span
+                className="theme-toggle__thumb"
+                layoutId={`${group}-thumb`}
+                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 32 }}
+              />
+            )}
+            <HugeiconsIcon icon={icon} size={15} strokeWidth={2} />
+          </button>
+        ))}
+      </div>
+    </LayoutGroup>
   );
 }
 
-const LABELS: Record<ThemeChoice, string> = {
-  light: 'Light',
-  dark: 'Dark',
-  system: 'Auto',
-};
+/** Ordered light → auto → dark, so the row reads as a brightness ramp. */
+const OPTIONS = [
+  { value: 'light', label: 'Light theme', icon: Sun03Icon },
+  { value: 'system', label: 'Match system theme', icon: ComputerIcon },
+  { value: 'dark', label: 'Dark theme', icon: Moon02Icon },
+] as const satisfies ReadonlyArray<{ value: ThemeChoice; label: string; icon: unknown }>;
 
 /** `storage` covers the same choice being made in another tab. */
 function subscribe(onChange: () => void): () => void {

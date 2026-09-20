@@ -4,7 +4,7 @@ import { PricingPreview } from "./landing-interactions";
 
 export function PricingSection() {
   return (
-    <section className="section-pad pricing-section" id="pricing">
+    <section className="section-pad pricing-section" id="pricing" data-motion-section>
       <div className="section-heading section-heading--center">
         <span className="eyebrow">Priced on volume, not domain count</span>
         <h2>Run it yourself for nothing.<br /><em>Or let us run it for you.</em></h2>

@@ -2,7 +2,7 @@ import { frequentlyAskedQuestions } from "./content";
 
 export function FaqSection() {
   return (
-    <section className="section-pad faq-section">
+    <section className="section-pad faq-section" id="faq" data-motion-section>
       <div className="faq-intro">
         <span className="eyebrow">Clear before clever</span>
         <h2>The questions behind the architecture.</h2>

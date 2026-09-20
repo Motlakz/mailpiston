@@ -137,7 +137,7 @@ export default async function MailPage({
             description={emptyDescription(active)}
           />
         ) : (
-          <Card className="gap-0 overflow-hidden py-0">
+          <Card className="mail-list-card gap-0 overflow-hidden py-0">
             {page.items.map((email) => (
               <MailRow key={email.id} email={email} />
             ))}
@@ -172,7 +172,7 @@ function MailRow({ email }: { email: EmailListItem }) {
   const preview = previewOf(email.text);
 
   return (
-    <div className="group relative flex items-center gap-3.5 border-b border-border px-4 py-3.5 transition-colors last:border-0 hover:bg-muted/40">
+    <div className="mail-list-row group relative flex items-center gap-3.5 border-b border-border px-4 py-3.5 transition-colors last:border-0 hover:bg-muted/40">
       <Link
         href={`/mail/${email.id}`}
         className="absolute inset-0"
@@ -189,11 +189,11 @@ function MailRow({ email }: { email: EmailListItem }) {
       {/* The counterparty is the scan target, so it gets the weight. The
           subject sits one step down and the preview one below that — three
           levels in a row that previously had one. */}
-      <span className="w-48 shrink-0 truncate text-sm font-medium">
+      <span className="mail-list-counterparty w-48 shrink-0 truncate text-sm font-medium">
         {counterparty || <span className="text-muted-foreground">—</span>}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
+      <span className="mail-list-subject min-w-0 flex-1 truncate text-sm text-foreground/90">
         {email.subject || (
           <span className="text-muted-foreground">(no subject)</span>
         )}

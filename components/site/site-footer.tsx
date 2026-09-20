@@ -4,28 +4,31 @@ import { ThemeToggle } from "./theme-toggle";
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer">
-      <Brand label="Back to top" />
-      <p>An ownership-first email control plane.</p>
-      <div>
-        <a href="#ownership">Principles</a>
-        <a href="#pricing">Access</a>
-        <Link href="/sign-in">Sign in</Link>
-        {/* The header hides the toggle on narrow screens, so this is the only
-            place a phone can reach it. */}
-        <ThemeToggle />
-        <a href="#top">Back to top ↑</a>
-      </div>
-      {/* The data claim, stated plainly. A product that stores other people's
-          mail is one people are entitled to ask about before signing up.
+    <footer className="site-footer" id="footer">
+      <div className="site-footer__top">
+        <div className="site-footer__brand">
+          <Brand label="Back to top" />
+          <p>An ownership-first email control plane.</p>
+        </div>
 
-          No Privacy or Terms links yet, deliberately: /privacy and /terms do
-          not exist, and a footer that links to two 404s is worse than one that
-          does not claim to have them. They go here when the pages do. */}
-      <p className="site-footer__legal">
-        MailPiston stores the mail you receive. It is never sold, never used for
-        training, and never read by anyone but you.
-      </p>
+        <nav className="site-footer__nav" aria-label="Footer navigation">
+          <a href="#ownership">Principles</a>
+          <a href="#pricing">Access</a>
+          <Link href="/sign-in">Sign in</Link>
+        </nav>
+      </div>
+
+      <div className="site-footer__bar">
+        <p className="site-footer__legal">
+          MailPiston stores the mail you receive. It is never sold, used for
+          training, or read by anyone but you.
+        </p>
+
+        <div className="site-footer__controls">
+          <ThemeToggle />
+          <a className="site-footer__top-link" href="#top">Back to top ↑</a>
+        </div>
+      </div>
     </footer>
   );
 }

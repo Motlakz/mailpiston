@@ -3,7 +3,7 @@ import { AiMail01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons"
 
 export function OwnershipSection() {
   return (
-    <section className="section-pad ownership-section" id="ownership">
+    <section className="section-pad ownership-section" id="ownership" data-motion-section>
       <div className="ownership-wrap">
         <div className="ownership-copy">
           <span className="eyebrow eyebrow--light">Maximum ownership, sensibly placed</span>

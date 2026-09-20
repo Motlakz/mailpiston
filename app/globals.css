@@ -253,7 +253,17 @@ em { color: var(--orange-dark); font-weight: 400; }
 .faq-section { background: var(--paper); display: grid; gap: 100px; grid-template-columns: .75fr 1.25fr; }.faq-intro { max-width: 460px; }.faq-intro h2 { font-size: clamp(42px, 4.6vw, 64px); }.faq-list details { border-top: 1px solid var(--line); }.faq-list details:last-child { border-bottom: 1px solid var(--line); }.faq-list summary { align-items: center; cursor: pointer; display: flex; font-family: var(--serif); font-size: 19px; justify-content: space-between; list-style: none; padding: 22px 0; }.faq-list summary::-webkit-details-marker { display: none; }.faq-list summary i { height: 16px; position: relative; width: 16px; }.faq-list summary i::before, .faq-list summary i::after { background: var(--ink); content: ""; height: 1px; left: 2px; position: absolute; top: 8px; transition: transform .2s ease; width: 12px; }.faq-list summary i::after { transform: rotate(90deg); }.faq-list details[open] summary i::after { transform: rotate(0); }.faq-list details p { color: var(--muted); font-size: 13px; line-height: 1.7; margin: -4px 40px 23px 0; }
 
 .final-cta { background: var(--ink); color: white; overflow: hidden; position: relative; text-align: center; }.final-cta__glow { background: radial-gradient(circle, rgba(191,225,238,.18), rgba(242,107,58,.08) 40%, transparent 70%); height: 750px; left: 50%; position: absolute; top: 50%; transform: translate(-50%,-50%); width: 900px; }.final-cta > *:not(.final-cta__glow) { position: relative; }.final-cta h2 { font-size: clamp(46px, 6vw, 82px); line-height: .98; margin: 26px auto 38px; max-width: 1000px; }.final-cta h2 em { color: var(--pink); }.final-cta__actions { align-items: center; display: flex; gap: 25px; justify-content: center; }.final-cta .text-link { color: #c4cdcf; }
-.site-footer { align-items: center; background: #0b1214; color: white; display: grid; grid-template-columns: 1fr auto 1fr; padding: 34px max(24px, calc((100vw - 1240px) / 2)); }.site-footer p { color: #768589; font-size: 10px; margin: 0; }.site-footer > div { display: flex; gap: 22px; justify-self: end; }.site-footer > div a { color: #aab6b8; font-size: 10px; }
+.site-footer { background: #0b1214; color: white; display: flex; flex-direction: column; gap: 30px; padding: 44px max(24px, calc((100vw - 1240px) / 2)) 30px; }
+.site-footer__top { align-items: start; display: flex; gap: 40px; justify-content: space-between; }
+.site-footer__brand p { color: #768589; font-size: 11px; line-height: 1.6; margin: 14px 0 0; max-width: 32ch; }
+.site-footer__nav { display: flex; gap: 28px; }
+.site-footer__nav a { color: #aab6b8; font-size: 12px; }
+.site-footer__nav a:hover { color: #fff; }
+.site-footer__bar { align-items: center; border-top: 1px solid rgba(255,255,255,.09); display: flex; gap: 32px; justify-content: space-between; padding-top: 24px; }
+.site-footer__legal { color: #768589; font-size: 11px; line-height: 1.6; margin: 0; max-width: 56ch; }
+.site-footer__controls { align-items: center; display: flex; flex: 0 0 auto; gap: 18px; }
+.site-footer__top-link { color: #aab6b8; font-size: 11px; white-space: nowrap; }
+.site-footer__top-link:hover { color: #fff; }
 
 @keyframes float { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-9px) rotate(1deg); } }
 @keyframes blink { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
@@ -270,7 +280,7 @@ em { color: var(--orange-dark); font-weight: 400; }
   .section-kicker, .ownership-wrap, .privacy-section, .faq-section { gap: 50px; grid-template-columns: 1fr; }.section-kicker > p { max-width: 620px; }.flow-demo__body { grid-template-columns: 1fr; }.flow-demo__copy { max-width: 620px; }.route-map { border-left: 0; border-top: 1px solid var(--line); }
   .ownership-copy { max-width: 700px; }.privacy-visual { order: 2; }.privacy-copy { max-width: 700px; }
   .pricing-grid { grid-template-columns: 1fr; margin: 0 auto; max-width: 620px; }.pricing-preview { margin: 54px 0 10px; }.price-card--featured { transform: none; }.price-card > p { min-height: 0; }
-  .faq-intro { max-width: 700px; }.site-footer { gap: 25px; grid-template-columns: 1fr 1fr; }.site-footer p { display: none; }
+  .faq-intro { max-width: 700px; }
 }
 
 @media (max-width: 620px) {
@@ -282,7 +292,7 @@ em { color: var(--orange-dark); font-weight: 400; }
   .benefit-card { padding: 25px; }.flow-demo__tabs { display: grid; grid-template-columns: repeat(3,1fr); }.flow-tab { min-width: 0; padding-left: 7px; padding-right: 7px; }.flow-demo__copy { padding: 40px 25px; }.flow-demo__copy h3 { font-size: 34px; }.route-map { min-height: 480px; }.route-node--sender { left: 6%; }.route-node--core { left: 22%; top: 185px; }.route-node--store { right: 6%; }.route-map__line--one { left: 26%; width: 27%; }.route-map__line--two { left: 42%; width: 38%; }
   .boundary-board { grid-template-columns: 1fr; }.boundary-divider { height: 1px; }.boundary-divider span { left: 50%; top: 50%; transform: translate(-50%,-50%); }.boundary-column { padding: 24px 18px; }.privacy-visual { min-height: 530px; }.privacy-orbit--two { height: 390px; width: 390px; }.identity-card--public { left: 5%; top: 55px; }.identity-card--private { bottom: 52px; right: 5%; }.relay-core { height: 96px; width: 96px; }
   .pricing-section .section-heading { margin-bottom: 48px; }.price-card { padding: 25px; }.access-note { padding: 18px; }.final-cta h2 { font-size: 43px; }.final-cta__actions { flex-direction: column; }
-  .site-footer { align-items: flex-start; grid-template-columns: 1fr; }.site-footer > div { flex-wrap: wrap; justify-self: start; }
+  .site-footer__top, .site-footer__bar { align-items: flex-start; flex-direction: column; gap: 22px; }.site-footer__nav { flex-wrap: wrap; gap: 18px 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -428,38 +438,41 @@ textarea:focus-visible {
 
 /* Theme toggle. Not a sun/moon switch: it is a three-way control including
    "follow the system", because a two-state toggle silently overrides the
-   preference the visitor already expressed to their OS. */
+   preference the visitor already expressed to their OS. Three icons on one
+   rail — the words live in `aria-label` and the tooltip, not on the surface. */
 .theme-toggle {
   align-items: center;
   background: var(--sheet);
   border: 1px solid var(--line);
   border-radius: 999px;
   display: inline-flex;
-  gap: 2px;
   padding: 3px;
 }
-.theme-toggle button {
+.theme-toggle__option {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 999px;
   color: var(--muted);
   cursor: pointer;
   display: inline-flex;
-  font-size: 11px;
-  font-weight: 650;
-  padding: 5px 10px;
-  transition: background .2s ease, color .2s ease;
+  height: 28px;
+  justify-content: center;
+  position: relative;
+  transition: color .2s ease;
+  width: 28px;
 }
-.theme-toggle button:hover { color: var(--ink); }
-.theme-toggle button[aria-pressed="true"] {
+.theme-toggle__option:hover { color: var(--ink); }
+.theme-toggle__option[aria-pressed="true"] { color: var(--cream); }
+/* The lit segment is a laid-out element rather than a background, so it can
+   slide between the three positions instead of blinking from one to the next. */
+.theme-toggle__thumb {
   background: var(--ink);
-  color: var(--cream);
+  border-radius: 999px;
+  inset: 0;
+  position: absolute;
 }
-
-@media (max-width: 860px) {
-  /* The header is already tight on mobile; the label is the first thing to go. */
-  .theme-toggle button { padding: 5px 8px; }
-}
+.theme-toggle__option svg { position: relative; z-index: 1; }
 
 /* Honour the visitor's reduced-motion setting. The page animates floating
    chips and orbs indefinitely, which is exactly what the setting is for. */
@@ -510,6 +523,7 @@ textarea:focus-visible {
   --border: var(--line);
   --input: rgba(16, 25, 28, 0.08);
   --ring: var(--orange);
+  --modal-shadow: rgba(28, 46, 50, 0.18);
 }
 
 .dark {
@@ -534,6 +548,7 @@ textarea:focus-visible {
   --border: rgba(255, 255, 255, 0.12);
   --input: rgba(255, 255, 255, 0.1);
   --ring: var(--orange);
+  --modal-shadow: rgba(0, 0, 0, 0.6);
 }
 
 @theme inline {

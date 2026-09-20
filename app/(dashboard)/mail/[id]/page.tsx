@@ -53,7 +53,7 @@ export default async function EmailPage({
 
       <ClassificationPanel email={email} />
 
-      <dl className="mb-6 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 rounded-lg bg-card p-5 text-sm ring-1 ring-foreground/10">
+      <dl className="message-metadata mb-6 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 rounded-lg bg-card p-5 text-sm ring-1 ring-foreground/10">
         <Field label="To">{email.to.join(', ') || '—'}</Field>
         {email.cc.length > 0 ? <Field label="Cc">{email.cc.join(', ')}</Field> : null}
         <Field label="Received">

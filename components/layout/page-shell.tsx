@@ -34,7 +34,7 @@ export function PageHeader({
   toolbar?: ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-4">
+    <header className="dashboard-page-header flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
           {eyebrow ? (
@@ -96,7 +96,7 @@ export function EmptyState({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 py-16 text-center">
+    <div className="dashboard-empty-state flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 py-16 text-center">
       <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
         <Icon name={icon} size={18} />
       </span>

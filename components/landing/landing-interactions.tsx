@@ -1,7 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {
+  Background,
+  BackgroundVariant,
+  MarkerType,
+  ReactFlow,
+  type Edge,
+  type Node,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowUpRight01Icon,
@@ -43,9 +52,10 @@ export function MailFlowDemo() {
   const [activeId, setActiveId] = useState<(typeof flowModes)[number]["id"]>("receive");
   const reduceMotion = useReducedMotion();
   const active = flowModes.find((mode) => mode.id === activeId) ?? flowModes[0];
+  const graph = useMemo(() => createFlowGraph(active.id), [active.id]);
 
   return (
-    <div className="flow-demo" aria-label="Interactive MailPiston email flow demonstration">
+    <div className="flow-demo" id="flow-canvas" aria-label="Interactive MailPiston email flow demonstration">
       <div className="flow-demo__tabs" role="tablist" aria-label="Email workflow stages">
         {flowModes.map((mode) => (
           <button
@@ -86,60 +96,96 @@ export function MailFlowDemo() {
           </motion.div>
         </AnimatePresence>
 
-        <div className={`route-map route-map--${active.id}`} aria-hidden="true">
-          <div className="route-map__line route-map__line--one" />
-          <div className="route-map__line route-map__line--two" />
-
-          <motion.div
-            className="route-node route-node--sender"
-            animate={reduceMotion ? undefined : { y: [0, -5, 0] }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+        <div className={`route-map route-map--${active.id}`} aria-label={`${active.label} routing diagram`}>
+          <ReactFlow
+            nodes={graph.nodes}
+            edges={graph.edges}
+            fitView
+            fitViewOptions={{ padding: 0.18 }}
+            minZoom={0.65}
+            maxZoom={1.1}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            panOnDrag={false}
+            zoomOnDoubleClick={false}
+            zoomOnPinch={false}
+            zoomOnScroll={false}
+            preventScrolling={false}
+            proOptions={{ hideAttribution: true }}
           >
-            <span className="route-node__icon route-node__icon--blue">
-              <HugeiconsIcon icon={Mail01Icon} size={19} strokeWidth={1.7} />
-            </span>
-            <span><small>Customer</small>alex@outside.co</span>
-          </motion.div>
-
-          <motion.div
-            className="route-node route-node--core"
-            animate={reduceMotion ? undefined : { scale: [1, 1.025, 1] }}
-            transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <span className="route-node__icon route-node__icon--orange">
-              <HugeiconsIcon icon={WorkflowCircle01Icon} size={20} strokeWidth={1.7} />
-            </span>
-            <span><small>MailPiston</small>support@yourdomain.com</span>
-          </motion.div>
-
-          <motion.div
-            className="route-node route-node--store"
-            animate={reduceMotion ? undefined : { y: [0, 4, 0] }}
-            transition={{ duration: 4.1, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
-          >
-            <span className="route-node__icon route-node__icon--pink">
-              {active.id === "reply" ? (
-                <HugeiconsIcon icon={ShieldKeyIcon} size={19} strokeWidth={1.7} />
-              ) : (
-                <HugeiconsIcon icon={Database01Icon} size={19} strokeWidth={1.7} />
-              )}
-            </span>
-            <span>
-              <small>{active.id === "reply" ? "Private reply" : "Your record"}</small>
-              {active.id === "route" ? "Inbox + webhook" : active.id === "reply" ? "you@personal.com" : "Thread #MP-1042"}
-            </span>
-          </motion.div>
-
-          {!reduceMotion && (
-            <motion.span
-              animate={{ left: ["23%", "51%"], opacity: [0, 1, 0] }}
-              className="route-pulse route-pulse--one"
-              transition={{ duration: 2.1, repeat: Infinity, ease: "easeInOut" }}
-            />
-          )}
+            <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+          </ReactFlow>
         </div>
       </div>
     </div>
+  );
+}
+
+type FlowModeId = (typeof flowModes)[number]["id"];
+
+function createFlowGraph(mode: FlowModeId): { nodes: Node[]; edges: Edge[] } {
+  const destination = mode === "reply"
+    ? { overline: "Private reply", value: "you@personal.com", icon: ShieldKeyIcon }
+    : mode === "route"
+      ? { overline: "Destinations", value: "Inbox + webhook", icon: Database01Icon }
+      : { overline: "Canonical record", value: "Thread #MP-1042", icon: Database01Icon };
+
+  const nodes: Node[] = [
+    {
+      id: "sender",
+      type: "input",
+      position: { x: 24, y: 30 },
+      className: "flow-node flow-node--sender",
+      data: { label: <FlowNodeLabel icon={Mail01Icon} overline="Customer" value="alex@outside.co" /> },
+    },
+    {
+      id: "core",
+      position: { x: 245, y: 142 },
+      className: "flow-node flow-node--core",
+      data: { label: <FlowNodeLabel icon={WorkflowCircle01Icon} overline="MailPiston" value="support@yourdomain.com" /> },
+    },
+    {
+      id: "destination",
+      type: "output",
+      position: { x: 500, y: 264 },
+      className: "flow-node flow-node--destination",
+      data: { label: <FlowNodeLabel icon={destination.icon} overline={destination.overline} value={destination.value} /> },
+    },
+  ];
+
+  const edges: Edge[] = [
+    {
+      id: `sender-core-${mode}`,
+      source: "sender",
+      target: "core",
+      animated: true,
+      type: "smoothstep",
+      markerEnd: { type: MarkerType.ArrowClosed },
+      label: mode === "receive" ? "verified event" : mode === "route" ? "rule match" : "signed relay",
+      className: "flow-edge",
+    },
+    {
+      id: `core-destination-${mode}`,
+      source: "core",
+      target: "destination",
+      animated: true,
+      type: "smoothstep",
+      markerEnd: { type: MarkerType.ArrowClosed },
+      label: mode === "receive" ? "stored once" : mode === "route" ? "fan-out" : "identity restored",
+      className: "flow-edge flow-edge--accent",
+    },
+  ];
+
+  return { nodes, edges };
+}
+
+function FlowNodeLabel({ icon, overline, value }: { icon: typeof Mail01Icon; overline: string; value: string }) {
+  return (
+    <span className="flow-node__content">
+      <span className="flow-node__icon"><HugeiconsIcon icon={icon} size={19} strokeWidth={1.7} /></span>
+      <span><small>{overline}</small><strong>{value}</strong></span>
+    </span>
   );
 }
 

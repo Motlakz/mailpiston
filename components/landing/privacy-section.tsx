@@ -3,7 +3,7 @@ import { CheckmarkCircle02Icon, Globe02Icon, Mail01Icon, ShieldKeyIcon } from "@
 
 export function PrivacySection() {
   return (
-    <section className="section-pad privacy-section">
+    <section className="section-pad privacy-section" id="privacy" data-motion-section>
       <div className="privacy-visual glass-panel">
         <div className="privacy-orbit privacy-orbit--one" aria-hidden="true" /><div className="privacy-orbit privacy-orbit--two" aria-hidden="true" />
         <div className="identity-card identity-card--public">
