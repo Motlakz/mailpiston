@@ -3,21 +3,29 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog, useConfirm } from '@/components/ui/confirm-dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 import type { SpamVerdict } from '@/server/core/types';
 
 /**
- * What an operator can do to a message from a list row or its own page
- * (roadmap Phase 12).
+ * What an operator can do to a message from a list row or its own page.
  *
  * The set of buttons is derived from where the message is, not passed in, so a
  * row cannot offer an action the server would refuse. A binned message offers
  * restore and permanent delete; a quarantined one offers "not spam"; everything
  * else offers "spam" and the bin.
  *
- * Only one action here is irreversible, and it is the only one that asks.
+ * Only one action here is irreversible, and it is the only one that asks —
+ * through `ConfirmDialog`, which also owns showing progress and keeping itself
+ * open if the request fails. A destructive action that failed silently and
+ * closed would leave the operator believing it worked.
  */
 export function MessageActions({
   emailId,
@@ -37,6 +45,7 @@ export function MessageActions({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const { confirmProps, ask } = useConfirm();
 
   async function run(key: string, call: () => Promise<unknown>) {
     setError(null);
@@ -67,7 +76,7 @@ export function MessageActions({
   const actions: Array<{
     key: string;
     label: string;
-    icon: 'spam' | 'shield' | 'delete' | 'restore';
+    icon: IconName;
     danger?: boolean;
     onClick: () => void;
   }> = [];
@@ -88,23 +97,20 @@ export function MessageActions({
       label: 'Delete forever',
       icon: 'delete',
       danger: true,
-      onClick: () => {
-        // The one action in the product that cannot be undone, and the only
-        // one that asks before doing it.
-        if (
-          !window.confirm(
-            'Permanently delete this message and its attachments? This cannot be undone.',
-          )
-        ) {
-          return;
-        }
-
-        run('purge', () =>
-          apiRequest(`/api/v1/emails/${emailId}?purge=true`, {
-            method: 'DELETE',
-          }),
-        );
-      },
+      onClick: () =>
+        ask({
+          title: 'Delete this message permanently?',
+          description:
+            'The message and its attachments are removed for good. This is the one action in MailPiston that cannot be undone.',
+          confirmLabel: 'Delete forever',
+          destructive: true,
+          onConfirm: async () => {
+            await apiRequest(`/api/v1/emails/${emailId}?purge=true`, {
+              method: 'DELETE',
+            });
+            startTransition(() => router.refresh());
+          },
+        }),
     });
   } else {
     // Outbound mail is sent by this deployment rather than received by it, so
@@ -131,6 +137,9 @@ export function MessageActions({
       key: 'bin',
       label: 'Bin',
       icon: 'delete',
+      // Binning is reversible and the bin is one click away, so it does not
+      // ask. Confirming a reversible action trains people to dismiss dialogs,
+      // which is exactly what you do not want by the time one matters.
       onClick: () =>
         run('bin', () =>
           apiRequest(`/api/v1/emails/${emailId}`, { method: 'DELETE' }),
@@ -140,28 +149,55 @@ export function MessageActions({
 
   return (
     <span className="flex items-center gap-1">
-      {actions.map((action) => (
-        <Button
-          key={action.key}
-          variant="ghost"
-          size={compact ? 'icon-sm' : 'sm'}
-          disabled={busy !== null}
-          aria-label={action.label}
-          title={action.label}
-          className={action.danger ? 'text-destructive hover:text-destructive' : undefined}
-          onClick={(event) => {
-            // Rows are links. Without this, acting on a message navigates to it.
-            event.preventDefault();
-            event.stopPropagation();
-            action.onClick();
-          }}
-        >
-          <Icon name={action.icon} size={compact ? 12 : 13} />
-          {compact ? null : action.label}
-        </Button>
-      ))}
+      {actions.map((action) =>
+        compact ? (
+          <Tooltip key={action.key}>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={busy !== null}
+                  aria-label={action.label}
+                  className={
+                    action.danger
+                      ? 'text-muted-foreground hover:text-destructive'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }
+                  onClick={(event) => {
+                    // Rows are links. Without this, acting on a message opens it.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    action.onClick();
+                  }}
+                />
+              }
+            >
+              <Icon name={action.icon} size={12} />
+            </TooltipTrigger>
+            <TooltipContent>{action.label}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button
+            key={action.key}
+            variant={action.danger ? 'destructive' : 'outline'}
+            size="sm"
+            disabled={busy !== null}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              action.onClick();
+            }}
+          >
+            <Icon name={action.icon} size={13} />
+            {busy === action.key ? 'Working…' : action.label}
+          </Button>
+        ),
+      )}
 
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
+
+      <ConfirmDialog {...confirmProps} />
     </span>
   );
 }
@@ -175,49 +211,35 @@ export function MessageActions({
  */
 export function EmptyBinButton({ count }: { count: number }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { confirmProps, ask } = useConfirm();
 
   if (count === 0) return null;
 
+  const noun = count === 1 ? 'message' : 'messages';
+
   return (
-    <span className="flex items-center gap-2">
+    <>
       <Button
-        variant="outline"
+        variant="destructive"
         size="sm"
-        disabled={busy}
-        className="text-destructive hover:text-destructive"
-        onClick={async () => {
-          if (
-            !window.confirm(
-              `Permanently delete ${count} ${count === 1 ? 'message' : 'messages'} and their attachments? This cannot be undone.`,
-            )
-          ) {
-            return;
-          }
-
-          setBusy(true);
-          setError(null);
-
-          try {
-            await apiRequest('/api/v1/mail-bin', { method: 'DELETE' });
-            router.refresh();
-          } catch (caught) {
-            setError(
-              caught instanceof ApiRequestError
-                ? caught.message
-                : 'Something went wrong. Check the server logs.',
-            );
-          } finally {
-            setBusy(false);
-          }
-        }}
+        onClick={() =>
+          ask({
+            title: `Empty the bin?`,
+            description: `${count} ${noun} and their attachments will be removed for good. This cannot be undone.`,
+            confirmLabel: `Delete ${count} ${noun}`,
+            destructive: true,
+            onConfirm: async () => {
+              await apiRequest('/api/v1/mail-bin', { method: 'DELETE' });
+              router.refresh();
+            },
+          })
+        }
       >
         <Icon name="delete" size={13} />
-        {busy ? 'Deleting…' : `Empty bin (${count})`}
+        Empty bin ({count})
       </Button>
 
-      {error ? <span className="text-xs text-destructive">{error}</span> : null}
-    </span>
+      <ConfirmDialog {...confirmProps} />
+    </>
   );
 }

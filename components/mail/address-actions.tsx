@@ -5,6 +5,18 @@ import { useState } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ConfirmDialog, useConfirm } from '@/components/ui/confirm-dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
 export interface DomainOption {
@@ -46,11 +58,7 @@ export function AddAddressForm({
       setLocalPart('');
       router.refresh();
     } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : 'Something went wrong. Check the server logs.',
-      );
+      setError(messageFor(caught));
     } finally {
       setBusy(false);
     }
@@ -60,81 +68,110 @@ export function AddAddressForm({
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-      <input
+      <Input
         value={localPart}
         onChange={(event) => setLocalPart(event.target.value)}
         placeholder="support"
+        aria-label="Local part"
         required
-        className="h-7 w-32 rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring"
+        className="w-28"
       />
 
       <span className="text-xs text-muted-foreground">@</span>
 
-      <select
+      <Select
         value={domainId}
-        onChange={(event) => setDomainId(event.target.value)}
-        className="h-7 rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring"
+        onValueChange={(value) => setDomainId(String(value))}
       >
-        {domains.map((domain) => (
-          <option key={domain.id} value={domain.id}>
-            {domain.name}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="w-44" aria-label="Domain">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {domains.map((domain) => (
+            <SelectItem key={domain.id} value={domain.id}>
+              {domain.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
+      <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
+        <Checkbox
           checked={canSend}
-          onChange={(event) => setCanSend(event.target.checked)}
+          onCheckedChange={(checked) => setCanSend(checked === true)}
         />
         Can send
-      </label>
+      </Label>
 
       <Button type="submit" disabled={busy}>
         <Icon name="add" size={13} />
-        Add address
+        {busy ? 'Adding…' : 'Add address'}
       </Button>
 
       {/* Sending needs a concrete provider alias; an inbound-only address is
           purely local and only works behind a catch-all. */}
       {!canSend && selected && !selected.hasCatchAll ? (
-        <p className="text-xs text-warning">
+        <p className="w-full text-xs text-warning">
           {selected.name} has no catch-all, so an inbound-only address there
           would never receive mail.
         </p>
       ) : null}
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="w-full text-xs text-destructive">{error}</p>
+      ) : null}
     </form>
   );
 }
 
-export function DeleteAddressButton({ addressId }: { addressId: string }) {
+export function DeleteAddressButton({
+  addressId,
+  email,
+}: {
+  addressId: string;
+  email: string;
+}) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const { confirmProps, ask } = useConfirm();
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label="Delete address"
-      disabled={busy}
-      onClick={async () => {
-        // Deleting removes the provider alias too, so it stops mail arriving.
-        if (!window.confirm('Delete this address and its provider alias?')) return;
+    <>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Delete ${email}`}
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() =>
+                ask({
+                  title: `Delete ${email}?`,
+                  // Naming the consequence rather than the operation: the row
+                  // disappearing is the visible part, mail stopping is the part
+                  // that matters and is easy not to think about.
+                  description:
+                    'This removes the provider alias as well, so mail sent to this address will stop arriving. Messages already received are kept.',
+                  confirmLabel: 'Delete address',
+                  destructive: true,
+                  onConfirm: async () => {
+                    await apiRequest(`/api/v1/addresses/${addressId}`, {
+                      method: 'DELETE',
+                    });
+                    router.refresh();
+                  },
+                })
+              }
+            />
+          }
+        >
+          <Icon name="delete" size={12} />
+        </TooltipTrigger>
+        <TooltipContent>Delete address</TooltipContent>
+      </Tooltip>
 
-        setBusy(true);
-        try {
-          await apiRequest(`/api/v1/addresses/${addressId}`, { method: 'DELETE' });
-          router.refresh();
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      <Icon name="delete" size={12} />
-    </Button>
+      <ConfirmDialog {...confirmProps} />
+    </>
   );
 }
 
@@ -153,36 +190,45 @@ export function RepairAliasButton({ addressId }: { addressId: string }) {
 
   return (
     <span className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Repoint provider alias at this deployment"
-        title="Repoint provider alias at this deployment"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Repoint provider alias at this deployment"
+              disabled={busy}
+              className="text-muted-foreground hover:text-foreground"
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
 
-          try {
-            await apiRequest(`/api/v1/addresses/${addressId}/repair`, {
-              method: 'PUT',
-            });
-            router.refresh();
-          } catch (caught) {
-            setError(
-              caught instanceof ApiRequestError
-                ? caught.message
-                : 'Something went wrong. Check the server logs.',
-            );
-          } finally {
-            setBusy(false);
+                try {
+                  await apiRequest(`/api/v1/addresses/${addressId}/repair`, {
+                    method: 'PUT',
+                  });
+                  router.refresh();
+                } catch (caught) {
+                  setError(messageFor(caught));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
           }
-        }}
-      >
-        <Icon name="refresh" size={12} />
-      </Button>
+        >
+          <Icon name="refresh" size={12} />
+        </TooltipTrigger>
+        <TooltipContent>Repoint alias at this deployment</TooltipContent>
+      </Tooltip>
 
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
     </span>
   );
+}
+
+function messageFor(error: unknown): string {
+  return error instanceof ApiRequestError
+    ? error.message
+    : 'Something went wrong. Check the server logs.';
 }

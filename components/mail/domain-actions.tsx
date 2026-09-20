@@ -6,6 +6,11 @@ import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
 export interface DriftFinding {
@@ -207,22 +212,23 @@ export function DriftBanner({
   }
 
   return (
-    <section className="mt-4 rounded-lg border border-warning/40 bg-card px-5 py-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <Card className="mt-5 gap-0 py-0 ring-warning/40">
+      <CardHeader className="flex flex-wrap items-baseline justify-between gap-2 border-b px-5 py-3.5">
         <h2 className="text-sm font-medium text-warning">
           Provider configuration has drifted
         </h2>
         <span className="text-xs text-muted-foreground">
           {checkedAt ? `checked ${checkedAt} UTC` : null}
         </span>
-      </div>
+      </CardHeader>
 
-      <p className="mt-1 text-xs text-muted-foreground">
+      <CardContent className="px-5 py-4">
+      <p className="text-xs leading-relaxed text-muted-foreground">
         Nothing has been changed. Mail for anything listed here may not be
         reaching MailPiston at all.
       </p>
 
-      <ul className="mt-3 flex flex-col gap-2.5">
+      <ul className="mt-3.5 flex flex-col gap-3">
         {findings.map((finding) => {
           const key = `${finding.resourceType}-${finding.resourceId}-${String(finding.detail.reason)}`;
           const target = repairFor(finding, isKnown(finding, domainNames));
@@ -230,12 +236,10 @@ export function DriftBanner({
           return (
             <li
               key={key}
-              className="border-t border-border pt-2.5 first:border-t-0 first:pt-0"
+              className="border-t border-border pt-3 first:border-t-0 first:pt-0"
             >
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] text-warning">
-                  {finding.status}
-                </span>
+              <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                <StatusBadge status={finding.status} />
                 <span className="font-mono">
                   {labelFor(finding, domainNames)}
                 </span>
@@ -288,7 +292,8 @@ export function DriftBanner({
         ) : null}
         {error ? <span className="text-xs text-destructive">{error}</span> : null}
       </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -415,24 +420,24 @@ export function AddDomainForm() {
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-      <input
+      <Input
         value={name}
         onChange={(event) => setName(event.target.value)}
         placeholder="example.com"
+        aria-label="Domain name"
         required
-        className="h-7 rounded-md border border-input bg-card px-2 text-xs outline-none focus-visible:border-ring"
+        className="w-44"
       />
 
-      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
+      <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
+        <Checkbox
           checked={createCatchAll}
-          onChange={(event) => setCreateCatchAll(event.target.checked)}
+          onCheckedChange={(checked) => setCreateCatchAll(checked === true)}
         />
         {/* Off by default: a catch-all means receiving mail for local parts
             that do not exist, which the inbound pipeline must then drop. */}
         Catch-all
-      </label>
+      </Label>
 
       <Button type="submit" disabled={pending}>
         <Icon name="add" size={13} />
@@ -598,14 +603,15 @@ export function WebhookKeyForm({
 
   return (
     <form onSubmit={save} className="flex flex-wrap items-center gap-2">
-      <input
+      <Input
         type="password"
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder={configured ? 'Replace stored key' : 'Paste webhook key'}
+        aria-label="Inbound webhook key"
         autoComplete="off"
         required
-        className="h-7 w-56 rounded-md border border-input bg-card px-2 font-mono text-xs outline-none focus-visible:border-ring"
+        className="w-56 font-mono"
       />
 
       <Button type="submit" disabled={pending}>

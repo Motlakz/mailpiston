@@ -1,6 +1,9 @@
 import Link from 'next/link';
 
+import { NavTabs } from '@/components/layout/nav-tabs';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { formatWhen } from '@/lib/format';
 import { repositories } from '@/server/repositories';
 
@@ -37,16 +40,21 @@ export default async function ThreadsPage({
       <PageHeader
         title="Threads"
         description="Conversations with a reply in them, resolved from In-Reply-To and References headers."
+        toolbar={
+          <NavTabs
+            aria-label="Filter conversations"
+            active={showAll ? 'all' : 'conversations'}
+            tabs={[
+              { key: 'conversations', label: 'Conversations', href: '/threads' },
+              {
+                key: 'all',
+                label: 'Including single messages',
+                href: '/threads?show=all',
+              },
+            ]}
+          />
+        }
       />
-
-      <nav className="mt-4 flex flex-wrap items-center gap-1.5">
-        <Toggle href="/threads" label="Conversations" active={!showAll} />
-        <Toggle
-          href="/threads?show=all"
-          label="Including single messages"
-          active={showAll}
-        />
-      </nav>
 
       {items.length === 0 ? (
         <EmptyState
@@ -59,12 +67,12 @@ export default async function ThreadsPage({
           }
         />
       ) : (
-        <div className="mt-4 overflow-hidden rounded-lg border border-border bg-card">
+        <Card className="gap-0 overflow-hidden py-0">
           {items.map((thread) => (
             <Link
               key={thread.id}
               href={`/threads/${thread.id}`}
-              className="flex items-baseline gap-3 border-b border-border px-4 py-3 last:border-0 hover:bg-muted/40"
+              className="flex items-center gap-3.5 border-b border-border px-4 py-3.5 transition-colors last:border-0 hover:bg-muted/40"
             >
               <span className="w-48 shrink-0 truncate text-sm font-medium">
                 {/* Who is in it matters more than the subject when scanning:
@@ -74,16 +82,16 @@ export default async function ThreadsPage({
                 )}
               </span>
 
-              <span className="min-w-0 flex-1 truncate text-sm">
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
                 {thread.subject || (
                   <span className="text-muted-foreground">(no subject)</span>
                 )}
               </span>
 
-              <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+              <Badge variant="outline" className="tabular-nums">
                 {thread.messageCount}{' '}
                 {thread.messageCount === 1 ? 'message' : 'messages'}
-              </span>
+              </Badge>
 
               <time
                 dateTime={thread.lastMessageAt.toISOString()}
@@ -94,32 +102,8 @@ export default async function ThreadsPage({
               </time>
             </Link>
           ))}
-        </div>
+        </Card>
       )}
     </>
-  );
-}
-
-function Toggle({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? 'page' : undefined}
-      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-        active
-          ? 'border-foreground/20 bg-foreground text-background'
-          : 'border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-      }`}
-    >
-      {label}
-    </Link>
   );
 }

@@ -1,12 +1,21 @@
-import Link from 'next/link';
-
 import { Icon } from '@/components/icon';
+import { NavTabs } from '@/components/layout/nav-tabs';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import {
   AddAddressForm,
   DeleteAddressButton,
   RepairAliasButton,
 } from '@/components/mail/address-actions';
+import { Card } from '@/components/ui/card';
+import { StatusBadge } from '@/components/ui/status-badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { AddressWithDomain, Domain } from '@/server/core/types';
 import { repositories } from '@/server/repositories';
 
@@ -68,6 +77,29 @@ export default async function AddressesPage({
             defaultDomainId={active ?? undefined}
           />
         }
+        toolbar={
+          // One domain is not a choice, so the tabs would be decoration.
+          domains.length > 1 ? (
+            <NavTabs
+              aria-label="Filter by domain"
+              active={active ?? 'all'}
+              tabs={[
+                {
+                  key: 'all',
+                  label: 'All',
+                  href: '/addresses',
+                  count: addresses.length,
+                },
+                ...domains.map((domain) => ({
+                  key: domain.id,
+                  label: domain.name,
+                  href: `/addresses?domain=${domain.id}`,
+                  count: countFor(domain.id),
+                })),
+              ]}
+            />
+          ) : undefined
+        }
       />
 
       {domains.length === 0 ? (
@@ -78,24 +110,11 @@ export default async function AddressesPage({
         />
       ) : (
         <>
-          {domains.length > 1 ? (
-            <nav className="mt-4 flex flex-wrap items-center gap-1.5">
-              <Tab href="/addresses" label="All" count={addresses.length} active={active === null} />
-              {domains.map((domain) => (
-                <Tab
-                  key={domain.id}
-                  href={`/addresses?domain=${domain.id}`}
-                  label={domain.name}
-                  count={countFor(domain.id)}
-                  active={active === domain.id}
-                />
-              ))}
-            </nav>
+          {active ? (
+            <DomainNote domain={domains.find((d) => d.id === active)!} />
           ) : null}
 
-          {active ? <DomainNote domain={domains.find((d) => d.id === active)!} /> : null}
-
-          <div className="mt-4">
+          <div>
             {visible.length === 0 ? (
               <EmptyState
                 icon="addresses"
@@ -112,33 +131,6 @@ export default async function AddressesPage({
   );
 }
 
-function Tab({
-  href,
-  label,
-  count,
-  active,
-}: {
-  href: string;
-  label: string;
-  count: number;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? 'page' : undefined}
-      className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
-        active
-          ? 'border-foreground/20 bg-foreground text-background'
-          : 'border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-      }`}
-    >
-      <span className={label === 'All' ? '' : 'font-mono'}>{label}</span>
-      <span className={active ? 'opacity-60' : 'opacity-70'}>{count}</span>
-    </Link>
-  );
-}
-
 /**
  * The one thing about a domain that changes what its addresses can be.
  *
@@ -148,7 +140,7 @@ function Tab({
  */
 function DomainNote({ domain }: { domain: Domain }) {
   return (
-    <p className="mt-3 text-xs text-muted-foreground">
+    <p className="text-xs leading-relaxed text-muted-foreground">
       {domain.status === 'verified' ? null : (
         <span className="text-warning">
           {domain.name} is not verified yet, so mail to it may not arrive.{' '}
@@ -169,45 +161,50 @@ function AddressTable({
   showDomain: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full min-w-[640px] text-left text-sm">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="border-b border-border">
-            <th className="px-4 py-2.5 font-medium">
+    <Card className="gap-0 overflow-hidden py-0">
+      <Table className="min-w-[640px]">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-10 px-4">
               {showDomain ? 'Address' : 'Local part'}
-            </th>
-            <th className="px-4 py-2.5 font-medium">Routing</th>
-            <th className="px-4 py-2.5 font-medium">Enabled</th>
-            <th className="px-4 py-2.5 font-medium">Created</th>
-            <th className="px-4 py-2.5" />
-          </tr>
-        </thead>
-        <tbody>
+            </TableHead>
+            <TableHead className="h-10 px-4">Routing</TableHead>
+            <TableHead className="h-10 px-4">State</TableHead>
+            <TableHead className="h-10 px-4">Created</TableHead>
+            <TableHead className="h-10 px-4" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {addresses.map((address) => (
-            <tr key={address.id} className="border-b border-border last:border-0">
-              <td className="px-4 py-2.5 font-mono text-xs">
+            <TableRow key={address.id}>
+              {/* The address is the identifier, so it carries the weight; every
+                  other column in the row is an attribute of it. */}
+              <TableCell className="px-4 py-3.5 font-mono text-sm font-medium">
                 {showDomain ? address.email : address.localPart}
-              </td>
-              <td className="px-4 py-2.5">
+              </TableCell>
+              <TableCell className="px-4 py-3.5">
                 {address.providerAliasId ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs">
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                     <Icon name="sent" size={13} className="text-success" />
                     Concrete alias · can send
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                     <Icon name="inbox" size={13} />
                     Local route · inbound only
                   </span>
                 )}
-              </td>
-              <td className="px-4 py-2.5 text-xs">
-                {address.enabled ? 'Yes' : 'No'}
-              </td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+              </TableCell>
+              <TableCell className="px-4 py-3.5">
+                <StatusBadge
+                  status={address.enabled ? 'verified' : 'disabled'}
+                  label={address.enabled ? 'enabled' : 'disabled'}
+                />
+              </TableCell>
+              <TableCell className="px-4 py-3.5 text-muted-foreground tabular-nums">
                 {address.createdAt.toISOString().slice(0, 10)}
-              </td>
-              <td className="px-4 py-2.5">
+              </TableCell>
+              <TableCell className="px-4 py-3.5">
                 <span className="flex items-center justify-end gap-1">
                   {/* Repointing an alias at the current ingress is useful here
                       and not only from a drift finding: the reconciliation
@@ -216,13 +213,16 @@ function AddressTable({
                   {address.providerAliasId ? (
                     <RepairAliasButton addressId={address.id} />
                   ) : null}
-                  <DeleteAddressButton addressId={address.id} />
+                  <DeleteAddressButton
+                    addressId={address.id}
+                    email={address.email}
+                  />
                 </span>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Card>
   );
 }

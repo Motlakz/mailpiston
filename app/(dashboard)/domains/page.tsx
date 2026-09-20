@@ -8,6 +8,22 @@ import {
   VerifyDomainButton,
   WebhookKeyForm,
 } from '@/components/mail/domain-actions';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { StatusBadge } from '@/components/ui/status-badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { Domain, DomainDnsRecord } from '@/server/core/types';
 import { listDomainsWithWebhookKeys } from '@/server/mail/domains/webhook-keys';
 import { repositories } from '@/server/repositories';
@@ -30,12 +46,6 @@ const KEY_LABEL: Record<WebhookKeyState, string> = {
   unreadable: 'unreadable',
 };
 
-const KEY_TONE: Record<WebhookKeyState, string> = {
-  fallback: 'border-border text-muted-foreground',
-  stored: 'border-success/40 text-success',
-  unreadable: 'border-destructive/40 text-destructive',
-};
-
 export default async function DomainsPage() {
   const [domains, withKeys, latestRun] = await Promise.all([
     repositories.domains.list(),
@@ -47,7 +57,9 @@ export default async function DomainsPage() {
   // silent failure an encryption-key rotation leaves behind, and this is the
   // screen where it has to be visible.
   const keyState = new Map(
-    withKeys.map((row) => [row.domainId, row.readable ? 'stored' : 'unreadable'] as const),
+    withKeys.map(
+      (row) => [row.domainId, row.readable ? 'stored' : 'unreadable'] as const,
+    ),
   );
 
   // Findings only. An `ok` item means the sweep looked and was satisfied, which
@@ -77,8 +89,8 @@ export default async function DomainsPage() {
         actions={<AddDomainForm />}
       />
 
-      {/* Detected, never repaired on its own. The button below is the only
-          thing that changes provider configuration from a finding. */}
+      {/* Detected, never repaired on its own. The buttons inside are the only
+          things that change provider configuration from a finding. */}
       <DriftBanner
         findings={findings}
         checkedAt={
@@ -96,7 +108,7 @@ export default async function DomainsPage() {
           description="Add a throwaway domain first. Do not point a domain you care about at MailPiston until the pipeline has run end to end."
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           {domains.map((domain) => (
             <DomainCard
               key={domain.id}
@@ -110,6 +122,15 @@ export default async function DomainsPage() {
   );
 }
 
+/**
+ * One domain, as three bands: identity, ingress key, DNS.
+ *
+ * The bands are separated by rules and have real padding between them. The
+ * previous version packed all three into 12px rows, which made a domain name,
+ * its status, a key state and a table of six records read as one undifferentiated
+ * block — and the domain name, which is the thing you are looking for when
+ * scanning, had the same weight as everything else.
+ */
 function DomainCard({
   domain,
   webhookKey,
@@ -118,76 +139,60 @@ function DomainCard({
   webhookKey: WebhookKeyState;
 }) {
   return (
-    <section className="rounded-lg border border-border bg-card">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
-        <div className="flex items-center gap-2">
-          <h2 className="font-mono text-sm">{domain.name}</h2>
+    <Card className="gap-0 py-0">
+      <CardHeader className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b px-5 py-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <CardTitle className="font-mono text-base tracking-tight">
+            {domain.name}
+          </CardTitle>
           <StatusBadge status={domain.status} />
-          <VerificationIssues issues={domain.verificationErrors} />
           {domain.catchAllAliasId ? (
-            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-              catch-all
-            </span>
+            <StatusBadge status="catch-all" tone="info" label="catch-all" />
           ) : null}
+          <VerificationIssues issues={domain.verificationErrors} />
         </div>
 
         <VerifyDomainButton domainId={domain.id} />
-      </header>
+      </CardHeader>
 
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-3">
-        <span className="text-xs text-muted-foreground">
-          Inbound webhook key
-        </span>
-
-        <span
-          className={`rounded-full border px-2 py-0.5 text-[11px] ${KEY_TONE[webhookKey]}`}
-        >
-          {KEY_LABEL[webhookKey]}
-        </span>
-
-        {webhookKey === 'unreadable' ? (
-          <span className="text-xs text-destructive">
-            Stored under a different encryption key, so it is being skipped —
-            inbound mail for this domain is failing verification. Paste the key
-            from Forward Email again to fix it.
-          </span>
-        ) : null}
+      <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b px-5 py-3.5">
+        <span className="text-xs font-medium">Inbound webhook key</span>
+        <StatusBadge status={webhookKey} label={KEY_LABEL[webhookKey]} />
 
         <WebhookKeyForm
           domainId={domain.id}
           configured={webhookKey !== 'fallback'}
         />
-      </div>
 
-      <div className="px-5 py-4">
+        {webhookKey === 'unreadable' ? (
+          <p className="w-full text-xs leading-relaxed text-destructive">
+            Stored under a different encryption key, so it is being skipped —
+            inbound mail for this domain is failing verification. Paste the key
+            from Forward Email again to fix it.
+          </p>
+        ) : null}
+      </CardContent>
+
+      <CardContent className="px-5 py-4">
         <DnsRecords records={domain.dnsRecords} />
 
         {domain.lastVerifiedAt ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Last checked {domain.lastVerifiedAt.toISOString()}
-          </p>
+          <>
+            <Separator className="my-3.5" />
+            <p className="text-xs text-muted-foreground">
+              Last checked{' '}
+              <time dateTime={domain.lastVerifiedAt.toISOString()}>
+                {domain.lastVerifiedAt
+                  .toISOString()
+                  .replace('T', ' ')
+                  .slice(0, 19)}{' '}
+                UTC
+              </time>
+            </p>
+          </>
         ) : null}
-      </div>
-    </section>
-  );
-}
-
-function StatusBadge({ status }: { status: Domain['status'] }) {
-  const styles: Record<Domain['status'], string> = {
-    verified: 'border-success/40 text-success',
-    pending: 'border-warning/40 text-warning',
-    // `failed` is not terminal: DNS propagates, so it only means "checked and
-    // not passing yet" rather than "give up".
-    failed: 'border-destructive/40 text-destructive',
-    disabled: 'border-border text-muted-foreground',
-  };
-
-  return (
-    <span
-      className={`rounded-full border px-2 py-0.5 text-[11px] ${styles[status]}`}
-    >
-      {status}
-    </span>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -215,13 +220,11 @@ function DnsRecords({ records }: { records: DomainDnsRecord[] }) {
     );
   }
 
-  const receiving = records.filter((record) =>
-    RECEIVING.has(record.purpose),
-  );
+  const receiving = records.filter((record) => RECEIVING.has(record.purpose));
   const sending = records.filter((record) => !RECEIVING.has(record.purpose));
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <RecordGroup
         title="Receiving"
         caption="Until these are live, mail to this domain never reaches MailPiston."
@@ -236,7 +239,10 @@ function DnsRecords({ records }: { records: DomainDnsRecord[] }) {
   );
 }
 
-const RECEIVING = new Set<DomainDnsRecord['purpose']>(['inbound', 'verification']);
+const RECEIVING = new Set<DomainDnsRecord['purpose']>([
+  'inbound',
+  'verification',
+]);
 
 const PURPOSE_LABEL: Record<DomainDnsRecord['purpose'], string> = {
   inbound: 'Routes mail to Forward Email',
@@ -262,77 +268,85 @@ function RecordGroup({
 
   return (
     <section>
-      <div className="flex flex-wrap items-baseline gap-2">
-        <h3 className="text-xs font-medium">{title}</h3>
-        <span
-          className={`rounded-full border px-2 py-0.5 text-[11px] ${
-            outstanding === 0
-              ? 'border-success/40 text-success'
-              : 'border-warning/40 text-warning'
-          }`}
-        >
-          {outstanding === 0
-            ? 'all published'
-            : `${outstanding} outstanding`}
-        </span>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <h3 className="text-xs font-semibold tracking-wide uppercase">
+          {title}
+        </h3>
+        <StatusBadge
+          status={outstanding === 0 ? 'verified' : 'pending'}
+          label={
+            outstanding === 0 ? 'all published' : `${outstanding} outstanding`
+          }
+        />
         {outstanding > 0 ? (
-          <span className="text-[11px] text-muted-foreground">{caption}</span>
+          <span className="text-xs text-muted-foreground">{caption}</span>
         ) : null}
       </div>
 
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-xs">
-          <thead className="text-muted-foreground">
-            <tr>
-              <th className="pb-2 font-medium">Type</th>
-              <th className="pb-2 font-medium">Name</th>
-              <th className="pb-2 font-medium">Value</th>
-              <th className="pb-2 font-medium">Purpose</th>
-              <th className="pb-2 font-medium">Present</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((record, index) => (
-              <tr
-                key={`${record.type}-${record.name}-${index}`}
-                className="border-t border-border"
-              >
-                <td className="py-2 font-mono align-top">
-                  {record.type}
-                  {record.priority ? ` (${record.priority})` : ''}
-                </td>
-                <td className="py-2 font-mono align-top">
-                  <span className="flex items-center gap-1">
-                    <span className="break-all">{record.name}</span>
-                    <CopyButton value={record.name} />
+      <Table className="mt-3">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-8 w-16 ps-0">Type</TableHead>
+            <TableHead className="h-8 w-[22%]">Name</TableHead>
+            <TableHead className="h-8">Value</TableHead>
+            <TableHead className="h-8 w-[26%]">Purpose</TableHead>
+            <TableHead className="h-8 w-16 text-right">Live</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {records.map((record, index) => (
+            <TableRow key={`${record.type}-${record.name}-${index}`}>
+              {/* `py-3` and `align-top` together: a DKIM value wraps to three
+                  lines, and a vertically centred type column next to it floats
+                  in the middle of nowhere. */}
+              <TableCell className="py-3 ps-0 align-top font-mono text-muted-foreground">
+                {record.type}
+                {record.priority ? (
+                  <span className="text-muted-foreground/60">
+                    {' '}
+                    {record.priority}
                   </span>
-                </td>
-                <td className="py-2 align-top">
-                  <span className="flex items-start gap-1">
-                    {/* DKIM keys are ~400 characters and must be copied whole,
-                        so the value wraps rather than truncating. */}
-                    <code className="font-mono break-all">{record.value}</code>
-                    <CopyButton value={record.value} />
-                  </span>
-                </td>
-                <td className="py-2 align-top text-muted-foreground">
-                  {PURPOSE_LABEL[record.purpose] ?? record.purpose}
-                </td>
-                <td className="py-2 align-top">
-                  <Icon
-                    name={record.present ? 'verified' : 'pending'}
-                    size={14}
-                    className={
-                      record.present ? 'text-success' : 'text-muted-foreground'
-                    }
-                    aria-label={record.present ? 'Present' : 'Not found'}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                ) : null}
+              </TableCell>
+
+              <TableCell className="py-3 align-top">
+                <span className="flex items-start gap-1">
+                  <code className="font-mono break-all">{record.name}</code>
+                  <CopyButton value={record.name} />
+                </span>
+              </TableCell>
+
+              <TableCell className="py-3 align-top">
+                <span className="flex items-start gap-1">
+                  {/* DKIM keys are ~400 characters and must be copied whole,
+                      so the value wraps rather than truncating. */}
+                  <code className="font-mono leading-relaxed break-all">
+                    {record.value}
+                  </code>
+                  <CopyButton value={record.value} />
+                </span>
+              </TableCell>
+
+              <TableCell className="py-3 align-top text-muted-foreground">
+                {PURPOSE_LABEL[record.purpose] ?? record.purpose}
+              </TableCell>
+
+              <TableCell className="py-3 text-right align-top">
+                <Icon
+                  name={record.present ? 'verified' : 'pending'}
+                  size={14}
+                  className={
+                    record.present
+                      ? 'inline text-success'
+                      : 'inline text-muted-foreground/50'
+                  }
+                  aria-label={record.present ? 'Present' : 'Not found'}
+                />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </section>
   );
 }

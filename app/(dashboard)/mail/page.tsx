@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
+import { NavTabs } from '@/components/layout/nav-tabs';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import { ComposeForm } from '@/components/mail/compose';
 import {
@@ -8,6 +9,8 @@ import {
   MessageActions,
 } from '@/components/mail/message-actions';
 import { QuotaBar } from '@/components/mail/quota-bar';
+import { Card } from '@/components/ui/card';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { formatWhen, previewOf } from '@/lib/format';
 import type { EmailListItem, EmailStatus, SpamCategory } from '@/server/core/types';
 import { getOutboundQuota } from '@/server/mail/emails/quota';
@@ -96,29 +99,23 @@ export default async function MailPage({
             <ComposeForm addresses={sendable} />
           )
         }
+        toolbar={
+          <NavTabs
+            aria-label="Filter mail"
+            active={active}
+            tabs={(Object.keys(FILTERS) as FilterKey[]).map((key) => ({
+              key,
+              label: FILTERS[key].label,
+              href: key === 'all' ? '/mail' : `/mail?show=${key}`,
+            }))}
+          />
+        }
       />
-
-      <nav className="mt-4 flex flex-wrap items-center gap-1.5">
-        {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
-          <Link
-            key={key}
-            href={key === 'all' ? '/mail' : `/mail?show=${key}`}
-            aria-current={key === active ? 'page' : undefined}
-            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-              key === active
-                ? 'border-foreground/20 bg-foreground text-background'
-                : 'border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-            }`}
-          >
-            {FILTERS[key].label}
-          </Link>
-        ))}
-      </nav>
 
       {showQuota ? <QuotaBar quota={quota} /> : null}
 
       {active === 'spam' ? (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Quarantined, not deleted. None of these reached a webhook or a personal
           inbox. Releasing one makes it visible again — it does not re-send the
           delivery your application never received.
@@ -126,13 +123,13 @@ export default async function MailPage({
       ) : null}
 
       {active === 'bin' ? (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Still here and still restorable. Emptying the bin removes these
           messages and their attachments for good.
         </p>
       ) : null}
 
-      <div className="mt-4">
+      <div>
         {page.items.length === 0 ? (
           <EmptyState
             icon={EMPTY_ICON[active]}
@@ -140,11 +137,11 @@ export default async function MailPage({
             description={emptyDescription(active)}
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <Card className="gap-0 overflow-hidden py-0">
             {page.items.map((email) => (
               <MailRow key={email.id} email={email} />
             ))}
-          </div>
+          </Card>
         )}
 
         {page.nextCursor ? (
@@ -175,7 +172,7 @@ function MailRow({ email }: { email: EmailListItem }) {
   const preview = previewOf(email.text);
 
   return (
-    <div className="group relative flex items-baseline gap-3 border-b border-border px-4 py-3 last:border-0 hover:bg-muted/40">
+    <div className="group relative flex items-center gap-3.5 border-b border-border px-4 py-3.5 transition-colors last:border-0 hover:bg-muted/40">
       <Link
         href={`/mail/${email.id}`}
         className="absolute inset-0"
@@ -189,16 +186,21 @@ function MailRow({ email }: { email: EmailListItem }) {
         →
       </span>
 
+      {/* The counterparty is the scan target, so it gets the weight. The
+          subject sits one step down and the preview one below that — three
+          levels in a row that previously had one. */}
       <span className="w-48 shrink-0 truncate text-sm font-medium">
         {counterparty || <span className="text-muted-foreground">—</span>}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-sm">
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
         {email.subject || (
           <span className="text-muted-foreground">(no subject)</span>
         )}
         {preview ? (
-          <span className="ml-2 text-muted-foreground">— {preview}</span>
+          <span className="ml-2 text-xs text-muted-foreground">
+            {preview}
+          </span>
         ) : null}
       </span>
 
@@ -252,21 +254,16 @@ function MailRow({ email }: { email: EmailListItem }) {
 function SpamBadge({ email }: { email: EmailListItem }) {
   if (email.spamVerdict === 'clean') return null;
 
-  const label = email.spamCategory
-    ? CATEGORY_LABEL[email.spamCategory]
-    : email.spamVerdict;
-
   return (
-    <span
+    <StatusBadge
+      status={email.spamVerdict}
+      label={
+        email.spamCategory ? CATEGORY_LABEL[email.spamCategory] : undefined
+      }
+      // The rules that fired, so hovering a badge answers "why" without
+      // opening the message.
       title={email.spamSignals.map((signal) => signal.rule).join(', ')}
-      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${
-        email.spamVerdict === 'spam'
-          ? 'border-destructive/40 text-destructive'
-          : 'border-warning/40 text-warning'
-      }`}
-    >
-      {label}
-    </span>
+    />
   );
 }
 
@@ -280,30 +277,6 @@ export const CATEGORY_LABEL: Record<SpamCategory, string> = {
   empty: 'empty',
 };
 
-const STATUS_TONE: Record<EmailStatus, string> = {
-  received: 'border-border text-muted-foreground',
-  queued: 'border-warning/40 text-warning',
-  sent: 'border-success/40 text-success',
-  delivered: 'border-success/40 text-success',
-  soft_bounced: 'border-warning/40 text-warning',
-  hard_bounced: 'border-destructive/40 text-destructive',
-  failed: 'border-destructive/40 text-destructive',
-};
-
-/**
- * A bounce is not a failure and is worth telling apart at a glance: `failed`
- * means we never handed it to the provider, `hard_bounced` means the provider
- * did and the far end refused it.
- */
-function StatusBadge({ status }: { status: EmailStatus }) {
-  return (
-    <span
-      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${STATUS_TONE[status]}`}
-    >
-      {status.replace('_', ' ')}
-    </span>
-  );
-}
 
 const EMPTY_ICON: Record<FilterKey, 'inbox' | 'spam' | 'delete'> = {
   all: 'inbox',
