@@ -20,7 +20,7 @@ export interface DnsRecord {
   value: string;
   priority?: number;
   /** What this record is for, so the dashboard can group them. */
-  purpose: 'inbound' | 'verification' | 'spf' | 'dkim' | 'dmarc';
+  purpose: 'inbound' | 'verification' | 'spf' | 'dkim' | 'return-path' | 'dmarc';
   present: boolean;
 }
 

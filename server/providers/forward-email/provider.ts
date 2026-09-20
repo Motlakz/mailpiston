@@ -259,18 +259,35 @@ function bracket(messageId: string): string {
 /**
  * The record set the operator must publish, as the dashboard displays it.
  *
- * Values are Forward Email's documented public records; `present` comes from
- * whichever verify call reported on them.
+ * Every value here comes from the provider's own answer for *this* domain.
+ * That is the whole point of the function: three of these records cannot be
+ * derived from a template.
  *
- * ⚠️ The DKIM/return-path row is the one to re-check against spike 0.10, which
- * has not run: `verify-smtp` is the authority on what sending actually demands,
- * and it may want a per-domain key rather than the shared CNAME below.
+ *  - **DKIM** carries a per-domain RSA public key under a per-domain selector
+ *    (`fe-5687bdb44e._domainkey`). It exists nowhere but the provider.
+ *  - **DMARC** names a provider mailbox keyed to the domain id in its `rua`,
+ *    and the provider's own policy is `p=reject`, not the `p=none` a generic
+ *    template would suggest.
+ *  - **The return path** is a CNAME whose name is relative.
+ *
+ * The previous version of this function invented all three. They looked
+ * plausible, which is worse than looking wrong: publishing a `p=none` DMARC
+ * record that does not match the provider's expectation, or a DKIM row that is
+ * actually the return path, leaves sending quietly unauthenticated — and the
+ * operator ends up in the provider's console copying the real values, which is
+ * exactly the errand MailPiston exists to remove.
+ *
+ * Names are passed through relative (`_dmarc`, `fe-bounces`) because that is
+ * what a DNS host's "name" field wants. A FQDN pasted there becomes
+ * `_dmarc.example.com.example.com`.
  */
 function dnsRecordsFor(
   domain: string,
   status: ForwardEmailDomain,
 ): DnsRecord[] {
-  return [
+  const smtp = status.smtp_dns_records ?? {};
+
+  const records: DnsRecord[] = [
     {
       type: 'MX',
       name: '@',
@@ -301,21 +318,45 @@ function dnsRecordsFor(
       name: '@',
       value: 'v=spf1 include:spf.forwardemail.net -all',
       purpose: 'spf',
-      present: Boolean(status.has_txt_record),
-    },
-    {
-      type: 'CNAME',
-      name: `fe-bounces.${domain}`,
-      value: 'forwardemail.net',
-      purpose: 'dkim',
-      present: Boolean(status.has_return_path_record),
-    },
-    {
-      type: 'TXT',
-      name: '_dmarc',
-      value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain};`,
-      purpose: 'dmarc',
-      present: Boolean(status.has_dmarc_record),
+      // `has_spf_record` is reported separately from `has_txt_record`, and
+      // conflating them showed SPF as satisfied the moment the unrelated
+      // verification TXT landed.
+      present: Boolean(status.has_spf_record),
     },
   ];
+
+  // Absent only on a domain the provider has not generated sending records for
+  // yet. Omitted rather than faked: an empty row is a visible "not yet", a
+  // placeholder is something an operator will publish.
+  if (smtp.dkim?.name && smtp.dkim.value) {
+    records.push({
+      type: 'TXT',
+      name: smtp.dkim.name,
+      value: smtp.dkim.value,
+      purpose: 'dkim',
+      present: Boolean(status.has_dkim_record),
+    });
+  }
+
+  if (smtp.return_path?.name && smtp.return_path.value) {
+    records.push({
+      type: 'CNAME',
+      name: smtp.return_path.name,
+      value: smtp.return_path.value,
+      purpose: 'return-path',
+      present: Boolean(status.has_return_path_record),
+    });
+  }
+
+  if (smtp.dmarc?.name && smtp.dmarc.value) {
+    records.push({
+      type: 'TXT',
+      name: smtp.dmarc.name,
+      value: smtp.dmarc.value,
+      purpose: 'dmarc',
+      present: Boolean(status.has_dmarc_record),
+    });
+  }
+
+  return records;
 }

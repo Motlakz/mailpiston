@@ -181,6 +181,66 @@ export class AddressService {
     return this.addresses.update(id, { ...input, providerAliasId });
   }
 
+  /**
+   * Repoints this address's provider alias at our current ingress (Phase 10).
+   *
+   * The drift this repairs is almost always an origin that moved: every alias
+   * carries the absolute ingress URL that was current when it was created, so
+   * changing `APP_URL` strands every alias made before the change. Nothing
+   * errors — the old origin usually still resolves — right up until it does
+   * not, and then mail stops with no symptom anywhere in the system.
+   *
+   * Like `repairCatchAll`, it finds the alias by *local part* rather than by
+   * the stored id. The stored id is exactly what goes stale when a domain is
+   * deleted and recreated at the provider, and repair has to work in that case
+   * above all others.
+   *
+   * It repoints rather than deletes-and-recreates: deleting first opens a
+   * window with no alias at all, and mail arriving in that window is not
+   * delayed, it is gone.
+   */
+  async repairAlias(id: string): Promise<Address> {
+    const address = await this.get(id);
+    const domain = await this.domains.findById(address.domainId);
+    if (!domain) throw new NotFoundError(`Domain ${address.domainId} not found`);
+
+    if (!domain.providerDomainId) {
+      throw new ConflictError(`Domain ${domain.name} has no provider record`);
+    }
+
+    if (!address.canSend && !address.providerAliasId) {
+      throw new ConflictError(
+        `${address.localPart}@${domain.name} is an inbound-only local route with ` +
+          'no provider alias of its own — it is routed by the domain catch-all, ' +
+          'so repair that instead.',
+      );
+    }
+
+    const providerDomainId = domain.providerDomainId;
+    const ingress = inboundIngressUrl();
+
+    const existing = await this.provider.findAlias(
+      providerDomainId,
+      address.localPart,
+    );
+
+    const alias = existing
+      ? await this.provider.updateAlias(existing.id, {
+          domainId: providerDomainId,
+          recipients: [ingress],
+          enabled: address.enabled,
+        })
+      : await this.provider.createAlias({
+          domainId: providerDomainId,
+          localPart: address.localPart,
+          recipients: [ingress],
+          enabled: address.enabled,
+          description: 'Managed by MailPiston',
+        });
+
+    return this.addresses.update(id, { providerAliasId: alias.id });
+  }
+
   async delete(id: string): Promise<void> {
     const address = await this.get(id);
 

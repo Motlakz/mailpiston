@@ -15,12 +15,62 @@ export interface DriftFinding {
   detail: Record<string, unknown>;
 }
 
+/** What a person can actually do about one finding, or nothing. */
+type Repair = { label: string; path: string } | null;
+
+/**
+ * Reasons whose fix is repointing the alias at our ingress.
+ *
+ * `provider_domain_id_changed` is deliberately not here: the domain was
+ * recreated at the provider, so every alias id we hold belongs to the old one
+ * and the domain has to be re-verified before an alias repair means anything.
+ */
+const REPOINTABLE = new Set([
+  'recipient_not_our_ingress',
+  'additional_recipients',
+  'disabled_at_provider',
+  'local_part_changed',
+  'not_found_at_provider',
+]);
+
+function repairFor(finding: DriftFinding, known: boolean): Repair {
+  if (!known) return null;
+
+  const reason = String(finding.detail.reason ?? '');
+  if (!REPOINTABLE.has(reason)) return null;
+
+  return finding.resourceType === 'alias' && finding.detail.localPart !== '*'
+    ? {
+        label: 'Repoint alias',
+        path: `/api/v1/addresses/${finding.resourceId}/repair`,
+      }
+    : {
+        label: 'Repair catch-all',
+        path: `/api/v1/domains/${finding.resourceId}/catch-all`,
+      };
+}
+
 /**
  * The drift banner (roadmap Phase 10).
  *
  * Reconciliation detects and stops. This is where a person sees what it found
- * and decides — the repair button is per domain, and it is the only thing in
- * the system that changes provider configuration on the strength of a finding.
+ * and decides — every repair here is a button, and they are the only things in
+ * the system that change provider configuration on the strength of a finding.
+ *
+ * Three things this screen has to do that a list of reason codes does not.
+ *
+ * **Show the values.** `recipient_not_our_ingress` names the rule that broke,
+ * not the fact that broke it. The fact is almost always an origin that moved —
+ * aliases carry the absolute ingress URL that was current when they were made —
+ * and that is invisible without the two URLs side by side.
+ *
+ * **Offer the repair for every repairable finding, not just the catch-all.** A
+ * banner that reports a problem and offers nothing to do about it is why
+ * "Check again" reads as broken: it re-runs honestly, finds the same drift, and
+ * the screen has no way to look any different.
+ *
+ * **Say what the re-check found.** Same reason. An action whose success and
+ * failure render identically cannot tell you it worked.
  */
 export function DriftBanner({
   findings,
@@ -34,16 +84,38 @@ export function DriftBanner({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  async function recheck() {
+  async function recheck(): Promise<number> {
+    const summary = await apiRequest<{
+      checked: number;
+      drift: number;
+      missing: number;
+      errors: number;
+    }>('/api/v1/reconciliation', { method: 'POST' });
+
+    startTransition(() => router.refresh());
+
+    const outstanding = summary.drift + summary.missing + summary.errors;
+
+    setNote(
+      outstanding === 0
+        ? `Checked ${summary.checked} — everything matches.`
+        : `Checked ${summary.checked} — ${outstanding} still not matching.`,
+    );
+
+    return outstanding;
+  }
+
+  async function runRecheck() {
     setError(null);
+    setNote(null);
     setBusy('recheck');
 
     try {
-      await apiRequest('/api/v1/reconciliation', { method: 'POST' });
-      startTransition(() => router.refresh());
+      await recheck();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -51,22 +123,68 @@ export function DriftBanner({
     }
   }
 
-  async function repair(domainId: string) {
+  /** One repair, then a sweep so the banner reflects the new truth. */
+  async function repair(target: Repair, key: string) {
+    if (!target) return;
+
     setError(null);
-    setBusy(domainId);
+    setNote(null);
+    setBusy(key);
 
     try {
-      await apiRequest(`/api/v1/domains/${domainId}/catch-all`, {
-        method: 'PUT',
-      });
-      await apiRequest('/api/v1/reconciliation', { method: 'POST' });
-      startTransition(() => router.refresh());
+      await apiRequest(target.path, { method: 'PUT' });
+      await recheck();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
       setBusy(null);
     }
   }
+
+  /**
+   * Every repairable finding, then one sweep at the end.
+   *
+   * Sequential on purpose: these are writes to provider configuration, and a
+   * parallel burst against one domain's alias collection is the wrong thing to
+   * do to an API we do not control. A failure stops the run rather than
+   * continuing — if repointing one alias failed, the next is likely to fail the
+   * same way, and a half-finished repair should be visible as such.
+   */
+  async function repairAll() {
+    setError(null);
+    setNote(null);
+    setBusy('all');
+
+    try {
+      let repaired = 0;
+
+      for (const finding of findings) {
+        const target = repairFor(finding, isKnown(finding, domainNames));
+        if (!target) continue;
+
+        await apiRequest(target.path, { method: 'PUT' });
+        repaired += 1;
+      }
+
+      const outstanding = await recheck();
+
+      setNote(
+        `Repaired ${repaired}. ${
+          outstanding === 0
+            ? 'Everything matches now.'
+            : `${outstanding} still not matching.`
+        }`,
+      );
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const repairable = findings.filter((finding) =>
+    repairFor(finding, isKnown(finding, domainNames)),
+  ).length;
 
   if (findings.length === 0) {
     return (
@@ -76,12 +194,13 @@ export function DriftBanner({
           : 'Provider configuration has not been checked yet.'}{' '}
         <button
           type="button"
-          onClick={recheck}
+          onClick={runRecheck}
           disabled={busy !== null}
-          className="underline hover:text-foreground"
+          className="underline hover:text-foreground disabled:no-underline disabled:opacity-60"
         >
-          Check now
+          {busy === 'recheck' ? 'Checking…' : 'Check now'}
         </button>
+        {note ? <span className="ml-2">{note}</span> : null}
         {error ? <span className="ml-2 text-destructive">{error}</span> : null}
       </p>
     );
@@ -103,54 +222,171 @@ export function DriftBanner({
         reaching MailPiston at all.
       </p>
 
-      <ul className="mt-3 flex flex-col gap-2">
-        {findings.map((finding) => (
-          <li
-            key={`${finding.resourceType}-${finding.resourceId}-${String(finding.detail.reason)}`}
-            className="flex flex-wrap items-center gap-2 text-xs"
-          >
-            <span className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] text-warning">
-              {finding.status}
-            </span>
-            <span className="font-mono">
-              {finding.resourceType === 'alias'
-                ? `${String(finding.detail.localPart ?? '?')}@${String(finding.detail.domain ?? '')}`
-                : (domainNames[finding.resourceId] ??
-                  String(finding.detail.name ?? finding.resourceId))}
-            </span>
-            <span className="text-muted-foreground">
-              {String(finding.detail.reason ?? 'unknown')}
-            </span>
+      <ul className="mt-3 flex flex-col gap-2.5">
+        {findings.map((finding) => {
+          const key = `${finding.resourceType}-${finding.resourceId}-${String(finding.detail.reason)}`;
+          const target = repairFor(finding, isKnown(finding, domainNames));
 
-            {finding.detail.localPart === '*' &&
-            domainNames[finding.resourceId] ? (
-              <button
-                type="button"
-                onClick={() => repair(finding.resourceId)}
-                disabled={busy !== null}
-                className="underline hover:text-foreground"
-              >
-                Repair catch-all
-              </button>
-            ) : null}
-          </li>
-        ))}
+          return (
+            <li
+              key={key}
+              className="border-t border-border pt-2.5 first:border-t-0 first:pt-0"
+            >
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] text-warning">
+                  {finding.status}
+                </span>
+                <span className="font-mono">
+                  {labelFor(finding, domainNames)}
+                </span>
+                <span className="text-muted-foreground">
+                  {REASON_TEXT[String(finding.detail.reason)] ??
+                    String(finding.detail.reason ?? 'unknown')}
+                </span>
+
+                {target ? (
+                  <button
+                    type="button"
+                    onClick={() => repair(target, key)}
+                    disabled={busy !== null}
+                    className="underline hover:text-foreground disabled:no-underline disabled:opacity-60"
+                  >
+                    {busy === key ? 'Repairing…' : target.label}
+                  </button>
+                ) : null}
+              </div>
+
+              <ValueComparison detail={finding.detail} />
+            </li>
+          );
+        })}
       </ul>
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={recheck}
+          onClick={runRecheck}
           disabled={busy !== null}
-          className="text-xs text-muted-foreground underline hover:text-foreground"
+          className="text-xs text-muted-foreground underline hover:text-foreground disabled:no-underline disabled:opacity-60"
         >
-          Check again
+          {busy === 'recheck' ? 'Checking…' : 'Check again'}
         </button>
+
+        {repairable > 1 ? (
+          <button
+            type="button"
+            onClick={repairAll}
+            disabled={busy !== null}
+            className="text-xs text-muted-foreground underline hover:text-foreground disabled:no-underline disabled:opacity-60"
+          >
+            {busy === 'all' ? 'Repairing…' : `Repair all ${repairable}`}
+          </button>
+        ) : null}
+
+        {note ? (
+          <span className="text-xs text-muted-foreground">{note}</span>
+        ) : null}
         {error ? <span className="text-xs text-destructive">{error}</span> : null}
       </div>
     </section>
   );
 }
+
+/**
+ * The two values, when the finding carries them.
+ *
+ * This is the part that turns a reason code into a diagnosis. `expected` and
+ * `actual` are usually two ingress URLs differing only by host, which is
+ * unreadable as prose and obvious as two stacked monospace lines.
+ */
+function ValueComparison({ detail }: { detail: Record<string, unknown> }) {
+  const expected = detail.expected;
+  const actual = detail.actual;
+
+  if (expected === undefined && actual === undefined) return null;
+
+  return (
+    <dl className="mt-1.5 ml-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
+      {expected !== undefined ? (
+        <>
+          <dt className="text-muted-foreground">expected</dt>
+          <dd className="font-mono break-all text-success">
+            {asText(expected)}
+          </dd>
+        </>
+      ) : null}
+      {actual !== undefined ? (
+        <>
+          <dt className="text-muted-foreground">actual</dt>
+          <dd className="font-mono break-all text-destructive">
+            {asText(actual)}
+          </dd>
+        </>
+      ) : null}
+    </dl>
+  );
+}
+
+function asText(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.length === 0 ? '(none)' : value.join(', ');
+  }
+  return String(value);
+}
+
+/**
+ * Whether we can act on this finding at all.
+ *
+ * A catch-all finding whose domain is no longer in `domainNames` came from a
+ * run against state that has since been deleted, and offering a repair for it
+ * would call a route that 404s.
+ */
+function isKnown(
+  finding: DriftFinding,
+  domainNames: Record<string, string>,
+): boolean {
+  if (finding.resourceType === 'alias' && finding.detail.localPart !== '*') {
+    // An alias finding's `resourceId` is the address, which this map does not
+    // carry. The address existed when the sweep ran; the repair route answers
+    // for it if it still does.
+    return true;
+  }
+
+  return Boolean(domainNames[finding.resourceId]);
+}
+
+function labelFor(
+  finding: DriftFinding,
+  domainNames: Record<string, string>,
+): string {
+  if (finding.resourceType === 'alias') {
+    return `${String(finding.detail.localPart ?? '?')}@${String(finding.detail.domain ?? '')}`;
+  }
+
+  return (
+    domainNames[finding.resourceId] ??
+    String(finding.detail.name ?? finding.resourceId)
+  );
+}
+
+/**
+ * The reason codes as a sentence.
+ *
+ * The codes are the right thing to store — stable and greppable — and the wrong
+ * thing to read at a glance when mail may be going missing.
+ */
+const REASON_TEXT: Record<string, string> = {
+  recipient_not_our_ingress: 'forwarding somewhere that is not this deployment',
+  additional_recipients: 'also forwarding somewhere we do not know about',
+  disabled_at_provider: 'disabled at the provider, so it receives nothing',
+  local_part_changed: 'renamed at the provider',
+  not_found_at_provider: 'gone from the provider',
+  no_provider_domain_id: 'never linked to a provider domain',
+  provider_domain_id_changed:
+    'recreated at the provider, so every alias id we hold is stale — verify the domain first',
+  no_longer_verified_at_provider:
+    'no longer passing verification at the provider',
+};
 
 export function AddDomainForm() {
   const router = useRouter();

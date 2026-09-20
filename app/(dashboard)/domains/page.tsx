@@ -8,7 +8,7 @@ import {
   VerifyDomainButton,
   WebhookKeyForm,
 } from '@/components/mail/domain-actions';
-import type { Domain } from '@/server/core/types';
+import type { Domain, DomainDnsRecord } from '@/server/core/types';
 import { listDomainsWithWebhookKeys } from '@/server/mail/domains/webhook-keys';
 import { repositories } from '@/server/repositories';
 
@@ -160,56 +160,7 @@ function DomainCard({
       </div>
 
       <div className="px-5 py-4">
-        {domain.dnsRecords.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No DNS records recorded yet. Run Verify to fetch them from the provider.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-xs">
-              <thead className="text-muted-foreground">
-                <tr>
-                  <th className="pb-2 font-medium">Type</th>
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Value</th>
-                  <th className="pb-2 font-medium">Purpose</th>
-                  <th className="pb-2 font-medium">Present</th>
-                </tr>
-              </thead>
-              <tbody>
-                {domain.dnsRecords.map((record, index) => (
-                  <tr
-                    key={`${record.type}-${record.name}-${index}`}
-                    className="border-t border-border"
-                  >
-                    <td className="py-2 font-mono">
-                      {record.type}
-                      {record.priority ? ` (${record.priority})` : ''}
-                    </td>
-                    <td className="py-2 font-mono">{record.name}</td>
-                    <td className="py-2">
-                      <span className="flex items-center gap-1">
-                        <code className="font-mono break-all">{record.value}</code>
-                        <CopyButton value={record.value} />
-                      </span>
-                    </td>
-                    <td className="py-2 text-muted-foreground">{record.purpose}</td>
-                    <td className="py-2">
-                      <Icon
-                        name={record.present ? 'verified' : 'pending'}
-                        size={14}
-                        className={
-                          record.present ? 'text-success' : 'text-muted-foreground'
-                        }
-                        aria-label={record.present ? 'Present' : 'Not found'}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DnsRecords records={domain.dnsRecords} />
 
         {domain.lastVerifiedAt ? (
           <p className="mt-3 text-xs text-muted-foreground">
@@ -237,5 +188,151 @@ function StatusBadge({ status }: { status: Domain['status'] }) {
     >
       {status}
     </span>
+  );
+}
+
+/**
+ * The DNS records, split by what they actually buy you.
+ *
+ * Receiving and sending fail differently and are fixed at different times.
+ * MX and the verification TXT decide whether mail reaches MailPiston at all;
+ * SPF, DKIM, the return path and DMARC decide whether mail *from* the domain is
+ * accepted by the far end. A single undifferentiated table hides that — a
+ * domain can be receiving perfectly while every message it sends lands in spam,
+ * and both look like "some rows are green".
+ *
+ * Every value here is the provider's own, per-domain: the DKIM selector and
+ * public key and the DMARC `rua` cannot be derived from a template, which is
+ * the reason this table is worth showing at all rather than linking out to the
+ * provider's console.
+ */
+function DnsRecords({ records }: { records: DomainDnsRecord[] }) {
+  if (records.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No DNS records recorded yet. Run Verify to fetch them from the provider.
+      </p>
+    );
+  }
+
+  const receiving = records.filter((record) =>
+    RECEIVING.has(record.purpose),
+  );
+  const sending = records.filter((record) => !RECEIVING.has(record.purpose));
+
+  return (
+    <div className="flex flex-col gap-5">
+      <RecordGroup
+        title="Receiving"
+        caption="Until these are live, mail to this domain never reaches MailPiston."
+        records={receiving}
+      />
+      <RecordGroup
+        title="Sending"
+        caption="Until these are live, mail sent from this domain is unauthenticated and will be filtered."
+        records={sending}
+      />
+    </div>
+  );
+}
+
+const RECEIVING = new Set<DomainDnsRecord['purpose']>(['inbound', 'verification']);
+
+const PURPOSE_LABEL: Record<DomainDnsRecord['purpose'], string> = {
+  inbound: 'Routes mail to Forward Email',
+  verification: 'Proves you own the domain',
+  spf: 'Authorises Forward Email to send as you',
+  dkim: 'Signs your outgoing mail',
+  'return-path': 'Where bounces come back to',
+  dmarc: 'Tells receivers what to do with failures',
+};
+
+function RecordGroup({
+  title,
+  caption,
+  records,
+}: {
+  title: string;
+  caption: string;
+  records: DomainDnsRecord[];
+}) {
+  if (records.length === 0) return null;
+
+  const outstanding = records.filter((record) => !record.present).length;
+
+  return (
+    <section>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <h3 className="text-xs font-medium">{title}</h3>
+        <span
+          className={`rounded-full border px-2 py-0.5 text-[11px] ${
+            outstanding === 0
+              ? 'border-success/40 text-success'
+              : 'border-warning/40 text-warning'
+          }`}
+        >
+          {outstanding === 0
+            ? 'all published'
+            : `${outstanding} outstanding`}
+        </span>
+        {outstanding > 0 ? (
+          <span className="text-[11px] text-muted-foreground">{caption}</span>
+        ) : null}
+      </div>
+
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-xs">
+          <thead className="text-muted-foreground">
+            <tr>
+              <th className="pb-2 font-medium">Type</th>
+              <th className="pb-2 font-medium">Name</th>
+              <th className="pb-2 font-medium">Value</th>
+              <th className="pb-2 font-medium">Purpose</th>
+              <th className="pb-2 font-medium">Present</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((record, index) => (
+              <tr
+                key={`${record.type}-${record.name}-${index}`}
+                className="border-t border-border"
+              >
+                <td className="py-2 font-mono align-top">
+                  {record.type}
+                  {record.priority ? ` (${record.priority})` : ''}
+                </td>
+                <td className="py-2 font-mono align-top">
+                  <span className="flex items-center gap-1">
+                    <span className="break-all">{record.name}</span>
+                    <CopyButton value={record.name} />
+                  </span>
+                </td>
+                <td className="py-2 align-top">
+                  <span className="flex items-start gap-1">
+                    {/* DKIM keys are ~400 characters and must be copied whole,
+                        so the value wraps rather than truncating. */}
+                    <code className="font-mono break-all">{record.value}</code>
+                    <CopyButton value={record.value} />
+                  </span>
+                </td>
+                <td className="py-2 align-top text-muted-foreground">
+                  {PURPOSE_LABEL[record.purpose] ?? record.purpose}
+                </td>
+                <td className="py-2 align-top">
+                  <Icon
+                    name={record.present ? 'verified' : 'pending'}
+                    size={14}
+                    className={
+                      record.present ? 'text-success' : 'text-muted-foreground'
+                    }
+                    aria-label={record.present ? 'Present' : 'Not found'}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

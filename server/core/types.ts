@@ -9,7 +9,7 @@ export interface DomainDnsRecord {
   name: string;
   value: string;
   priority?: number;
-  purpose: 'inbound' | 'verification' | 'spf' | 'dkim' | 'dmarc';
+  purpose: 'inbound' | 'verification' | 'spf' | 'dkim' | 'return-path' | 'dmarc';
   present: boolean;
 }
 
