@@ -14,11 +14,14 @@ import type {
   EndpointWebhookConfig,
   MailEvent,
   MailEventType,
+  MailFilterEntry,
   Paginated,
   ReconciliationItem,
   ReconciliationItemStatus,
   ReconciliationRun,
   ReplyRelay,
+  SpamSignal,
+  SpamVerdict,
   Thread,
 } from '@/server/core/types';
 
@@ -134,7 +137,26 @@ export interface EndpointRepository {
   removeRecipient(recipientId: string): Promise<void>;
 }
 
-export type CreateEmailData = Omit<Email, 'id' | 'createdAt' | 'updatedAt'>;
+/**
+ * Classification and the bin are omitted and re-added as optional: both have
+ * column defaults, outbound mail is never classified, and every existing caller
+ * would otherwise have to write `spamVerdict: 'clean', deletedAt: null` to say
+ * nothing at all.
+ */
+export type CreateEmailData = Omit<
+  Email,
+  | 'id'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'spamVerdict'
+  | 'spamScore'
+  | 'spamCategory'
+  | 'spamSignals'
+  | 'deletedAt'
+> &
+  Partial<
+    Pick<Email, 'spamVerdict' | 'spamScore' | 'spamCategory' | 'spamSignals'>
+  >;
 
 /**
  * The message list, as the unified Mail view queries it.
@@ -148,6 +170,20 @@ export interface EmailFilter {
   statuses?: Email['status'][];
   addressId?: string;
   threadId?: string;
+  /**
+   * Which classifications to include (roadmap Phase 12).
+   *
+   * Unset means `clean` and `suspicious` — the ordinary views must not show
+   * quarantined mail, and forgetting to pass this should hide spam rather than
+   * reveal it. Spam is opted into, never defaulted into.
+   */
+  spamVerdicts?: SpamVerdict[];
+  /**
+   * `false` (the default) excludes binned messages, `true` returns only them.
+   * There is no "both": the bin is a place, and a message is either in it or
+   * not.
+   */
+  deleted?: boolean;
   limit?: number;
   cursor?: string | null;
 }
@@ -247,6 +283,52 @@ export interface EmailRepository {
     limit: number,
   ): Promise<EmailAttachment[]>;
   markAttachmentPruned(id: string): Promise<void>;
+
+  /**
+   * Reclassification by hand (roadmap Phase 12) — "this is spam", "this is
+   * not". Overwrites the engine's verdict and replaces its signals with a
+   * single one naming the operator, so the message can still say why it is
+   * where it is.
+   */
+  setSpamVerdict(
+    id: string,
+    verdict: SpamVerdict,
+    signals: SpamSignal[],
+  ): Promise<Email>;
+
+  /** Bin and un-bin. Neither touches stored bytes. */
+  softDelete(id: string): Promise<Email>;
+  restore(id: string): Promise<Email>;
+
+  /**
+   * Emptying the bin: the only path in the system that destroys a message.
+   *
+   * Returns the storage keys it removed rows for, because the bytes live in
+   * object storage and the caller has to delete them separately — a repository
+   * does not reach across to R2. Callers delete bytes *after* the rows are
+   * gone: an orphaned object is cheap and collectable, a row pointing at
+   * bytes that no longer exist is indistinguishable from corruption.
+   */
+  purgeDeleted(before?: Date): Promise<{ count: number; storageKeys: string[] }>;
+  purgeOne(id: string): Promise<{ storageKeys: string[] }>;
+}
+
+/**
+ * The operator's standing allow and deny decisions (roadmap Phase 12).
+ *
+ * Global rather than per domain: one person runs several apps, and an agency
+ * worth blocking on one is worth blocking on all of them.
+ */
+export interface MailFilterRepository {
+  list(): Promise<MailFilterEntry[]>;
+  /** The two lists the classifier takes, in one round trip. */
+  lists(): Promise<{ allow: string[]; deny: string[] }>;
+  add(data: {
+    kind: MailFilterEntry['kind'];
+    pattern: string;
+    note: string | null;
+  }): Promise<MailFilterEntry>;
+  remove(id: string): Promise<void>;
 }
 
 export interface ThreadRepository {

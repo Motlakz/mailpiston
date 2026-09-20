@@ -176,6 +176,18 @@ export class NeonEmailRepository implements EmailRepository {
             : undefined,
           filter.addressId ? eq(emails.addressId, filter.addressId) : undefined,
           filter.threadId ? eq(emails.threadId, filter.threadId) : undefined,
+          // Quarantined mail is opted into, never defaulted into: a caller that
+          // forgets this filter should under-show rather than leak spam into
+          // the ordinary views.
+          inArray(
+            emails.spamVerdict,
+            filter.spamVerdicts?.length
+              ? filter.spamVerdicts
+              : (['clean', 'suspicious'] as const),
+          ),
+          filter.deleted
+            ? isNotNull(emails.deletedAt)
+            : isNull(emails.deletedAt),
           cursorDate ? lt(emails.createdAt, cursorDate) : undefined,
         ),
       )
@@ -314,6 +326,116 @@ export class NeonEmailRepository implements EmailRepository {
       .set({ prunedAt: new Date() })
       .where(eq(emailAttachments.id, id));
   }
+
+  // --- Classification and the bin (Phase 12) --------------------------------
+
+  async setSpamVerdict(
+    id: string,
+    verdict: Email['spamVerdict'],
+    signals: Email['spamSignals'],
+  ): Promise<Email> {
+    const [row] = await db
+      .update(emails)
+      .set({
+        spamVerdict: verdict,
+        spamSignals: signals,
+        spamScore: signals.reduce((total, signal) => total + signal.score, 0),
+        spamCategory: signals[0]?.category ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(emails.id, id))
+      .returning();
+
+    if (!row) throw new NotFoundError(`Email ${id} not found`);
+    return toEmail(row);
+  }
+
+  async softDelete(id: string): Promise<Email> {
+    const [row] = await db
+      .update(emails)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(emails.id, id))
+      .returning();
+
+    if (!row) throw new NotFoundError(`Email ${id} not found`);
+    return toEmail(row);
+  }
+
+  async restore(id: string): Promise<Email> {
+    const [row] = await db
+      .update(emails)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(eq(emails.id, id))
+      .returning();
+
+    if (!row) throw new NotFoundError(`Email ${id} not found`);
+    return toEmail(row);
+  }
+
+  /**
+   * Emptying the bin. The only statement in the system that loses a message.
+   *
+   * The attachment rows cascade from the message, so the storage keys have to
+   * be read *before* the delete or they are gone with it. They are returned
+   * rather than acted on: this is a repository, and reaching into object
+   * storage from here would put a network call inside a database method.
+   */
+  async purgeDeleted(
+    before?: Date,
+  ): Promise<{ count: number; storageKeys: string[] }> {
+    const scope = and(
+      isNotNull(emails.deletedAt),
+      before ? lt(emails.deletedAt, before) : undefined,
+    );
+
+    const doomed = await db
+      .select({ id: emails.id, rawStorageKey: emails.rawStorageKey })
+      .from(emails)
+      .where(scope);
+
+    if (doomed.length === 0) return { count: 0, storageKeys: [] };
+
+    const ids = doomed.map((row) => row.id);
+
+    const attachments = await db
+      .select({ storageKey: emailAttachments.storageKey })
+      .from(emailAttachments)
+      .where(inArray(emailAttachments.emailId, ids));
+
+    await db.delete(emails).where(inArray(emails.id, ids));
+
+    return {
+      count: ids.length,
+      storageKeys: [
+        ...doomed.map((row) => row.rawStorageKey).filter((key): key is string => Boolean(key)),
+        ...attachments.map((row) => row.storageKey),
+      ],
+    };
+  }
+
+  async purgeOne(id: string): Promise<{ storageKeys: string[] }> {
+    const [row] = await db
+      .select({ rawStorageKey: emails.rawStorageKey })
+      .from(emails)
+      .where(eq(emails.id, id))
+      .limit(1);
+
+    if (!row) throw new NotFoundError(`Email ${id} not found`);
+
+    const attachments = await db
+      .select({ storageKey: emailAttachments.storageKey })
+      .from(emailAttachments)
+      .where(eq(emailAttachments.emailId, id));
+
+    await db.delete(emails).where(eq(emails.id, id));
+
+    return {
+      storageKeys: [
+        ...(row.rawStorageKey ? [row.rawStorageKey] : []),
+        ...attachments.map((attachment) => attachment.storageKey),
+      ],
+    };
+  }
 }
 
 /**
@@ -372,6 +494,11 @@ function toEmail(row: EmailRow): Email {
     rawStorageKey: row.rawStorageKey,
     receivedAt: row.receivedAt,
     sentAt: row.sentAt,
+    spamVerdict: row.spamVerdict,
+    spamScore: row.spamScore,
+    spamCategory: row.spamCategory as Email['spamCategory'],
+    spamSignals: (row.spamSignals ?? []) as Email['spamSignals'],
+    deletedAt: row.deletedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

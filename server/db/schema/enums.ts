@@ -31,6 +31,25 @@ export const emailStatus = pgEnum('email_status', [
 ]);
 
 /**
+ * Inbound abuse classification (roadmap Phase 12).
+ *
+ * Three states, not two, because the middle one is what keeps the filter
+ * trustworthy. `spam` is hidden and not fanned out; `suspicious` is delivered
+ * normally and merely marked, which is where everything the engine is unsure
+ * about lands. Collapsing the two would force every borderline message to be
+ * either invisible or unremarkable, and the borderline cases are exactly the
+ * ones an operator wants to look at.
+ */
+export const spamVerdict = pgEnum('spam_verdict', [
+  'clean',
+  'suspicious',
+  'spam',
+]);
+
+/** Whether an operator list entry vouches for a sender or blocks one. */
+export const mailFilterKind = pgEnum('mail_filter_kind', ['allow', 'deny']);
+
+/**
  * Execution plan §4.7, plus `email.rejected` — required by the catch-all
  * decision (roadmap §1.2): mail for an unknown local part is recorded and
  * dropped rather than bounced.

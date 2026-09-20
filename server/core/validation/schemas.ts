@@ -167,3 +167,37 @@ export type VerifyRecipientInput = z.infer<typeof verifyRecipientSchema>;
 export type BindEndpointInput = z.infer<typeof bindEndpointSchema>;
 export type SendEmailInput = z.infer<typeof sendEmailSchema>;
 export type ReplyEmailInput = z.infer<typeof replyEmailSchema>;
+
+/**
+ * Reclassifying a message by hand (roadmap Phase 12).
+ *
+ * `suspicious` is deliberately not offered: it is where the engine puts what it
+ * is unsure about, and a person who has looked at a message is not unsure. They
+ * are saying "this is spam" or "this is not".
+ */
+export const reclassifyEmailSchema = z.object({
+  spamVerdict: z.enum(['clean', 'spam']),
+});
+
+/** Sender patterns are a full address or a bare domain, never a wildcard. */
+export const mailFilterPatternSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(320)
+  .refine(
+    (value) =>
+      /^[^@\s]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(value) ||
+      /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/.test(value),
+    'Must be an email address or a domain name',
+  );
+
+export const createMailFilterSchema = z.object({
+  kind: z.enum(['allow', 'deny']),
+  pattern: mailFilterPatternSchema,
+  note: z.string().trim().max(200).nullable().default(null),
+});
+
+export type ReclassifyEmailInput = z.infer<typeof reclassifyEmailSchema>;
+export type CreateMailFilterInput = z.infer<typeof createMailFilterSchema>;

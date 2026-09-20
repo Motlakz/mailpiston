@@ -250,7 +250,13 @@ export class InMemoryEmailRepository implements EmailRepository {
 
   async create(data: CreateEmailData): Promise<Email> {
     const now = new Date();
-    const email: Email = { ...data, id: nextId('em'), createdAt: now, updatedAt: now };
+    const email: Email = {
+      spamVerdict: 'clean' as const, spamScore: 0, spamCategory: null, spamSignals: [], deletedAt: null, 
+      ...data,
+      id: nextId('em'),
+      createdAt: now,
+      updatedAt: now,
+    };
     this.rows.set(email.id, email);
     return email;
   }
@@ -277,7 +283,13 @@ export class InMemoryEmailRepository implements EmailRepository {
 
     await this.threads.touch(threadId, lastMessageAt);
 
-    const email: Email = { ...input.email, threadId, createdAt: now, updatedAt: now };
+    const email: Email = {
+      spamVerdict: 'clean' as const, spamScore: 0, spamCategory: null, spamSignals: [], deletedAt: null, 
+      ...input.email,
+      threadId,
+      createdAt: now,
+      updatedAt: now,
+    };
     this.rows.set(email.id, email);
     // Stands in for the Neon join the resolver runs against `emails`.
     this.threads.index([email.messageId, email.providerMessageId], threadId);
@@ -330,6 +342,10 @@ export class InMemoryEmailRepository implements EmailRepository {
       )
       .filter((row) => !filter.addressId || row.addressId === filter.addressId)
       .filter((row) => !filter.threadId || row.threadId === filter.threadId)
+      .filter((row) =>
+        (filter.spamVerdicts ?? ['clean', 'suspicious']).includes(row.spamVerdict),
+      )
+      .filter((row) => (filter.deleted ? row.deletedAt : !row.deletedAt))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, filter.limit ?? 50)
       .map((row) => ({
@@ -428,7 +444,85 @@ export class InMemoryEmailRepository implements EmailRepository {
       this.attachments.set(id, { ...existing, prunedAt: new Date() });
     }
   }
+  // --- Classification and the bin (Phase 12) --------------------------------
+
+  async setSpamVerdict(
+    id: string,
+    verdict: Email['spamVerdict'],
+    signals: Email['spamSignals'],
+  ): Promise<Email> {
+    const existing = this.rows.get(id);
+    if (!existing) throw new NotFoundError(`Email ${id} not found`);
+
+    const updated: Email = {
+      ...existing,
+      spamVerdict: verdict,
+      spamSignals: signals,
+      spamScore: signals.reduce((total, signal) => total + signal.score, 0),
+      spamCategory: signals[0]?.category ?? null,
+      updatedAt: new Date(),
+    };
+
+    this.rows.set(id, updated);
+    return updated;
+  }
+
+  async softDelete(id: string): Promise<Email> {
+    return this.setDeletedAt(id, new Date());
+  }
+
+  async restore(id: string): Promise<Email> {
+    return this.setDeletedAt(id, null);
+  }
+
+  private setDeletedAt(id: string, deletedAt: Date | null): Email {
+    const existing = this.rows.get(id);
+    if (!existing) throw new NotFoundError(`Email ${id} not found`);
+
+    const updated: Email = { ...existing, deletedAt, updatedAt: new Date() };
+    this.rows.set(id, updated);
+    return updated;
+  }
+
+  async purgeDeleted(
+    before?: Date,
+  ): Promise<{ count: number; storageKeys: string[] }> {
+    const doomed = [...this.rows.values()].filter(
+      (row) => row.deletedAt && (!before || row.deletedAt < before),
+    );
+
+    const storageKeys: string[] = [];
+
+    for (const row of doomed) {
+      storageKeys.push(...this.removeWithAttachments(row));
+    }
+
+    return { count: doomed.length, storageKeys };
+  }
+
+  async purgeOne(id: string): Promise<{ storageKeys: string[] }> {
+    const existing = this.rows.get(id);
+    if (!existing) throw new NotFoundError(`Email ${id} not found`);
+
+    return { storageKeys: this.removeWithAttachments(existing) };
+  }
+
+  /** Stands in for the `email_attachments` cascade the real schema declares. */
+  private removeWithAttachments(row: Email): string[] {
+    const keys = row.rawStorageKey ? [row.rawStorageKey] : [];
+
+    for (const [id, attachment] of this.attachments) {
+      if (attachment.emailId === row.id) {
+        keys.push(attachment.storageKey);
+        this.attachments.delete(id);
+      }
+    }
+
+    this.rows.delete(row.id);
+    return keys;
+  }
 }
+
 
 export class InMemoryThreadRepository implements ThreadRepository {
   readonly rows = new Map<string, Thread>();

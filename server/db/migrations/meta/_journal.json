@@ -50,6 +50,13 @@
       "when": 1788893268807,
       "tag": "0006_odd_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789896591843,
+      "tag": "0007_colorful_sabretooth",
+      "breakpoints": true
     }
   ]
 }

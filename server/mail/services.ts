@@ -13,6 +13,7 @@ import { EndpointService } from './endpoints/endpoint-service';
 import { ForwardingService } from './forwarding/forwarding-service';
 import { RelayService } from './forwarding/relay-service';
 import { InboundService } from './inbound/inbound-service';
+import { MailboxService } from './mailbox/mailbox-service';
 import { ReconciliationService } from './reconciliation/reconciliation-service';
 import { RetentionService } from './retention/retention-service';
 import { DefaultThreadResolver } from './threads/thread-resolver';
@@ -28,6 +29,7 @@ import { WebhookService } from './webhooks/webhook-service';
 let domainService: DomainService | undefined;
 let addressService: AddressService | undefined;
 let inboundService: InboundService | undefined;
+let mailboxService: MailboxService | undefined;
 let outboundService: OutboundService | undefined;
 let endpointService: EndpointService | undefined;
 let forwardingService: ForwardingService | undefined;
@@ -68,9 +70,22 @@ export function getInboundService(): InboundService {
       relay: getRelayService(),
       forwarding: getForwardingService(),
       webhooks: getWebhookService(),
+      filters: repositories.mailFilters,
     },
   );
   return inboundService;
+}
+
+export function getMailboxService(): MailboxService {
+  mailboxService ??= new MailboxService(
+    repositories.emails,
+    repositories.events,
+    // Lazy for the same reason the inbound pipeline is: only a purge ever
+    // reaches object storage, and binning must work on a deployment where
+    // R2 has not been configured yet.
+    getStorage,
+  );
+  return mailboxService;
 }
 
 export function getOutboundService(): OutboundService {

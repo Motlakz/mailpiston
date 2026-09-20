@@ -18,6 +18,8 @@ import {
   emailStatus,
   endpointType,
   mailEventType,
+  mailFilterKind,
+  spamVerdict,
 } from './enums';
 
 const id = () => text('id').primaryKey();
@@ -262,6 +264,34 @@ export const emails = pgTable(
     receivedAt: timestamp('received_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
 
+    /**
+     * Inbound abuse classification (roadmap Phase 12). Always `clean` on
+     * outbound, which is never classified.
+     */
+    spamVerdict: spamVerdict('spam_verdict').notNull().default('clean'),
+    spamScore: integer('spam_score').notNull().default(0),
+    /** Category of the strongest signal. Null when nothing fired. */
+    spamCategory: text('spam_category'),
+    /**
+     * Every rule that fired, with its score.
+     *
+     * Stored rather than recomputed because the rules change and the verdict
+     * must stay explainable as it was made. "Why is this in spam?" answered
+     * against today's rules is a different answer from the one the operator
+     * saw, and the second one is the one they are asking about.
+     */
+    spamSignals: jsonb('spam_signals').notNull().default(sql`'[]'::jsonb`),
+
+    /**
+     * Soft delete — the bin (roadmap Phase 12).
+     *
+     * A mail system's one unforgivable failure is losing a message, so nothing
+     * in the dashboard deletes a row. Binning sets this; emptying the bin is a
+     * separate, explicit, irreversible action that also removes the stored
+     * bytes.
+     */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -271,6 +301,40 @@ export const emails = pgTable(
     index('emails_message_id_idx').on(table.messageId),
     index('emails_created_at_idx').on(table.createdAt),
     uniqueIndex('emails_fingerprint_key').on(table.fingerprint),
+    // Every list view filters on these two before anything else.
+    index('emails_spam_verdict_idx').on(table.spamVerdict, table.createdAt),
+    index('emails_deleted_at_idx').on(table.deletedAt),
+  ],
+);
+
+/**
+ * The operator's standing decisions about senders (roadmap Phase 12).
+ *
+ * Deliberately global rather than per domain. The operator is one person
+ * running several apps, and a sender worth blocking on one of them is worth
+ * blocking on all of them — per-domain lists would mean re-blocking the same
+ * agency three times.
+ *
+ * An entry is a full address or a bare domain; a domain entry covers its
+ * subdomains, because allowing `stripe.com` and then not receiving from
+ * `mail.stripe.com` is a surprise nobody wants.
+ */
+export const mailFilterEntries = pgTable(
+  'mail_filter_entries',
+  {
+    id: id(),
+    kind: mailFilterKind('kind').notNull(),
+    /** Lower-cased address or domain. */
+    pattern: text('pattern').notNull(),
+    /** Why, for the operator reading this list in six months. */
+    note: text('note'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('mail_filter_entries_kind_pattern_key').on(
+      table.kind,
+      sql`lower(${table.pattern})`,
+    ),
   ],
 );
 

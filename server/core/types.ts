@@ -116,6 +116,47 @@ export type EmailStatus =
   | 'hard_bounced'
   | 'failed';
 
+/**
+ * Inbound abuse classification (roadmap Phase 12).
+ *
+ * `suspicious` exists so the engine has somewhere to put the cases it is not
+ * sure about. Without it every borderline message is either hidden or
+ * unremarkable, and the borderline ones are the ones worth looking at.
+ */
+export type SpamVerdict = 'clean' | 'suspicious' | 'spam';
+
+export type SpamCategory =
+  | 'authentication'
+  | 'phishing'
+  | 'malware'
+  | 'promotional'
+  | 'gibberish'
+  | 'cold_outreach'
+  | 'empty';
+
+/** One rule that fired, kept so a verdict can always explain itself. */
+export interface SpamSignal {
+  rule: string;
+  category: SpamCategory;
+  score: number;
+  detail?: string;
+}
+
+/**
+ * A standing operator decision about a sender.
+ *
+ * `pattern` is a full address or a bare domain; a domain covers its
+ * subdomains, because allowing `stripe.com` and then not hearing from
+ * `mail.stripe.com` is a surprise.
+ */
+export interface MailFilterEntry {
+  id: string;
+  kind: 'allow' | 'deny';
+  pattern: string;
+  note: string | null;
+  createdAt: Date;
+}
+
 export interface Email {
   id: string;
   threadId: string | null;
@@ -144,6 +185,15 @@ export interface Email {
 
   receivedAt: Date | null;
   sentAt: Date | null;
+
+  /** Always `clean` on outbound: only inbound mail is classified. */
+  spamVerdict: SpamVerdict;
+  spamScore: number;
+  spamCategory: SpamCategory | null;
+  spamSignals: SpamSignal[];
+
+  /** Set when binned. Nothing in the dashboard deletes a row outright. */
+  deletedAt: Date | null;
 
   createdAt: Date;
   updatedAt: Date;
@@ -205,6 +255,13 @@ export const MAIL_EVENT_TYPES = [
   'webhook.queued',
   'webhook.delivered',
   'webhook.failed',
+  // Roadmap Phase 12. Quarantine and its reversals are mail events rather
+  // than audit entries: the question they answer is "where did that message
+  // go?", which is asked on the message timeline and not in the audit log.
+  'email.quarantined',
+  'email.released',
+  'email.deleted',
+  'email.restored',
 ] as const;
 
 export type MailEventType = (typeof MAIL_EVENT_TYPES)[number];

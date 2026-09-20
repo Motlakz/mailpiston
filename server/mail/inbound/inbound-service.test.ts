@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { NormalizedInboundEmail } from '@/server/providers/types';
+import type { MailFilterRepository } from '@/server/repositories/types';
 import {
   InMemoryAddressRepository,
   InMemoryDomainRepository,
@@ -366,3 +367,159 @@ describe('InboundService thread resolution', () => {
     expect(threads.rows.size).toBe(afterFirst);
   });
 });
+
+/**
+ * Quarantine at the pipeline level (roadmap Phase 12).
+ *
+ * The rules themselves are covered exhaustively in
+ * `server/mail/filtering/classifier.test.ts`. What matters here is the
+ * consequence: what quarantine does and, more importantly, what it does not do.
+ */
+describe('InboundService quarantine', () => {
+  /** A pitch dense enough that the classifier is unambiguous about it. */
+  function pitch(overrides: Partial<NormalizedInboundEmail> = {}) {
+    return delivery({
+      from: 'Marcus <marcus@growth-agency.test>',
+      subject: 'Quick question about your site',
+      text:
+        'Hope this email finds you well. I came across your website and we ' +
+        'help companies like yours with link building to boost your rankings. ' +
+        'Would love to connect — do you have 15 minutes?',
+      ...overrides,
+    });
+  }
+
+  it('still stores a quarantined message', async () => {
+    // The whole design rests on this: filtering decides whether to act, never
+    // whether to keep. A spam filter that drops mail is how mail is lost.
+    const result = await inbound.capture(pitch());
+
+    expect(result.status).toBe('quarantined');
+    expect(result.emailId).toBeTruthy();
+    expect(emails.rows.size).toBe(1);
+
+    const [email] = [...emails.rows.values()];
+    expect(email.spamVerdict).toBe('spam');
+    expect(email.spamCategory).toBe('cold_outreach');
+    expect(email.deletedAt).toBeNull();
+  });
+
+  it('keeps the reasons on the message', async () => {
+    await inbound.capture(pitch());
+
+    const [email] = [...emails.rows.values()];
+    expect(email.spamSignals.map((signal) => signal.rule)).toContain(
+      'cold_outreach_template',
+    );
+    expect(email.spamScore).toBeGreaterThanOrEqual(60);
+  });
+
+  it('records an email.quarantined event', async () => {
+    const result = await inbound.capture(pitch());
+
+    const quarantined = events.rows.filter(
+      (event) => event.type === 'email.quarantined',
+    );
+
+    expect(quarantined).toHaveLength(1);
+    expect(quarantined[0].emailId).toBe(result.emailId);
+  });
+
+  it('hides it from the ordinary list but not from the spam view', async () => {
+    await inbound.capture(pitch());
+
+    expect((await emails.list({})).items).toHaveLength(0);
+    expect(
+      (await emails.list({ spamVerdicts: ['spam'] })).items,
+    ).toHaveLength(1);
+  });
+
+  it('leaves an ordinary support message alone', async () => {
+    const result = await inbound.capture(delivery());
+
+    expect(result.status).toBe('captured');
+    expect([...emails.rows.values()][0].spamVerdict).toBe('clean');
+  });
+
+  it('honours a deny-list entry over the rules', async () => {
+    const filtered = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: false },
+      { filters: listsOf({ deny: ['example.com'] }) },
+    );
+
+    const result = await filtered.capture(delivery());
+
+    expect(result.status).toBe('quarantined');
+    expect([...emails.rows.values()][0].spamSignals[0].rule).toBe(
+      'sender_denied',
+    );
+  });
+
+  it('honours an allow-list entry over the rules', async () => {
+    const filtered = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: false },
+      { filters: listsOf({ allow: ['growth-agency.test'] }) },
+    );
+
+    expect((await filtered.capture(pitch())).status).toBe('captured');
+  });
+
+  it('captures the message even if the lists cannot be read', async () => {
+    // Classification is a convenience. Capture is the product, and a filter
+    // table that is unreachable must not cost the operator their mail.
+    const broken = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: false },
+      {
+        filters: {
+          lists: () => Promise.reject(new Error('database is down')),
+          list: () => Promise.reject(new Error('database is down')),
+          add: () => Promise.reject(new Error('database is down')),
+          remove: () => Promise.reject(new Error('database is down')),
+        },
+      },
+    );
+
+    expect((await broken.capture(delivery())).status).toBe('captured');
+  });
+
+  it('does not quarantine a reply to a message we already hold', async () => {
+    await inbound.capture(delivery({ messageId: '<first@example.com>' }));
+
+    const result = await inbound.capture(
+      pitch({
+        messageId: '<second@example.com>',
+        inReplyTo: '<first@example.com>',
+        references: ['<first@example.com>'],
+      }),
+    );
+
+    expect(result.status).toBe('captured');
+  });
+});
+
+/** A filter repository standing in for one row per pattern. */
+function listsOf(seed: { allow?: string[]; deny?: string[] }): MailFilterRepository {
+  return {
+    lists: async () => ({ allow: seed.allow ?? [], deny: seed.deny ?? [] }),
+    list: async () => [],
+    add: () => {
+      throw new Error('not needed in this test');
+    },
+    remove: async () => {},
+  };
+}

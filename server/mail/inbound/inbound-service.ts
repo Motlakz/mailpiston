@@ -4,6 +4,10 @@ import { isRelayRecipient } from '@/server/core/config';
 import { createInboundFingerprint } from '@/server/core/idempotency';
 import { newId } from '@/server/core/ids';
 import type { AddressWithDomain } from '@/server/core/types';
+import {
+  classify,
+  type Classification,
+} from '@/server/mail/filtering/classifier';
 import type { ForwardingService } from '@/server/mail/forwarding/forwarding-service';
 import type { RelayService } from '@/server/mail/forwarding/relay-service';
 import type { ThreadResolver } from '@/server/mail/threads/thread-resolver';
@@ -15,6 +19,7 @@ import type {
   EmailRepository,
   EventRepository,
   InboundThreadTarget,
+  MailFilterRepository,
 } from '@/server/repositories/types';
 import type { Storage } from '@/server/storage';
 import { attachmentKey, rawMimeKey } from '@/server/storage';
@@ -46,7 +51,7 @@ import { attachmentKey, rawMimeKey } from '@/server/storage';
  * exist, which is indistinguishable from data loss at read time.
  */
 export interface InboundResult {
-  status: 'captured' | 'duplicate' | 'rejected' | 'relayed';
+  status: 'captured' | 'duplicate' | 'rejected' | 'relayed' | 'quarantined';
   emailId: string | null;
   reason?: string;
 }
@@ -59,6 +64,14 @@ export interface InboundHandlers {
   forwarding?: ForwardingService;
   /** Signed deliveries to HTTP endpoints (plan §13). */
   webhooks?: WebhookService;
+  /**
+   * The operator's standing allow and deny decisions (roadmap Phase 12).
+   *
+   * Optional: with no source of lists the classifier still runs on its rules
+   * alone. Unwired, filtering degrades to "no explicit decisions yet", which is
+   * the correct behaviour for a fresh deployment anyway.
+   */
+  filters?: MailFilterRepository;
 }
 
 export class InboundService {
@@ -103,6 +116,7 @@ export class InboundService {
     const attachments = await this.storeAttachments(emailId, normalized);
     const rawStorageKey = await this.storeRawMime(emailId, normalized);
     const thread = await this.resolveThread(normalized);
+    const classification = await this.classify(normalized, thread);
 
     const result = await this.emails.createInbound({
       email: {
@@ -127,6 +141,10 @@ export class InboundService {
         rawStorageKey,
         receivedAt: normalized.receivedAt,
         sentAt: null,
+        spamVerdict: classification.verdict,
+        spamScore: classification.score,
+        spamCategory: classification.category,
+        spamSignals: classification.signals,
       },
       attachments,
       thread,
@@ -136,11 +154,37 @@ export class InboundService {
         envelopeSender: normalized.envelopeSender,
         envelopeRecipients: normalized.envelopeRecipients,
         attachmentCount: attachments.length,
+        spamVerdict: classification.verdict,
       },
     });
 
     if (result.duplicate) {
       return { status: 'duplicate', emailId: null };
+    }
+
+    /**
+     * Quarantine stops the fan-out, and that is the whole of what it does.
+     *
+     * The message is already durable above — quarantine never decides whether
+     * to store, only whether to *act*. Suppressing the fan-out is the part the
+     * operator actually feels: their application is not woken for an SEO pitch
+     * and their personal inbox does not receive a phishing attempt. Everything
+     * is still on the Spam view, one click from being released.
+     */
+    if (classification.verdict === 'spam') {
+      await this.events.create({
+        emailId: result.email.id,
+        type: 'email.quarantined',
+        metadata: {
+          recipient: normalized.recipient,
+          from: normalized.from,
+          category: classification.category,
+          score: classification.score,
+          signals: classification.signals,
+        },
+      });
+
+      return { status: 'quarantined', emailId: result.email.id };
     }
 
     // Fan-out runs after the message is durable and can never undo it: a
@@ -172,6 +216,56 @@ export class InboundService {
     }
 
     return { status: 'captured', emailId: result.email.id };
+  }
+
+  /**
+   * The abuse verdict for this delivery (roadmap Phase 12).
+   *
+   * Two things are supplied that the rule engine cannot work out for itself.
+   *
+   * The operator's allow and deny lists, which override everything — a rule
+   * engine that can out-vote an explicit decision is one the operator has to
+   * fight.
+   *
+   * And whether this message joins a conversation we already hold. That is the
+   * single most useful signal available and it is free here: thread resolution
+   * has already run, and an existing thread means we have talked to this person
+   * before. It discounts rather than exempts — a compromised account replying
+   * in-thread is exactly how a convincing attack arrives.
+   *
+   * A failure to read the lists must not cost the message. Classification is a
+   * convenience; capture is the product.
+   */
+  private async classify(
+    normalized: NormalizedInboundEmail,
+    thread: InboundThreadTarget,
+  ): Promise<Classification> {
+    let lists = { allow: [] as string[], deny: [] as string[] };
+
+    if (this.handlers.filters) {
+      try {
+        lists = await this.handlers.filters.lists();
+      } catch (error) {
+        console.error('Could not read mail filter lists; classifying without them', error);
+      }
+    }
+
+    return classify({
+      from: normalized.from,
+      envelopeSender: normalized.envelopeSender,
+      subject: normalized.subject,
+      text: normalized.text,
+      html: normalized.html,
+      headers: normalized.headers,
+      attachments: normalized.attachments.map((attachment) => ({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+      })),
+      inReplyTo: normalized.inReplyTo,
+      allowList: lists.allow,
+      denyList: lists.deny,
+      knownCorrespondent: thread.existingId !== undefined,
+    });
   }
 
   /**

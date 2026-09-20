@@ -6,6 +6,7 @@ import { NeonAuditRepository } from './neon/audit-repository';
 import { NeonDomainRepository } from './neon/domain-repository';
 import { NeonEmailRepository } from './neon/email-repository';
 import { NeonEventRepository } from './neon/event-repository';
+import { NeonMailFilterRepository } from './neon/mail-filter-repository';
 import { NeonEndpointRepository } from './neon/endpoint-repository';
 import { NeonDeliveryRepository } from './neon/delivery-repository';
 import { NeonReconciliationRepository } from './neon/reconciliation-repository';
@@ -32,6 +33,7 @@ export const repositories = {
   deliveries: new NeonDeliveryRepository(),
   replyRelays: new NeonReplyRelayRepository(),
   reconciliation: new NeonReconciliationRepository(),
+  mailFilters: new NeonMailFilterRepository(),
 } as const;
 
 export type Repositories = typeof repositories;
