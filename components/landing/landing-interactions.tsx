@@ -13,7 +13,6 @@ import {
 import "@xyflow/react/dist/style.css";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  ArrowUpRight01Icon,
   CheckmarkCircle02Icon,
   Database01Icon,
   Mail01Icon,
@@ -188,50 +187,3 @@ function FlowNodeLabel({ icon, overline, value }: { icon: typeof Mail01Icon; ove
   );
 }
 
-export function PricingPreview() {
-  const [annual, setAnnual] = useState(true);
-  const reduceMotion = useReducedMotion();
-
-  return (
-    <div className="pricing-preview">
-      <div className="pricing-toggle" aria-label="Billing period">
-        <button type="button" className={!annual ? "is-active" : ""} onClick={() => setAnnual(false)} aria-pressed={!annual}>
-          Monthly
-        </button>
-        <button type="button" className={annual ? "is-active" : ""} onClick={() => setAnnual(true)} aria-pressed={annual}>
-          Annual <span>save 20%</span>
-        </button>
-      </div>
-
-      <div className="price-card price-card--featured">
-        <div className="price-card__glow" aria-hidden="true" />
-        <span className="eyebrow eyebrow--small">Hosted</span>
-        <div className="price-line" aria-live="polite">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.strong
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
-              key={annual ? "annual" : "monthly"}
-              transition={{ duration: reduceMotion ? 0 : 0.2 }}
-            >
-              ${annual ? "12" : "15"}
-            </motion.strong>
-          </AnimatePresence>
-          <span>/ month{annual ? ", billed yearly" : ""}</span>
-        </div>
-        <p>The managed control plane, for operators who would rather not run the application layer themselves.</p>
-        <ul>
-          <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Managed MailPiston workspace</li>
-          <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Multiple domains and reply identities</li>
-          <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Provider and usage costs billed at cost</li>
-        </ul>
-        <a className="button button--dark button--wide" href="#access-note">
-          Understand the model
-          <HugeiconsIcon icon={ArrowUpRight01Icon} size={18} />
-        </a>
-        <small>Your delivery, database, and storage providers bill you directly.</small>
-      </div>
-    </div>
-  );
-}

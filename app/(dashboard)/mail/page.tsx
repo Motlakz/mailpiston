@@ -10,7 +10,7 @@ import {
   ReadingPane,
   ReadingPanePlaceholder,
   ReadingPaneSkeleton,
-} from '@/components/mail/reading-pane';
+} from './reading-pane';
 import { EmptyBinButton } from '@/components/mail/message-actions';
 import { QuotaBar } from '@/components/mail/quota-bar';
 import type { EmailStatus } from '@/server/core/types';

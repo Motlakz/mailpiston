@@ -32,3 +32,37 @@ export function previewOf(text: string | null, length = 140): string | null {
     ? `${collapsed.slice(0, length).trimEnd()}…`
     : collapsed;
 }
+
+/**
+ * A date, without a time.
+ *
+ * Read in UTC, deliberately. These formatters run inside server components, so
+ * the machine's "local" time is the *renderer's* and never the viewer's — UTC
+ * on a deployment, whatever the laptop is set to in development. Mixing that
+ * with the UTC timestamps shown elsewhere produced a message dated 20 Sep in
+ * the list and 19 Sep 22:42 UTC in the reading pane: both correct, one calendar
+ * day apart, from a single timestamp.
+ */
+export function formatDay(date: Date): string {
+  const day = pad(date.getUTCDate());
+  const month = MONTHS[date.getUTCMonth()];
+  const year = String(date.getUTCFullYear()).slice(-2);
+
+  return `${day} ${month} ${year}`;
+}
+
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** Byte counts for attachment rows. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}

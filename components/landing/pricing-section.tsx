@@ -1,49 +1,70 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle02Icon, CodeIcon } from "@hugeicons/core-free-icons";
-import { PricingPreview } from "./landing-interactions";
 
 export function PricingSection() {
   return (
     <section className="section-pad pricing-section" id="pricing" data-motion-section>
       <div className="section-heading section-heading--center">
         <span className="eyebrow">Priced on volume, not domain count</span>
-        <h2>Run it yourself for nothing.<br /><em>Or let us run it for you.</em></h2>
-        <p>Every plan bills the same way underneath: a flat product fee, with provider, storage, and volume costs left visible instead of buried in a tier maze.</p>
+        <h2>Every domain you own.<br /><em>One flat fee.</em></h2>
+        <p>MailPiston is the control plane. You bring your own mail provider account, so your sending reputation, your send quota and your provider bill stay yours — and adding a domain costs you nothing here.</p>
       </div>
 
       <div className="pricing-grid">
         <article className="price-card">
-          <span className="eyebrow eyebrow--small">Self-hosted</span>
-          <div className="price-line"><strong>$0</strong><span>MailPiston product fee</span></div>
-          <p>Deploy the control plane on your own infrastructure and pay your providers directly, at their prices.</p>
+          <span className="eyebrow eyebrow--small">Single domain</span>
+          <div className="price-line"><strong>$0</strong><span>free, indefinitely</span></div>
+          <p>One verified domain with the full inbox — enough to run the mail for a single product or an org address.</p>
           <ul>
-            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Full application ownership</li>
-            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Your database, your object storage</li>
-            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Infrastructure costs stay visible</li>
+            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> One domain, unlimited addresses</li>
+            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Threads, routing, and reply relay</li>
+            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Signed webhooks and the full API</li>
           </ul>
-          <a className="button button--ghost button--wide" href="#flow">Explore the architecture</a>
-          <small>Your database, your bucket, your domains.</small>
+          <a className="button button--ghost button--wide" href="#flow">See how mail moves</a>
+          <small>Your provider account, your data.</small>
         </article>
 
-        <PricingPreview />
+        <div className="pricing-preview">
+          <div className="price-card price-card--featured">
+            <div className="price-card__glow" aria-hidden="true" />
+            <span className="eyebrow eyebrow--small">Unlimited domains</span>
+            <div className="price-line">
+              <strong>$6</strong>
+              <span>/ month &middot; indicative</span>
+            </div>
+            <p>Every domain you manage in one inbox, for the same price whether that is two or twenty.</p>
+            <ul>
+              <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Unlimited domains and addresses</li>
+              <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> One inbox across all of them</li>
+              <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Metered on messages, never on domains</li>
+            </ul>
+            <a className="button button--dark button--wide" href="#access-note">
+              Understand the model
+            </a>
+            <small>Indicative while the hosted workspace is in build.</small>
+          </div>
+        </div>
 
         <article className="price-card">
-          <span className="eyebrow eyebrow--small">Managed setup</span>
-          <div className="price-line"><strong>Custom</strong></div>
-          <p>Migration and configuration help for teams moving several domains or an existing mail flow across.</p>
+          <span className="eyebrow eyebrow--small">Your provider</span>
+          <div className="price-line"><strong>At cost</strong></div>
+          <p>Mail transport is bought from a specialist and paid for directly. We never mark it up, because we never touch it.</p>
           <ul>
-            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Domain and route planning</li>
-            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Provider migration support</li>
-            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Custom integration review</li>
+            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Your own provider account and token</li>
+            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Your sending reputation, not a shared one</li>
+            <li><HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} /> Leave whenever — the domains are yours</li>
           </ul>
-          <a className="button button--ghost button--wide" href="#access-note">Why this stays optional</a>
-          <small>One-off engagement. Never a requirement.</small>
+          <a className="button button--ghost button--wide" href="#ownership">Where the boundary sits</a>
+          <small>Around $3 a month at the time of writing.</small>
         </article>
       </div>
 
       <div className="access-note" id="access-note">
         <HugeiconsIcon icon={CodeIcon} size={24} strokeWidth={1.6} />
-        <div><strong>The pricing principle</strong><p>A simple base fee funds the managed product. Large provider, storage, and volume costs stay transparent rather than hidden inside a confusing tier maze - and nothing is priced per domain, because domains are not what costs money.</p></div>
+        <div>
+          <strong>Why nothing is priced per domain</strong>
+          <p>Because domains are not what costs money. Storage and volume are, and those scale with the mail you actually receive — so a second product, or a fifth, changes nothing on this bill. Providers that charge per domain make adding one a decision; here it is not.</p>
+        </div>
       </div>
     </section>
   );
