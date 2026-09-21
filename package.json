@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "post:inbound": "node scripts/post-inbound.mjs"
+    "post:inbound": "node scripts/post-inbound.mjs",
+    "send-limit": "node scripts/send-limit.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

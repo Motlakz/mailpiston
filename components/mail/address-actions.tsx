@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { keepWithin } from '@/lib/select-value';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
 export interface DomainOption {
@@ -34,8 +35,11 @@ export function AddAddressForm({
   defaultDomainId?: string;
 }) {
   const router = useRouter();
-  const [domainId, setDomainId] = useState(
-    defaultDomainId ?? domains[0]?.id ?? '',
+  // Only honour the default when it names a domain actually on offer: Base UI
+  // prints the raw value when it cannot find it in `items`, so an unknown id
+  // would render as itself in the trigger rather than as a domain name.
+  const [domainId, setDomainId] = useState(() =>
+    keepWithin(defaultDomainId ?? '', domains),
   );
   const [localPart, setLocalPart] = useState('');
   const [canSend, setCanSend] = useState(true);

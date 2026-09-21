@@ -24,6 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Dialog } from '@/components/ui/dialog';
+import { keepWithin } from '@/lib/select-value';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
 
 function messageFor(error: unknown): string {
@@ -696,6 +697,17 @@ export function EndpointBindings({
 
   const unbound = addresses.filter((address) => !bound.includes(address.id));
 
+  /**
+   * The value has to be a member of the list it is chosen from.
+   *
+   * Base UI resolves the trigger label by looking the value up in `items`
+   * and prints the raw value when it is missing — so a selection that has
+   * since been bound, or an initial pick taken from the full list, renders
+   * as a bare id. Falling back to the first still-available address keeps
+   * the two in step as the list shrinks.
+   */
+  const selectedId = keepWithin(addressId, unbound);
+
   async function bind() {
     setError(null);
 
@@ -759,7 +771,7 @@ export function EndpointBindings({
               value: address.id,
               label: address.email,
             }))}
-            value={addressId}
+            value={selectedId}
             onValueChange={(value) => setAddressId(String(value))}
           >
             <SelectTrigger aria-label="Address to bind" className="w-auto min-w-48">
