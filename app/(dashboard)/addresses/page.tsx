@@ -68,16 +68,21 @@ export default async function AddressesPage({
       <PageHeader
         title="Addresses"
         description="Send-capable addresses get a concrete provider alias. Inbound-only addresses stay local, behind the domain catch-all."
-        actions={
-          <AddAddressForm
-            domains={domainOptions}
-            // Adding an address while looking at one app should default to that
-            // app. Getting this wrong creates support@ on the wrong domain,
-            // which is a provider alias and a DNS-shaped mistake to undo.
-            defaultDomainId={active ?? undefined}
-          />
-        }
         toolbar={
+          // Filter and create share one row. They were two floating boxes —
+          // the domain tabs below the heading and the domain Select up in the
+          // action slot — which read as unrelated controls despite both being
+          // about which domain you are working in.
+          <div className="dashboard-toolbar-stack">
+            <AddAddressForm
+              domains={domainOptions}
+              // Adding an address while looking at one app should default to
+              // that app. Getting this wrong creates support@ on the wrong
+              // domain, which is a provider alias and a DNS-shaped mistake.
+              defaultDomainId={active ?? undefined}
+            />
+
+            {
           // One domain is not a choice, so the tabs would be decoration.
           domains.length > 1 ? (
             <NavTabs
@@ -98,7 +103,8 @@ export default async function AddressesPage({
                 })),
               ]}
             />
-          ) : undefined
+          ) : null}
+          </div>
         }
       />
 

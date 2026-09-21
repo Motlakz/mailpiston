@@ -82,7 +82,7 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={create} className="flex flex-wrap items-center gap-2">
+      <form onSubmit={create} className="dashboard-inline-form flex flex-wrap items-center gap-2">
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}

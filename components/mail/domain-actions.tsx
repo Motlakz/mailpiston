@@ -419,7 +419,7 @@ export function AddDomainForm() {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+    <form onSubmit={submit} className="dashboard-inline-form flex flex-wrap items-center gap-2">
       <Input
         value={name}
         onChange={(event) => setName(event.target.value)}
@@ -602,7 +602,7 @@ export function WebhookKeyForm({
   }
 
   return (
-    <form onSubmit={save} className="flex flex-wrap items-center gap-2">
+    <form onSubmit={save} className="dashboard-inline-form flex flex-wrap items-center gap-2">
       <Input
         type="password"
         value={value}

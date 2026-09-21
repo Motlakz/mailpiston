@@ -66,7 +66,7 @@ export function LogFilters({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="dashboard-inline-form flex flex-wrap items-center gap-2">
       <FilterSelect
         label="Event type"
         placeholder="All event types"

@@ -36,10 +36,28 @@ const envSchema = z.object({
 
   // --- Auth (single operator) ----------------------------------------------
   BETTER_AUTH_SECRET: z.string().min(32),
-  GITHUB_CLIENT_ID: z.string().min(1),
-  GITHUB_CLIENT_SECRET: z.string().min(1),
+  /**
+   * Optional in the schema so a local checkout can run without registering an
+   * OAuth app, and mandatory in production below — where it is the only way in.
+   */
+  GITHUB_CLIENT_ID: z.string().min(1).optional(),
+  GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
   /** Comma-separated allow-list. Anyone outside it cannot hold a session. */
   ALLOWED_OPERATOR_EMAILS: csv.pipe(z.array(z.email()).min(1)),
+  /**
+   * Email-and-password sign-in, for local development only.
+   *
+   * GitHub OAuth needs a registered callback URL, which makes a throwaway
+   * checkout, a colleague's machine, or an offline train journey more work
+   * than it should be. This trades that for a password on the one allow-listed
+   * address — and it is refused outright in production below, because a
+   * password login on a deployment whose entire authorisation model is "an
+   * allow-listed GitHub account" is a second, weaker front door.
+   *
+   * The allow-list still applies: sign-up runs through the same
+   * `isOperatorEmail` hook, so this lets you in as *you*, not as anyone.
+   */
+  DEV_EMAIL_LOGIN: booleanish.default(false),
 
   // --- Mail provider --------------------------------------------------------
   MAIL_PROVIDER: z.enum(['forward-email', 'mock']).default('forward-email'),
@@ -215,6 +233,35 @@ function loadEnv(): Env {
     );
   }
 
+  if (parsed.data.DEV_EMAIL_LOGIN && parsed.data.NODE_ENV === 'production') {
+    throw new Error(
+      'DEV_EMAIL_LOGIN cannot be used in production: it opens a password ' +
+        'login beside the GitHub allow-list, which is the weaker of the two ' +
+        'and the one an attacker would pick.',
+    );
+  }
+
+  const githubConfigured = Boolean(
+    parsed.data.GITHUB_CLIENT_ID && parsed.data.GITHUB_CLIENT_SECRET,
+  );
+
+  if (parsed.data.NODE_ENV === 'production' && !githubConfigured) {
+    throw new Error(
+      'Production requires GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET: they ' +
+        'are the only sign-in method available there.',
+    );
+  }
+
+  // A deployment with neither is one nobody can sign in to, and the symptom is
+  // a sign-in page whose only button does nothing.
+  if (!githubConfigured && !parsed.data.DEV_EMAIL_LOGIN) {
+    throw new Error(
+      'No sign-in method is configured. Set GITHUB_CLIENT_ID and ' +
+        'GITHUB_CLIENT_SECRET, or set DEV_EMAIL_LOGIN=true for local ' +
+        'email-and-password sign-in.',
+    );
+  }
+
   if (
     parsed.data.WEBHOOK_ALLOW_INSECURE_TARGETS &&
     parsed.data.NODE_ENV === 'production'
@@ -287,6 +334,25 @@ export function relayAddressFor(token: string): string | null {
 export function isRelayRecipient(recipient: string): boolean {
   if (!env.RELAY_DOMAIN) return false;
   return recipient.toLowerCase().endsWith(`@${env.RELAY_DOMAIN}`);
+}
+
+/**
+ * Whether GitHub OAuth is available on this deployment. Always true in
+ * production, where the boot check above refuses to start without it.
+ */
+export function isGithubLoginEnabled(): boolean {
+  return Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
+}
+
+/**
+ * Whether the local password form should be offered.
+ *
+ * Reads `NODE_ENV` again rather than trusting the flag alone: the boot check
+ * already refuses this combination, and a second read costs nothing to make
+ * the production answer unconditionally `false` at the point of use.
+ */
+export function isDevEmailLoginEnabled(): boolean {
+  return env.DEV_EMAIL_LOGIN && env.NODE_ENV !== 'production';
 }
 
 export function isOperatorEmail(email: string | null | undefined): boolean {

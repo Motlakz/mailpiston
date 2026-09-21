@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { Icon } from '@/components/icon';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import { ComposeForm } from '@/components/mail/compose';
-import { ConversationRow } from '@/components/mail/conversation-row';
+import { BulkActions } from '@/components/mail/bulk-actions';
+import { ConversationList } from '@/components/mail/conversation-list';
 import {
   ReadingPane,
   ReadingPanePlaceholder,
   ReadingPaneSkeleton,
-} from '@/components/mail/reading-pane';
+} from './reading-pane';
 import { EmptyBinButton } from '@/components/mail/message-actions';
 import { QuotaBar } from '@/components/mail/quota-bar';
 import type { EmailStatus } from '@/server/core/types';
@@ -20,7 +21,7 @@ import { repositories } from '@/server/repositories';
 
 export const metadata = { title: 'Mail · MailPiston' };
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
 /**
  * One list for everything that arrived and everything that left.
@@ -155,6 +156,8 @@ export default async function MailPage({
                   </span>
                 </div>
 
+                <BulkActions binned={active === 'bin'} />
+
                 <nav className="mail-list-filters" aria-label="Filter mail">
                   {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
                     <Link
@@ -170,21 +173,16 @@ export default async function MailPage({
               </div>
 
               <div className="mail-list-scroll">
-                {page.items.map((email) => (
-                  <ConversationRow
-                    key={email.id}
-                    email={email}
-                    href={hrefFor(email.id)}
-                    selected={email.id === selectedId}
-                  />
-                ))}
+                {/* First page from the server, the rest fetched as you reach
+                    the bottom. The old cap was not a display limit — mail past
+                    the hundredth message had no route to the screen. */}
+                <ConversationList
+                  initialItems={page.items}
+                  initialCursor={page.nextCursor}
+                  show={active}
+                  selectedId={selectedId}
+                />
               </div>
-
-              {page.nextCursor ? (
-                <p className="mail-list-more">
-                  Showing the most recent {PAGE_SIZE}.
-                </p>
-              ) : null}
               </div>
             </div>
 

@@ -8,11 +8,32 @@
 
 /** Time for today, date for anything older — the usual mail-client shorthand. */
 export function formatWhen(date: Date): string {
-  const isToday = new Date().toDateString() === date.toDateString();
+  const now = new Date();
+  const isToday =
+    now.getUTCFullYear() === date.getUTCFullYear() &&
+    now.getUTCMonth() === date.getUTCMonth() &&
+    now.getUTCDate() === date.getUTCDate();
 
   return isToday
-    ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    ? `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`
     : date.toISOString().slice(0, 10);
+}
+
+export function formatDay(date: Date): string {
+  const day = pad(date.getUTCDate());
+  const month = MONTHS[date.getUTCMonth()];
+  const year = String(date.getUTCFullYear()).slice(-2);
+
+  return `${day} ${month} ${year}`;
+}
+
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
 }
 
 /**
@@ -31,4 +52,11 @@ export function previewOf(text: string | null, length = 140): string | null {
   return collapsed.length > length
     ? `${collapsed.slice(0, length).trimEnd()}…`
     : collapsed;
+}
+
+/** Byte counts for attachment rows. Shared by the reading pane and the message page. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

@@ -4,7 +4,10 @@ import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { PageTransition } from '@/components/layout/page-transition';
 import { Sidebar } from '@/components/layout/sidebar';
 import { SignOutButton } from '@/components/layout/sign-out-button';
+import { ActivityBar } from '@/components/layout/activity-bar';
+import { QueryProvider } from '@/components/layout/query-provider';
 import { ThemeToggle } from '@/components/site/theme-toggle';
+import { Toaster } from '@/components/ui/sonner';
 import { Separator } from '@/components/ui/separator';
 import { requireOperatorPage } from '@/server/core/auth';
 import './dashboard.css';
@@ -30,8 +33,10 @@ export default async function DashboardLayout({
   const operator = await requireOperatorPage();
 
   return (
-    <div className="dashboard-shell flex min-h-screen bg-background text-foreground">
-      <Sidebar />
+    <QueryProvider>
+      <div className="dashboard-shell flex min-h-screen bg-background text-foreground">
+        <ActivityBar />
+        <Sidebar />
 
       <div className="dashboard-workspace flex min-w-0 flex-1 flex-col">
         <header className="dashboard-topbar sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-6 backdrop-blur-sm">
@@ -54,7 +59,10 @@ export default async function DashboardLayout({
         <main className="dashboard-content flex min-w-0 flex-1 flex-col px-6 py-6">
           <PageTransition>{children}</PageTransition>
         </main>
+        </div>
+
+        <Toaster />
       </div>
-    </div>
+    </QueryProvider>
   );
 }

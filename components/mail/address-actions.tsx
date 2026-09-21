@@ -67,7 +67,7 @@ export function AddAddressForm({
   if (domains.length === 0) return null;
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+    <form onSubmit={submit} className="dashboard-inline-form flex flex-wrap items-center gap-2">
       <Input
         value={localPart}
         onChange={(event) => setLocalPart(event.target.value)}

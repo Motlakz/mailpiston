@@ -87,7 +87,7 @@ export default async function DomainsPage() {
       <PageHeader
         title="Domains"
         description="Add or import a domain, publish the records it shows you, then verify. Existing Forward Email domains are imported automatically."
-        actions={<AddDomainForm />}
+        toolbar={<AddDomainForm />}
       />
 
       {/* Detected, never repaired on its own. The buttons inside are the only
