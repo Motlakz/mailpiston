@@ -193,6 +193,9 @@ const REDACTED_FIELDS = new Set([
   'webhookKey',
   'secret',
   'token',
+  // A tenant's provider token: written encrypted, and it must not be written
+  // in clear to the audit log on the way past.
+  'apiToken',
   'password',
   'text',
   'html',

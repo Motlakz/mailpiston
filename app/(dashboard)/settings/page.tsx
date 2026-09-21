@@ -1,6 +1,8 @@
 import { PageHeader } from '@/components/layout/page-shell';
 import { FilterLists } from '@/components/mail/filter-lists';
+import { ProviderConnection } from '@/components/mail/provider-connection';
 import { env } from '@/server/core/config';
+import { hasTenantApiToken } from '@/server/core/tenancy/credentials';
 import { repositoriesFor } from '@/server/repositories';
 import { requireOperatorPage } from '@/server/core/auth';
 
@@ -20,9 +22,10 @@ export const metadata = { title: 'Settings · MailPiston' };
 export default async function SettingsPage() {
   const { tenantId } = await requireOperatorPage();
   const repositories = repositoriesFor(tenantId);
-  const [audit, filters] = await Promise.all([
+  const [audit, filters, providerConnected] = await Promise.all([
     repositories.audit.list({ limit: 50 }),
     repositories.mailFilters.list(),
+    hasTenantApiToken(tenantId),
   ]);
 
   return (
@@ -31,6 +34,21 @@ export default async function SettingsPage() {
         title="Settings"
         description="Configuration is read-only here — it is parsed from the environment at boot. This page shows what is in force, and who changed what."
       />
+
+      <section className="rounded-lg bg-card ring-1 ring-foreground/10">
+        <header className="border-b border-border px-5 py-3">
+          <h2 className="text-sm font-medium">Mail provider</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            MailPiston is the control plane. Transport is bought from a
+            specialist on your own account, so the bill and the reputation
+            stay yours.
+          </p>
+        </header>
+
+        <div className="px-5 py-4">
+          <ProviderConnection connected={providerConnected} />
+        </div>
+      </section>
 
       <section className="rounded-lg bg-card ring-1 ring-foreground/10">
         <header className="border-b border-border px-5 py-3">

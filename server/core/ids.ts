@@ -26,6 +26,7 @@ export const ID_PREFIXES = {
   item: 'item',
   audit: 'aud',
   filter: 'flt',
+  tenant: 'ten',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

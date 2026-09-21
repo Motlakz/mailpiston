@@ -881,3 +881,31 @@
   margin-right: auto;
   white-space: nowrap;
 }
+
+/* Connecting a workspace to its own mail provider. */
+.provider-connection { display: flex; flex-direction: column; gap: .7rem; max-width: 44rem; }
+.provider-connection__state {
+  align-items: center;
+  color: var(--warning);
+  display: flex;
+  font-size: .78rem;
+  gap: .4rem;
+  margin: 0;
+}
+.provider-connection__state[data-connected] { color: var(--success); }
+.provider-connection__row { display: flex; gap: .5rem; }
+.provider-connection__warn {
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border-radius: .5rem;
+  font-size: .74rem;
+  line-height: 1.6;
+  margin: 0;
+  padding: .55rem .7rem;
+}
+.provider-connection__note {
+  color: var(--muted-foreground);
+  font-size: .72rem;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 62ch;
+}

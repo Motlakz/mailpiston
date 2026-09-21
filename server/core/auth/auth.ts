@@ -9,6 +9,7 @@ import {
   isGithubLoginEnabled,
   isOperatorEmail,
 } from '@/server/core/config';
+import { provisionTenantForUser } from '@/server/core/tenancy/provision';
 import { db, schema } from '@/server/db/client';
 
 /**
@@ -77,6 +78,22 @@ export const auth = betterAuth({
             return false;
           }
           return { data: user };
+        },
+
+        /**
+         * Every account gets a workspace of its own, immediately.
+         *
+         * A session is refused without a membership, so skipping this would
+         * let someone authenticate successfully and then be told they belong
+         * to nothing. Doing it here rather than lazily on first page load
+         * means the account is never in that half-made state.
+         */
+        after: async (user) => {
+          await provisionTenantForUser({
+            userId: user.id,
+            email: user.email,
+            name: user.name,
+          });
         },
       },
     },
