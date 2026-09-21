@@ -1,0 +1,1 @@
+ALTER TABLE "tenants" ADD COLUMN "monthly_send_limit" integer DEFAULT 1000 NOT NULL;

@@ -5,6 +5,7 @@ import {
   asc,
   desc,
   eq,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -128,6 +129,21 @@ export class NeonEmailRepository implements EmailRepository {
       }
       throw error;
     }
+  }
+
+  async countOutboundSince(since: Date): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(emails)
+      .where(
+        and(
+          eq(emails.tenantId, this.tenantId),
+          eq(emails.direction, 'outbound'),
+          gte(emails.createdAt, since),
+        ),
+      );
+
+    return row?.count ?? 0;
   }
 
   async findById(id: string): Promise<Email | null> {

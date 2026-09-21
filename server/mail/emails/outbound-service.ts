@@ -56,9 +56,24 @@ export class OutboundService {
     private readonly events: EventRepository,
     private readonly threads: ThreadRepository,
     private readonly provider: MailProvider,
+    /**
+     * The monthly send gate.
+     *
+     * Injected rather than imported so this service keeps knowing nothing
+     * about tenants or the database — and so a test can send a thousand
+     * messages without one.
+     */
+    private readonly sendLimit: { assert(): Promise<void> } = {
+      async assert() {},
+    },
   ) {}
 
   async send(input: SendInput): Promise<Email> {
+    // Before anything is written. A refused send should leave no row
+    // behind — a queued message that never goes out is the kind of debris
+    // that makes a mailbox untrustworthy.
+    await this.sendLimit.assert();
+
     const from = await this.requireSendableAddress(input.addressId);
 
     const thread = await this.threads.create({
@@ -100,6 +115,11 @@ export class OutboundService {
    * half and the useless one: the customer would see a disconnected message.
    */
   async reply(emailId: string, input: ReplyInput): Promise<Email> {
+    // Before anything is written. A refused send should leave no row
+    // behind — a queued message that never goes out is the kind of debris
+    // that makes a mailbox untrustworthy.
+    await this.sendLimit.assert();
+
     const parent = await this.emails.findById(emailId);
     if (!parent) throw new NotFoundError(`Email ${emailId} not found`);
 

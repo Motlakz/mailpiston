@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { SendLimitExceededError } from '@/server/core/tenancy/limits';
 
 import { DefaultThreadResolver } from '@/server/mail/threads/thread-resolver';
 import { MockMailProvider } from '@/server/providers/mock/provider';
@@ -241,5 +242,82 @@ describe('OutboundService.recordDeliveryEvent', () => {
     const event = events.rows.at(-1)!;
     expect(event.emailId).toBeNull();
     expect(event.metadata.unmatched).toBe(true);
+  });
+});
+
+/**
+ * The send gate.
+ *
+ * Worth testing at this level rather than trusting the wiring: the limit is
+ * only meaningful if it refuses *before* a row exists. A gate that rejects
+ * after writing leaves a queued message that will never go out, which is worse
+ * than no gate — the operator sees mail they believe was sent.
+ */
+describe('monthly send limit', () => {
+  it('refuses a send once the allowance is spent, and writes nothing', async () => {
+    const limited = new OutboundService(
+      emails,
+      addresses,
+      events,
+      threads,
+      provider,
+      {
+        async assert() {
+          throw new SendLimitExceededError(1000, 1000);
+        },
+      },
+    );
+
+    const before = (await emails.list({ limit: 100 })).items.length;
+
+    await expect(
+      limited.send({
+        addressId: sendableId,
+        to: ['someone@example.test'],
+        subject: 'Over the line',
+        text: 'This should never leave.',
+      }),
+    ).rejects.toBeInstanceOf(SendLimitExceededError);
+
+    const after = (await emails.list({ limit: 100 })).items.length;
+    expect(after).toBe(before);
+  });
+
+  it('allows a send while allowance remains', async () => {
+    const allowed = new OutboundService(
+      emails,
+      addresses,
+      events,
+      threads,
+      provider,
+      { async assert() {} },
+    );
+
+    const sent = await allowed.send({
+      addressId: sendableId,
+      to: ['someone@example.test'],
+      subject: 'Within the line',
+      text: 'This should go.',
+    });
+
+    expect(sent.direction).toBe('outbound');
+  });
+
+  it('counts only outbound mail in the window', async () => {
+    // Inbound is counted for usage reporting but never gated — refusing mail
+    // somebody sent you is the one failure a mail system does not get to have.
+    const start = new Date(Date.now() - 60_000);
+
+    await new OutboundService(emails, addresses, events, threads, provider, {
+      async assert() {},
+    }).send({
+      addressId: sendableId,
+      to: ['someone@example.test'],
+      subject: 'Counted',
+      text: 'One.',
+    });
+
+    expect(await emails.countOutboundSince(start)).toBeGreaterThan(0);
+    expect(await emails.countOutboundSince(new Date(Date.now() + 60_000))).toBe(0);
   });
 });

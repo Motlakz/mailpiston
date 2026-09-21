@@ -219,6 +219,16 @@ export interface EmailRepository {
   create(data: CreateEmailData): Promise<Email>;
 
   /**
+   * How many messages this workspace has sent since a moment.
+   *
+   * Counted from the stored rows rather than a running tally, so it cannot
+   * drift: a counter column would need a transaction around every send and
+   * would still be wrong after any manual correction. The window is small and
+   * the index on (tenant_id, created_at) covers it.
+   */
+  countOutboundSince(since: Date): Promise<number>;
+
+  /**
    * Writes an inbound message, its attachment metadata, and its
    * `email.received` event as one transaction.
    *

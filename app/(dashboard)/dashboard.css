@@ -909,3 +909,25 @@
   margin: 0;
   max-width: 62ch;
 }
+
+/* Monthly sending. A limit nobody can see is one they hit by surprise. */
+.send-usage { display: flex; flex-direction: column; gap: .6rem; padding: 1rem 1.25rem 1.25rem; }
+.send-usage__figure { align-items: baseline; display: flex; gap: .5rem; margin: 0; }
+.send-usage__figure strong {
+  font-family: var(--font-geist-sans), var(--sans);
+  font-size: 1.65rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  letter-spacing: -.04em;
+}
+.send-usage__figure span { color: var(--muted-foreground); font-size: .78rem; }
+.send-usage__bar {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 999px;
+  height: 6px;
+  max-width: 34rem;
+  overflow: hidden;
+}
+.send-usage__bar > span { background: var(--success); display: block; height: 100%; }
+.send-usage__bar > span[data-full] { background: var(--warning); }
+.send-usage__note { color: var(--muted-foreground); font-size: .74rem; line-height: 1.6; margin: 0; max-width: 64ch; }

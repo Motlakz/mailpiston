@@ -1,4 +1,5 @@
 import {
+  integer,
   pgTable,
   primaryKey,
   text,
@@ -35,6 +36,20 @@ export const tenants = pgTable(
     name: text('name').notNull(),
     /** URL-safe handle. Lower-cased at the boundary, unique across the install. */
     slug: text('slug').notNull(),
+    /**
+     * Messages this workspace may send per calendar month.
+     *
+     * A limit exists from the first day, deliberately, even though it is
+     * generous. A product that ships without one has no idea what a runaway
+     * loop costs until the bill arrives, and retro-fitting a ceiling onto
+     * accounts that never had one is a change of terms rather than a
+     * default.
+     *
+     * Outbound only. Inbound is counted and never refused — losing a message
+     * somebody sent you is the one failure a mail system does not get to
+     * have.
+     */
+    monthlySendLimit: integer('monthly_send_limit').notNull().default(1000),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

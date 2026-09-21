@@ -3,6 +3,7 @@ import 'server-only';
 import { env } from '@/server/core/config';
 import { inngestRetryScheduler } from '@/server/jobs/inngest-scheduler';
 import { mailProviderRegistry } from '@/server/providers/registry';
+import { assertWithinSendLimit } from '@/server/core/tenancy/limits';
 import { repositoriesFor } from '@/server/repositories';
 import { getStorage } from '@/server/storage';
 
@@ -89,6 +90,9 @@ export function servicesFor(tenantId: string): MailServices {
         repositories.events,
         repositories.threads,
         provider(),
+        {
+          assert: () => assertWithinSendLimit(tenantId, repositories.emails),
+        },
       )),
 
     forwarding: () =>
