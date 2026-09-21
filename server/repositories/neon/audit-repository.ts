@@ -14,6 +14,8 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 export class NeonAuditRepository implements AuditRepository {
+  constructor(private readonly tenantId: string) {}
+
   async record(data: {
     actor: string;
     action: string;
@@ -23,7 +25,7 @@ export class NeonAuditRepository implements AuditRepository {
   }): Promise<AuditEntry> {
     const [row] = await db
       .insert(auditLogs)
-      .values({ id: newId('audit'), ...data })
+      .values({ id: newId('audit'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toEntry(row);
@@ -42,6 +44,7 @@ export class NeonAuditRepository implements AuditRepository {
       .from(auditLogs)
       .where(
         and(
+          eq(auditLogs.tenantId, this.tenantId),
           filter.action ? eq(auditLogs.action, filter.action) : undefined,
           cursorDate && !Number.isNaN(cursorDate.getTime())
             ? lt(auditLogs.occurredAt, cursorDate)

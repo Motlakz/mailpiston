@@ -15,6 +15,14 @@
  */
 export interface RetryScheduler {
   scheduleRetry(input: {
+    /**
+     * Whose workspace this delivery belongs to.
+     *
+     * The retry runs later, in a background function with no request behind
+     * it, so the tenant cannot be inferred there — it has to travel with the
+     * schedule or the retry has no scoped services to run against.
+     */
+    tenantId: string;
     deliveryId: string;
     /** The attempt number this schedules, 1-based. */
     attempt: number;

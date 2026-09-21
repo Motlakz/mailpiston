@@ -2,19 +2,19 @@ import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
 import { updateAddressSchema } from '@/server/core/validation';
-import { getAddressService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 export const GET = withApi(
-  async ({ params }) => {
-    const address = await getAddressService().get(params.id);
+  async ({ params, tenantId }) => {
+    const address = await servicesFor(tenantId).addresses().get(params.id);
     return NextResponse.json({ data: address });
   },
   { endpoint: '/v1/addresses' },
 );
 
 export const PATCH = withApi(
-  async ({ params, body }) => {
-    const address = await getAddressService().update(params.id, body);
+  async ({ params, body, tenantId }) => {
+    const address = await servicesFor(tenantId).addresses().update(params.id, body);
     return NextResponse.json({ data: address });
   },
   {
@@ -25,8 +25,8 @@ export const PATCH = withApi(
 );
 
 export const DELETE = withApi(
-  async ({ params }) => {
-    await getAddressService().delete(params.id);
+  async ({ params, tenantId }) => {
+    await servicesFor(tenantId).addresses().delete(params.id);
     return NextResponse.json({ data: { id: params.id, deleted: true } });
   },
   {

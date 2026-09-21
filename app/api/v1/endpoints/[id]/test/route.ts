@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getWebhookService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 /**
  * Sends a sample delivery to the endpoint and reports what came back.
@@ -12,8 +12,8 @@ import { getWebhookService } from '@/server/mail/services';
  * operator's question, not a failure of this request.
  */
 export const POST = withApi(
-  async ({ params }) => {
-    const result = await getWebhookService().test(params.id);
+  async ({ params, tenantId }) => {
+    const result = await servicesFor(tenantId).webhooks().test(params.id);
     return NextResponse.json({ data: result });
   },
   { endpoint: '/v1/endpoints' },

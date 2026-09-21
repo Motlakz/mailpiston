@@ -8,7 +8,8 @@ import {
   WebhookPanel,
 } from '@/components/mail/endpoint-actions';
 import { env } from '@/server/core/config';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Endpoints · MailPiston' };
 
@@ -16,6 +17,8 @@ export const metadata = { title: 'Endpoints · MailPiston' };
 const DELIVERY_LOG_LIMIT = 10;
 
 export default async function EndpointsPage() {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const [endpoints, addresses] = await Promise.all([
     repositories.endpoints.list(),
     repositories.addresses.list(),

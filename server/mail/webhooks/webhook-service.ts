@@ -72,6 +72,14 @@ export interface DispatchResult {
 }
 
 export interface WebhookServiceOptions {
+  /**
+   * Whose workspace this service belongs to.
+   *
+   * Carried so a scheduled retry can name its tenant. The repositories are
+   * already scoped, but the retry runs later in a background function with no
+   * request behind it, and nothing there can infer the workspace.
+   */
+  tenantId: string;
   timeoutMs: number;
   /**
    * Required, not defaulted. A deployment that ends up never retrying should
@@ -342,6 +350,7 @@ export class WebhookService {
       // The other order loses the row and schedules an event pointing at
       // nothing.
       await this.options.scheduler.scheduleRetry({
+        tenantId: this.options.tenantId,
         deliveryId: claimed.id,
         attempt: nextAttempt,
         delayMs,

@@ -2,7 +2,8 @@ import 'server-only';
 
 import { cron } from 'inngest';
 
-import { getReconciliationService } from '@/server/mail/services';
+import { allTenantIds } from '@/server/core/tenancy/resolve';
+import { servicesFor } from '@/server/mail/services';
 
 import { inngest } from './inngest';
 
@@ -27,6 +28,22 @@ export const reconcileProvider = inngest.createFunction(
     retries: 1,
     triggers: [cron('0 */6 * * *')],
   },
-  async ({ step }) =>
-    step.run('reconcile', () => getReconciliationService().run()),
+  async ({ step }) => {
+    const tenants = await step.run('list-tenants', allTenantIds);
+
+    // One step per tenant, so a workspace whose provider token is missing or
+    // revoked fails on its own line and the rest of the sweep still runs.
+    return Promise.all(
+      tenants.map((tenantId) =>
+        step
+          .run(`reconcile-${tenantId}`, () =>
+            servicesFor(tenantId).reconciliation().run(),
+          )
+          .catch((error: unknown) => {
+            console.error('Reconciliation failed for tenant', tenantId, error);
+            return null;
+          }),
+      ),
+    );
+  },
 );

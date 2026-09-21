@@ -5,20 +5,20 @@ import {
   addRecipientSchema,
   type AddRecipientInput,
 } from '@/server/core/validation';
-import { getEndpointService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 export const GET = withApi(
-  async ({ params }) =>
+  async ({ params, tenantId }) =>
     NextResponse.json({
-      data: await getEndpointService().listRecipients(params.id),
+      data: await servicesFor(tenantId).endpoints().listRecipients(params.id),
     }),
   { endpoint: '/v1/endpoints' },
 );
 
 /** Created unverified. Nothing is forwarded until a challenge is confirmed. */
 export const POST = withApi<AddRecipientInput>(
-  async ({ body, params }) => {
-    const recipient = await getEndpointService().addRecipient(
+  async ({ body, params, tenantId }) => {
+    const recipient = await servicesFor(tenantId).endpoints().addRecipient(
       params.id,
       body.email,
     );

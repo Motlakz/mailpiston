@@ -13,6 +13,8 @@ const DISPLAY_PREFIX_LENGTH = KEY_PREFIX.length + 6;
 export interface ApiKeyIdentity {
   id: string;
   name: string;
+  /** Which workspace this key acts inside. Every scoped read derives from it. */
+  tenantId: string;
 }
 
 export interface IssuedApiKey {
@@ -50,7 +52,7 @@ export async function resolveApiKey(
   const now = new Date();
 
   const [row] = await db
-    .select({ id: apiKeys.id, name: apiKeys.name })
+    .select({ id: apiKeys.id, name: apiKeys.name, tenantId: apiKeys.tenantId })
     .from(apiKeys)
     .where(
       and(

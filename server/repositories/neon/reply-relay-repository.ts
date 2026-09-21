@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { newId } from '@/server/core/ids';
 import type { ReplyRelay } from '@/server/core/types';
@@ -16,8 +16,16 @@ type RelayRow = typeof replyRelays.$inferSelect;
  * Only the hash is stored, and lookup is *by* the hash — so a leaked table
  * yields nothing that can be put in a `To:`, and the query is an index probe
  * rather than a scan comparing secrets one row at a time.
+ *
+ * Tenant-scoped like every other repository: the instance is bound to one
+ * tenant at construction and every statement carries that filter. A token is
+ * already unguessable, so the extra predicate is not what makes the lookup
+ * safe — it is there so that no query in this file can *ever* reach another
+ * tenant's row, whatever is passed to it.
  */
 export class NeonReplyRelayRepository implements ReplyRelayRepository {
+  constructor(private readonly tenantId: string) {}
+
   async create(data: {
     tokenHash: string;
     addressId: string;
@@ -27,7 +35,7 @@ export class NeonReplyRelayRepository implements ReplyRelayRepository {
   }): Promise<ReplyRelay> {
     const [row] = await db
       .insert(replyRelays)
-      .values({ id: newId('relay'), ...data })
+      .values({ id: newId('relay'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toRelay(row);
@@ -37,7 +45,12 @@ export class NeonReplyRelayRepository implements ReplyRelayRepository {
     const [row] = await db
       .select()
       .from(replyRelays)
-      .where(eq(replyRelays.tokenHash, tokenHash))
+      .where(
+        and(
+          eq(replyRelays.tenantId, this.tenantId),
+          eq(replyRelays.tokenHash, tokenHash),
+        ),
+      )
       .limit(1);
 
     return row ? toRelay(row) : null;
@@ -47,7 +60,9 @@ export class NeonReplyRelayRepository implements ReplyRelayRepository {
     await db
       .update(replyRelays)
       .set({ revokedAt: new Date() })
-      .where(eq(replyRelays.id, id));
+      .where(
+        and(eq(replyRelays.tenantId, this.tenantId), eq(replyRelays.id, id)),
+      );
   }
 }
 

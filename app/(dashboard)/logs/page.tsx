@@ -2,7 +2,8 @@ import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import { LogFilters } from '@/components/mail/log-filters';
 import { EventTimeline } from '@/components/mail/event-timeline';
 import { MAIL_EVENT_TYPES, type MailEventType } from '@/server/core/types';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Logs · MailPiston' };
 
@@ -21,6 +22,8 @@ export default async function LogsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const params = await searchParams;
 
   const type = single(params.type);

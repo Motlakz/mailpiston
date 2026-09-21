@@ -1,7 +1,8 @@
 import { PageHeader } from '@/components/layout/page-shell';
 import { FilterLists } from '@/components/mail/filter-lists';
 import { env } from '@/server/core/config';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Settings · MailPiston' };
 
@@ -17,6 +18,8 @@ export const metadata = { title: 'Settings · MailPiston' };
  * privileged mutations, which is worth nothing if nobody can read it.
  */
 export default async function SettingsPage() {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const [audit, filters] = await Promise.all([
     repositories.audit.list({ limit: 50 }),
     repositories.mailFilters.list(),

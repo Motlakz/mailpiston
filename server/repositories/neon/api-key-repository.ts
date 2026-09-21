@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import { NotFoundError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -12,6 +12,8 @@ import type { ApiKeyRepository } from '@/server/repositories/types';
 type ApiKeyRow = typeof apiKeys.$inferSelect;
 
 export class NeonApiKeyRepository implements ApiKeyRepository {
+  constructor(private readonly tenantId: string) {}
+
   async create(data: {
     name: string;
     keyHash: string;
@@ -20,14 +22,18 @@ export class NeonApiKeyRepository implements ApiKeyRepository {
   }): Promise<ApiKey> {
     const [row] = await db
       .insert(apiKeys)
-      .values({ id: newId('apiKey'), ...data })
+      .values({ id: newId('apiKey'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toApiKey(row);
   }
 
   async list(): Promise<ApiKey[]> {
-    const rows = await db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt));
+    const rows = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.tenantId, this.tenantId))
+      .orderBy(desc(apiKeys.createdAt));
     return rows.map(toApiKey);
   }
 
@@ -39,7 +45,7 @@ export class NeonApiKeyRepository implements ApiKeyRepository {
     const [row] = await db
       .update(apiKeys)
       .set({ revokedAt: new Date() })
-      .where(eq(apiKeys.id, id))
+      .where(and(eq(apiKeys.tenantId, this.tenantId), eq(apiKeys.id, id)))
       .returning({ id: apiKeys.id });
 
     if (!row) throw new NotFoundError(`API key ${id} not found`);

@@ -17,7 +17,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { AddressWithDomain, Domain } from '@/server/core/types';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Addresses · MailPiston' };
 
@@ -38,6 +39,8 @@ export default async function AddressesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const params = await searchParams;
   const raw = Array.isArray(params.domain) ? params.domain[0] : params.domain;
 

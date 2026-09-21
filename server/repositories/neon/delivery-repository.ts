@@ -26,6 +26,8 @@ export class NeonDeliveryRepository implements DeliveryRepository {
    * exactly one of them delivers. A read-then-write check would have a window
    * between the two statements where both callers see nothing and both deliver.
    */
+  constructor(private readonly tenantId: string) {}
+
   async enqueue(data: {
     endpointId: string;
     eventId: string;
@@ -33,7 +35,7 @@ export class NeonDeliveryRepository implements DeliveryRepository {
   }): Promise<EnqueueResult> {
     const [inserted] = await db
       .insert(endpointDeliveries)
-      .values({ id: newId('delivery'), ...data })
+      .values({ id: newId('delivery'), tenantId: this.tenantId, ...data })
       .onConflictDoNothing()
       .returning();
 
@@ -44,6 +46,7 @@ export class NeonDeliveryRepository implements DeliveryRepository {
       .from(endpointDeliveries)
       .where(
         and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
           eq(endpointDeliveries.eventId, data.eventId),
           eq(endpointDeliveries.endpointId, data.endpointId),
           sql`coalesce(${endpointDeliveries.recipientId}, '') = coalesce(${data.recipientId}, '')`,
@@ -69,7 +72,12 @@ export class NeonDeliveryRepository implements DeliveryRepository {
     const [row] = await db
       .select()
       .from(endpointDeliveries)
-      .where(eq(endpointDeliveries.id, id))
+      .where(
+        and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
+          eq(endpointDeliveries.id, id),
+        ),
+      )
       .limit(1);
 
     return row ? toDelivery(row) : null;
@@ -107,6 +115,7 @@ export class NeonDeliveryRepository implements DeliveryRepository {
       })
       .where(
         and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
           eq(endpointDeliveries.id, id),
           or(
             eq(endpointDeliveries.status, 'pending'),
@@ -144,6 +153,7 @@ export class NeonDeliveryRepository implements DeliveryRepository {
       })
       .where(
         and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
           eq(endpointDeliveries.id, id),
           or(
             eq(endpointDeliveries.status, 'failed'),
@@ -171,7 +181,12 @@ export class NeonDeliveryRepository implements DeliveryRepository {
         leaseExpiresAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(endpointDeliveries.id, id));
+      .where(
+        and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
+          eq(endpointDeliveries.id, id),
+        ),
+      );
   }
 
   async markFailed(
@@ -201,14 +216,24 @@ export class NeonDeliveryRepository implements DeliveryRepository {
         leaseExpiresAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(endpointDeliveries.id, id));
+      .where(
+        and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
+          eq(endpointDeliveries.id, id),
+        ),
+      );
   }
 
   async listForEvent(eventId: string): Promise<EndpointDelivery[]> {
     const rows = await db
       .select()
       .from(endpointDeliveries)
-      .where(eq(endpointDeliveries.eventId, eventId))
+      .where(
+        and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
+          eq(endpointDeliveries.eventId, eventId),
+        ),
+      )
       .orderBy(desc(endpointDeliveries.createdAt));
 
     return rows.map(toDelivery);
@@ -221,7 +246,12 @@ export class NeonDeliveryRepository implements DeliveryRepository {
     const rows = await db
       .select()
       .from(endpointDeliveries)
-      .where(eq(endpointDeliveries.endpointId, endpointId))
+      .where(
+        and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
+          eq(endpointDeliveries.endpointId, endpointId),
+        ),
+      )
       .orderBy(desc(endpointDeliveries.createdAt))
       .limit(limit);
 

@@ -17,7 +17,8 @@ import { QuotaBar } from '@/components/mail/quota-bar';
 import type { EmailStatus } from '@/server/core/types';
 import { getOutboundQuota } from '@/server/mail/emails/quota';
 import type { EmailFilter } from '@/server/repositories';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Mail · MailPiston' };
 
@@ -72,6 +73,8 @@ export default async function MailPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const params = await searchParams;
   const raw = Array.isArray(params.show) ? params.show[0] : params.show;
   const active: FilterKey = raw && raw in FILTERS ? (raw as FilterKey) : 'all';
@@ -197,7 +200,7 @@ export default async function MailPage({
 
               {selectedId ? (
                 <Suspense key={selectedId} fallback={<ReadingPaneSkeleton />}>
-                  <ReadingPane emailId={selectedId} />
+                  <ReadingPane emailId={selectedId} tenantId={tenantId} />
                 </Suspense>
               ) : (
                 <ReadingPanePlaceholder />

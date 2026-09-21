@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { ValidationError } from '@/server/core/errors';
 import { withApi } from '@/server/core/http';
 import { MAIL_EVENT_TYPES, type MailEventType } from '@/server/core/types';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 /**
  * The unified event stream (roadmap Phase 9, plan §4.7).
@@ -18,7 +18,8 @@ import { repositories } from '@/server/repositories';
  * exactly what someone filtering by address is usually hunting for.
  */
 export const GET = withApi(
-  async ({ request }) => {
+  async ({ request, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const params = new URL(request.url).searchParams;
 
     const addressId = params.get('addressId');

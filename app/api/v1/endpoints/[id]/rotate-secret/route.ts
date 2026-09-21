@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getEndpointService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 /**
  * Mints a new signing secret and returns it once.
@@ -12,8 +12,8 @@ import { getEndpointService } from '@/server/mail/services';
  * leaked must stop working the moment it is rotated.
  */
 export const POST = withApi(
-  async ({ params }) => {
-    const secret = await getEndpointService().rotateSecret(params.id);
+  async ({ params, tenantId }) => {
+    const secret = await servicesFor(tenantId).endpoints().rotateSecret(params.id);
     return NextResponse.json({ data: { secret } });
   },
   {

@@ -25,13 +25,15 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 export class NeonThreadRepository implements ThreadRepository {
+  constructor(private readonly tenantId: string) {}
+
   async create(data: {
     subject: string | null;
     lastMessageAt: Date;
   }): Promise<Thread> {
     const [row] = await db
       .insert(threads)
-      .values({ id: newId('thread'), ...data })
+      .values({ id: newId('thread'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toThread(row);
@@ -41,7 +43,7 @@ export class NeonThreadRepository implements ThreadRepository {
     const [row] = await db
       .select()
       .from(threads)
-      .where(eq(threads.id, id))
+      .where(and(eq(threads.tenantId, this.tenantId), eq(threads.id, id)))
       .limit(1);
 
     return row ? toThread(row) : null;
@@ -69,6 +71,7 @@ export class NeonThreadRepository implements ThreadRepository {
       .innerJoin(threads, eq(emails.threadId, threads.id))
       .where(
         and(
+          eq(threads.tenantId, this.tenantId),
           isNotNull(emails.threadId),
           or(
             inArray(emails.messageId, candidates),
@@ -117,7 +120,14 @@ export class NeonThreadRepository implements ThreadRepository {
         >`array_agg(distinct ${emails.from})`.as('participants'),
       })
       .from(emails)
-      .where(and(isNotNull(emails.threadId), isNull(emails.deletedAt), eq(emails.spamVerdict, 'clean')))
+      .where(
+        and(
+          eq(emails.tenantId, this.tenantId),
+          isNotNull(emails.threadId),
+          isNull(emails.deletedAt),
+          eq(emails.spamVerdict, 'clean'),
+        ),
+      )
       .groupBy(emails.threadId)
       .as('counted');
 
@@ -131,6 +141,7 @@ export class NeonThreadRepository implements ThreadRepository {
       .innerJoin(counted, eq(counted.threadId, threads.id))
       .where(
         and(
+          eq(threads.tenantId, this.tenantId),
           cursorDate ? lt(threads.lastMessageAt, cursorDate) : undefined,
           gte(counted.messageCount, minMessages),
         ),
@@ -167,7 +178,7 @@ export class NeonThreadRepository implements ThreadRepository {
         lastMessageAt: sql`greatest(${threads.lastMessageAt}, ${lastMessageAt.toISOString()}::timestamptz)`,
         updatedAt: new Date(),
       })
-      .where(eq(threads.id, id));
+      .where(and(eq(threads.tenantId, this.tenantId), eq(threads.id, id)));
   }
 }
 

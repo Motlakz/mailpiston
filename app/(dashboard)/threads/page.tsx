@@ -5,7 +5,8 @@ import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { formatWhen } from '@/lib/format';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Threads · MailPiston' };
 
@@ -26,6 +27,8 @@ export default async function ThreadsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const params = await searchParams;
   const raw = Array.isArray(params.show) ? params.show[0] : params.show;
   const showAll = raw === 'all';

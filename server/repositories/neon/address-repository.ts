@@ -18,12 +18,15 @@ import { isUniqueViolation } from './domain-repository';
 type AddressRow = typeof addresses.$inferSelect;
 
 export class NeonAddressRepository implements AddressRepository {
+  constructor(private readonly tenantId: string) {}
+
   async create(data: CreateAddressData): Promise<Address> {
     try {
       const [row] = await db
         .insert(addresses)
         .values({
           id: newId('address'),
+          tenantId: this.tenantId,
           domainId: data.domainId,
           localPart: data.localPart.toLowerCase(),
           providerAliasId: data.providerAliasId,
@@ -44,7 +47,11 @@ export class NeonAddressRepository implements AddressRepository {
   }
 
   async findById(id: string): Promise<Address | null> {
-    const [row] = await db.select().from(addresses).where(eq(addresses.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(addresses)
+      .where(and(eq(addresses.tenantId, this.tenantId), eq(addresses.id, id)))
+      .limit(1);
     return row ? toAddress(row) : null;
   }
 
@@ -53,7 +60,7 @@ export class NeonAddressRepository implements AddressRepository {
       .select({ address: addresses, domainName: domains.name })
       .from(addresses)
       .innerJoin(domains, eq(addresses.domainId, domains.id))
-      .where(eq(addresses.id, id))
+      .where(and(eq(addresses.tenantId, this.tenantId), eq(addresses.id, id)))
       .limit(1);
 
     return row ? withDomain(row.address, row.domainName) : null;
@@ -77,6 +84,7 @@ export class NeonAddressRepository implements AddressRepository {
       .innerJoin(domains, eq(addresses.domainId, domains.id))
       .where(
         and(
+          eq(addresses.tenantId, this.tenantId),
           sql`lower(${addresses.localPart}) = ${localPart}`,
           sql`lower(${domains.name}) = ${domainName}`,
         ),
@@ -95,6 +103,7 @@ export class NeonAddressRepository implements AddressRepository {
       .from(addresses)
       .where(
         and(
+          eq(addresses.tenantId, this.tenantId),
           eq(addresses.domainId, domainId),
           sql`lower(${addresses.localPart}) = ${localPart.toLowerCase()}`,
         ),
@@ -109,7 +118,12 @@ export class NeonAddressRepository implements AddressRepository {
       .select({ address: addresses, domainName: domains.name })
       .from(addresses)
       .innerJoin(domains, eq(addresses.domainId, domains.id))
-      .where(filter.domainId ? eq(addresses.domainId, filter.domainId) : undefined)
+      .where(
+        and(
+          eq(addresses.tenantId, this.tenantId),
+          filter.domainId ? eq(addresses.domainId, filter.domainId) : undefined,
+        ),
+      )
       .orderBy(asc(domains.name), asc(addresses.localPart));
 
     return rows.map((row) => withDomain(row.address, row.domainName));
@@ -119,7 +133,7 @@ export class NeonAddressRepository implements AddressRepository {
     const [row] = await db
       .update(addresses)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(addresses.id, id))
+      .where(and(eq(addresses.tenantId, this.tenantId), eq(addresses.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Address ${id} not found`);
@@ -129,7 +143,7 @@ export class NeonAddressRepository implements AddressRepository {
   async delete(id: string): Promise<void> {
     const deleted = await db
       .delete(addresses)
-      .where(eq(addresses.id, id))
+      .where(and(eq(addresses.tenantId, this.tenantId), eq(addresses.id, id)))
       .returning({ id: addresses.id });
 
     if (deleted.length === 0) throw new NotFoundError(`Address ${id} not found`);

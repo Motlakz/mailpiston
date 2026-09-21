@@ -4,7 +4,8 @@ import { notFound } from 'next/navigation';
 import { Icon } from '@/components/icon';
 import { PageHeader } from '@/components/layout/page-shell';
 import { EmailBody } from '@/components/mail/email-body';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Thread · MailPiston' };
 
@@ -13,6 +14,8 @@ export default async function ThreadPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const { id } = await params;
 
   const thread = await repositories.threads.findById(id);

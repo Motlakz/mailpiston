@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -14,7 +14,8 @@ const MAX_LIMIT = 200;
  * fired" — the answer is usually that it fired and the receiver answered 500.
  */
 export const GET = withApi(
-  async ({ request, params }) => {
+  async ({ request, params, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const requested = Number(new URL(request.url).searchParams.get('limit'));
     const limit =
       Number.isFinite(requested) && requested > 0

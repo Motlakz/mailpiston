@@ -359,3 +359,23 @@ export function isOperatorEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return env.ALLOWED_OPERATOR_EMAILS.includes(email.toLowerCase());
 }
+
+/**
+ * The opaque token out of a relay recipient, or null.
+ *
+ * `reply+<token>@<relay domain>` — the plus-part is the whole identity of the
+ * thread being answered, and it is the only handle an inbound relay reply
+ * carries. Returns null for anything that is not a relay address, so a caller
+ * cannot accidentally treat an ordinary recipient as one.
+ */
+export function relayLocalToken(recipient: string): string | null {
+  if (!isRelayRecipient(recipient)) return null;
+
+  const local = recipient.slice(0, recipient.lastIndexOf('@'));
+  const plus = local.indexOf('+');
+
+  if (plus === -1) return null;
+
+  const token = local.slice(plus + 1).trim();
+  return token.length > 0 ? token : null;
+}

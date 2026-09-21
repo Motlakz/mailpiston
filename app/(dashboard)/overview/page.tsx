@@ -4,7 +4,8 @@ import { Icon } from '@/components/icon';
 import { PageHeader } from '@/components/layout/page-shell';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Overview · MailPiston' };
 
@@ -17,6 +18,8 @@ export const metadata = { title: 'Overview · MailPiston' };
  * indistinguishable from a broken one.
  */
 export default async function OverviewPage() {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const [domains, addresses] = await Promise.all([
     repositories.domains.list(),
     repositories.addresses.list(),

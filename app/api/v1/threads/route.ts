@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 export const GET = withApi(
-  async ({ request }) => {
+  async ({ request, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const params = new URL(request.url).searchParams;
 
     const page = await repositories.threads.list({

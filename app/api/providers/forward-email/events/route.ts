@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { withProvider } from '@/server/core/http';
-import { getOutboundService } from '@/server/mail/services';
+import { tenantForProviderMessage } from '@/server/core/tenancy/resolve';
+import { servicesFor } from '@/server/mail/services';
 import { mailProviderRegistry } from '@/server/providers/registry';
 
 /**
@@ -18,7 +19,20 @@ export const POST = withProvider(
     const provider = mailProviderRegistry.active();
     const event = await provider.normalizeDeliveryEvent(payload);
 
-    const { emailId } = await getOutboundService().recordDeliveryEvent({
+    // A delivery event names a message rather than a workspace, so the
+    // message is what resolves the tenant.
+    const tenantId = await tenantForProviderMessage(
+      event.providerMessageId,
+      event.messageId,
+    );
+
+    if (!tenantId) {
+      // An event for mail this deployment did not send. Recorded nowhere, but
+      // acknowledged: retrying it would not make it ours.
+      return NextResponse.json({ received: true, emailId: null });
+    }
+
+    const { emailId } = await servicesFor(tenantId).outbound().recordDeliveryEvent({
       type: event.type,
       providerMessageId: event.providerMessageId,
       messageId: event.messageId,

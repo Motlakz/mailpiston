@@ -27,7 +27,8 @@ import {
 } from '@/components/ui/table';
 import type { Domain, DomainDnsRecord } from '@/server/core/types';
 import { listDomainsWithWebhookKeys } from '@/server/mail/domains/webhook-keys';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Domains · MailPiston' };
 
@@ -48,6 +49,8 @@ const KEY_LABEL: Record<WebhookKeyState, string> = {
 };
 
 export default async function DomainsPage() {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const [domains, withKeys, latestRun] = await Promise.all([
     repositories.domains.list(),
     listDomainsWithWebhookKeys(),
