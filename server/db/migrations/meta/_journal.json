@@ -57,6 +57,13 @@
       "when": 1789896591843,
       "tag": "0007_colorful_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789992047894,
+      "tag": "0008_nosy_thanos",
+      "breakpoints": true
     }
   ]
 }
