@@ -83,6 +83,31 @@ export function withProvider(
         throw new WebhookVerificationError();
       }
     } catch (error) {
+      /**
+       * Say that a delivery was refused, and say enough to tell why.
+       *
+       * This used to be silent. `formatErrorResponse` logs only unexpected
+       * errors, and a rejected signature is an entirely expected one — so a
+       * misconfigured webhook key produced a 401, no log line, no stored mail,
+       * and no event, because an unauthenticated request has no tenant to
+       * record an event against. The operator's evidence was an empty inbox.
+       *
+       * A missing signature header and a wrong key are the two causes and they
+       * need different fixes: the first means the provider was never told to
+       * sign, the second that it signs with a key we do not hold. Neither the
+       * signature nor the body is logged — this narrows the cause without
+       * writing down the thing an attacker is trying to guess.
+       */
+      console.warn(`[${options.provider}] ingress refused a delivery`, {
+        endpoint: options.endpoint,
+        reason: error instanceof WebhookVerificationError ? 'signature' : 'error',
+        signatureHeaderPresent: Boolean(
+          request.headers.get('x-webhook-signature'),
+        ),
+        bodyBytes: rawBody.length,
+        message: error instanceof Error ? error.message : String(error),
+      });
+
       // Verification failures are the one case that must NOT return 200: an
       // unauthenticated caller gets nothing, and nothing is written.
       return errorResponse(error);
