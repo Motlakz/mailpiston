@@ -124,7 +124,7 @@ export default function DocsPage() {
               title="Concrete alias"
               badge="can send"
               body="Has its own alias at the provider pointing at this deployment. Required for sending: the provider will not authorise a From: header for an address that exists only behind a catch-all."
-              detail="This is what the SDK's addressId refers to."
+              detail="One of these is what a send's from has to name."
             />
             <DefinitionCard
               title="Local route"
