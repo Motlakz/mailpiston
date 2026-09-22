@@ -122,8 +122,17 @@ export class EndpointService {
 
   async update(
     id: string,
-    data: { name?: string; enabled?: boolean; url?: string },
+    data: {
+      name?: string;
+      enabled?: boolean;
+      url?: string;
+      type?: 'email' | 'email_group';
+    },
   ): Promise<Endpoint> {
+    if (data.type !== undefined) {
+      await this.assertConvertible(id, data.type);
+    }
+
     if (data.url !== undefined) {
       await this.requireWebhookEndpoint(id);
       const config = await this.endpoints.getWebhookConfig(id);
@@ -144,15 +153,58 @@ export class EndpointService {
       });
     }
 
-    const { name, enabled } = data;
+    const { name, enabled, type } = data;
 
-    if (name === undefined && enabled === undefined) {
+    if (name === undefined && enabled === undefined && type === undefined) {
       const endpoint = await this.endpoints.findById(id);
       if (!endpoint) throw new NotFoundError(`Endpoint ${id} not found`);
       return endpoint;
     }
 
-    return this.endpoints.update(id, { name, enabled });
+    return this.endpoints.update(id, { name, enabled, type });
+  }
+
+  /**
+   * Whether an endpoint may become the requested mailbox subtype.
+   *
+   * `email` and `email_group` differ in exactly one rule — how many verified
+   * mailboxes they may hold — so widening one into the other is a change of
+   * that rule and nothing else. Without this, an `email` endpoint created with
+   * one mailbox was a dead end: adding a second is refused because it is an
+   * `email`, and it could not become an `email_group` because `type` was not
+   * updatable. The only way out was deleting it, which means re-verifying the
+   * mailbox and re-binding every address.
+   *
+   * Narrowing is allowed only while it would discard nothing. Silently
+   * dropping recipients would stop mail reaching people who are, as far as
+   * anyone can see, still on the list.
+   */
+  private async assertConvertible(
+    id: string,
+    target: 'email' | 'email_group',
+  ): Promise<void> {
+    const endpoint = await this.endpoints.findById(id);
+    if (!endpoint) throw new NotFoundError(`Endpoint ${id} not found`);
+
+    if (endpoint.type === target) return;
+
+    if (endpoint.type === 'webhook') {
+      throw new ConflictError(
+        'A webhook endpoint delivers to a URL, not to mailboxes. Create an ' +
+          'email endpoint instead.',
+      );
+    }
+
+    if (target === 'email') {
+      const recipients = await this.endpoints.listRecipients(id);
+
+      if (recipients.length > 1) {
+        throw new ConflictError(
+          `An \`email\` endpoint holds exactly one mailbox, and this one has ` +
+            `${recipients.length}. Remove the others first.`,
+        );
+      }
+    }
   }
 
   /**

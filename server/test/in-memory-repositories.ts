@@ -687,7 +687,7 @@ export class InMemoryEndpointRepository implements EndpointRepository {
 
   async update(
     id: string,
-    data: { name?: string; enabled?: boolean },
+    data: { name?: string; enabled?: boolean; type?: 'email' | 'email_group' },
   ): Promise<Endpoint> {
     const existing = this.rows.get(id);
     if (!existing) throw new NotFoundError(`Endpoint ${id} not found`);

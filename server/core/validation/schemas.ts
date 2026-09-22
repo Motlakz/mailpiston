@@ -120,6 +120,15 @@ export const updateEndpointSchema = z
     name: z.string().trim().min(1).max(100).optional(),
     enabled: z.boolean().optional(),
     url: webhookUrlSchema.optional(),
+    /**
+     * Converting between the two mailbox subtypes.
+     *
+     * `webhook` is absent on purpose: it is not a wider or narrower version of
+     * a mailbox endpoint but a different delivery mechanism, with a URL and a
+     * signing secret where the others have verified recipients. Turning one
+     * into the other is deleting it and making another.
+     */
+    type: z.enum(['email', 'email_group']).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field must be provided',

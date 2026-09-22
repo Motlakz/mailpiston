@@ -66,7 +66,7 @@ export class NeonEndpointRepository implements EndpointRepository {
 
   async update(
     id: string,
-    data: { name?: string; enabled?: boolean },
+    data: { name?: string; enabled?: boolean; type?: 'email' | 'email_group' },
   ): Promise<Endpoint> {
     const [row] = await db
       .update(endpoints)

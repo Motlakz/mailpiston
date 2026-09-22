@@ -101,7 +101,7 @@ export interface EndpointRepository {
   list(): Promise<Endpoint[]>;
   update(
     id: string,
-    data: { name?: string; enabled?: boolean },
+    data: { name?: string; enabled?: boolean; type?: 'email' | 'email_group' },
   ): Promise<Endpoint>;
   delete(id: string): Promise<void>;
 

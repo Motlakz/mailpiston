@@ -249,10 +249,12 @@ export interface SendableAddressOption {
  */
 export function RecipientList({
   endpointId,
+  type,
   recipients,
   addresses,
 }: {
   endpointId: string;
+  type: EndpointType;
   recipients: RecipientRow[];
   addresses: SendableAddressOption[];
 }) {
@@ -277,6 +279,29 @@ export function RecipientList({
       setError(messageFor(caught));
     }
   }
+
+  /**
+   * Widens the endpoint so it can hold more than one mailbox.
+   *
+   * An `email` endpoint created with one recipient was otherwise a dead end:
+   * a second is refused, and the only escape was deleting the endpoint, which
+   * means verifying the mailbox again and re-binding every address.
+   */
+  async function convertToGroup() {
+    setError(null);
+
+    try {
+      await apiRequest(`/api/v1/endpoints/${endpointId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ type: 'email_group' }),
+      });
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
+
+  const atCapacity = type === 'email' && recipients.length >= 1;
 
   async function remove(recipientId: string) {
     setError(null);
@@ -321,21 +346,39 @@ export function RecipientList({
         </div>
       ))}
 
-      <form onSubmit={add} className="flex flex-wrap items-center gap-2">
-        <Input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="you@personal.example"
-          aria-label="Recipient email"
-          required
-          className="w-56"
-        />
-        <Button type="submit" variant="outline" size="sm" disabled={pending}>
-          Add recipient
-        </Button>
-        {error ? <span className="text-xs text-destructive">{error}</span> : null}
-      </form>
+      {atCapacity ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            This endpoint holds one mailbox.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={convertToGroup}
+            disabled={pending}
+          >
+            Convert to group
+          </Button>
+          {error ? <span className="text-xs text-destructive">{error}</span> : null}
+        </div>
+      ) : (
+        <form onSubmit={add} className="flex flex-wrap items-center gap-2">
+          <Input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@personal.example"
+            aria-label="Recipient email"
+            required
+            className="w-56"
+          />
+          <Button type="submit" variant="outline" size="sm" disabled={pending}>
+            Add recipient
+          </Button>
+          {error ? <span className="text-xs text-destructive">{error}</span> : null}
+        </form>
+      )}
     </div>
   );
 }
