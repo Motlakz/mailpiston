@@ -19,6 +19,16 @@ export function formatWhen(date: Date): string {
     : date.toISOString().slice(0, 10);
 }
 
+/**
+ * A date, without a time.
+ *
+ * Read in UTC, deliberately. These formatters run inside server components, so
+ * the machine's "local" time is the *renderer's* and never the viewer's — UTC
+ * on a deployment, whatever the laptop is set to in development. Mixing that
+ * with the UTC timestamps shown elsewhere produced a message dated 20 Sep in
+ * the list and 19 Sep 22:42 UTC in the reading pane: both correct, one calendar
+ * day apart, from a single timestamp.
+ */
 export function formatDay(date: Date): string {
   const day = pad(date.getUTCDate());
   const month = MONTHS[date.getUTCMonth()];
