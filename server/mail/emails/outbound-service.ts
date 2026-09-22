@@ -1,7 +1,8 @@
 import 'server-only';
 
 import { ConflictError, NotFoundError, ValidationError } from '@/server/core/errors';
-import type { Email } from '@/server/core/types';
+import type { AddressWithDomain, Email } from '@/server/core/types';
+import { formatSender, parseSender } from '@/server/core/validation/sender';
 import type { MailProvider } from '@/server/providers/types';
 import type {
   AddressRepository,
@@ -32,7 +33,12 @@ import type {
  * than at the provider, where the error would be someone else's vocabulary.
  */
 export interface SendInput {
-  addressId: string;
+  /**
+   * `user@example.com`, or `Display Name <user@example.com>`. Exactly one of
+   * this and `addressId` — see `core/validation/sender.ts` for why both exist.
+   */
+  from?: string;
+  addressId?: string;
   to: string[];
   cc?: string[];
   bcc?: string[];
@@ -47,6 +53,8 @@ export interface ReplyInput {
   /** Defaults to the sender of the message being answered. */
   to?: string[];
   cc?: string[];
+  /** A display name for the reply. The address in it must be the parent's. */
+  from?: string;
 }
 
 export class OutboundService {
@@ -74,7 +82,7 @@ export class OutboundService {
     // that makes a mailbox untrustworthy.
     await this.sendLimit.assert();
 
-    const from = await this.requireSendableAddress(input.addressId);
+    const { address: from, header } = await this.resolveSender(input);
 
     const thread = await this.threads.create({
       subject: input.subject,
@@ -84,6 +92,9 @@ export class OutboundService {
     const queued = await this.queue({
       threadId: thread.id,
       addressId: from.id,
+      // The row keeps the bare address, never the rendered header: this is the
+      // value a reply addresses and a thread is grouped by, and a display name
+      // in it would make the same address two different senders.
       from: from.email,
       to: input.to,
       cc: input.cc ?? [],
@@ -96,7 +107,7 @@ export class OutboundService {
 
     return this.dispatch(queued, () =>
       this.provider.send({
-        from: from.email,
+        from: header,
         to: input.to,
         cc: input.cc,
         bcc: input.bcc,
@@ -130,6 +141,7 @@ export class OutboundService {
     }
 
     const from = await this.requireSendableAddress(parent.addressId);
+    const header = this.replyHeader(from.email, input.from);
 
     // The parent's own id if it has one; otherwise the provider's, which is
     // what the recipient's client saw.
@@ -158,7 +170,7 @@ export class OutboundService {
 
     const sent = await this.dispatch(queued, () =>
       this.provider.reply({
-        from: from.email,
+        from: header,
         to,
         cc: input.cc,
         subject,
@@ -210,6 +222,80 @@ export class OutboundService {
     });
 
     return { emailId: email?.id ?? null };
+  }
+
+  /**
+   * Turns whichever sender the caller gave into an address and a `From:`.
+   *
+   * Two values come back because they are genuinely two things: the address is
+   * what authorises the send and owns the thread, and the header is what the
+   * recipient reads. They differ only by a display name.
+   */
+  private async resolveSender(
+    input: Pick<SendInput, 'from' | 'addressId'>,
+  ): Promise<{ address: AddressWithDomain; header: string }> {
+    if (input.addressId) {
+      const address = await this.requireSendableAddress(input.addressId);
+      return { address, header: address.email };
+    }
+
+    if (!input.from) {
+      throw new ValidationError(
+        'A send needs a `from` address, or the `addressId` of a managed address',
+      );
+    }
+
+    const sender = parseSender(input.from);
+
+    if (!sender) {
+      throw new ValidationError(
+        `${input.from} is not an email address. Use user@example.com, or Display Name <user@example.com>.`,
+      );
+    }
+
+    const address = await this.addresses.findByEmail(sender.email);
+
+    if (!address) {
+      // Named as a 404 on the *address*, because that is the thing to go fix:
+      // the domain may not be connected, or the address may not exist yet.
+      throw new NotFoundError(
+        `${sender.email} is not one of your addresses, so there is no alias authorising it as a From`,
+      );
+    }
+
+    return {
+      address: await this.requireSendableAddress(address.id),
+      header: formatSender({ ...sender, email: address.email }),
+    };
+  }
+
+  /**
+   * The `From:` for a reply.
+   *
+   * The address is the parent's and is not negotiable — a reply sent as
+   * someone else is a new conversation carrying a thread's headers. So a
+   * `from` on a reply may add a display name and nothing more, and one that
+   * names a different address is refused rather than quietly ignored.
+   */
+  private replyHeader(email: string, from?: string): string {
+    if (!from) return email;
+
+    const sender = parseSender(from);
+
+    if (!sender) {
+      throw new ValidationError(
+        `${from} is not an email address. Use user@example.com, or Display Name <user@example.com>.`,
+      );
+    }
+
+    if (sender.email !== email.toLowerCase()) {
+      throw new ConflictError(
+        `A reply goes out as ${email}, the address the message it answers belongs to. ` +
+          `Omit \`from\`, or use ${email} in it — sending as ${sender.email} would start a new conversation.`,
+      );
+    }
+
+    return formatSender({ ...sender, email });
   }
 
   private async requireSendableAddress(addressId: string) {
