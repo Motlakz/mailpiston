@@ -7,7 +7,7 @@ import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 import type { MailFilterEntry } from '@/server/core/types';
 
 /**
@@ -161,8 +161,3 @@ function FilterList({
   );
 }
 
-function messageFor(error: unknown): string {
-  return error instanceof ApiRequestError
-    ? error.message
-    : 'Something went wrong. Check the server logs.';
-}

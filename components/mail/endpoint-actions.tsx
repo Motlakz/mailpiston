@@ -25,13 +25,7 @@ import {
 } from '@/components/ui/table';
 import { Dialog } from '@/components/ui/dialog';
 import { keepWithin } from '@/lib/select-value';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
-
-function messageFor(error: unknown): string {
-  return error instanceof ApiRequestError
-    ? error.message
-    : 'Something went wrong. Check the server logs.';
-}
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 type EndpointType = 'email' | 'email_group' | 'webhook';
 

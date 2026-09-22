@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 export interface DriftFinding {
   resourceId: string;
@@ -543,12 +543,6 @@ export function CopyButton({ value }: { value: string }) {
       <Icon name={copied ? 'verified' : 'copy'} size={12} />
     </Button>
   );
-}
-
-function messageFor(error: unknown): string {
-  return error instanceof ApiRequestError
-    ? error.message
-    : 'Something went wrong. Check the server logs.';
 }
 
 /**

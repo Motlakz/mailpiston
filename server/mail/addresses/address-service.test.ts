@@ -53,6 +53,60 @@ describe('DomainService', () => {
     expect(domain.dnsRecords.every((record) => record.present)).toBe(true);
   });
 
+  it('adopts a catch-all that already exists at the provider', async () => {
+    // Importing a domain that was already set up by hand. The provider has the
+    // `*` alias; we have no record of it, so the create path used to POST a
+    // second one and surface the provider's 400 to the operator.
+    const providerDomain = await provider.createDomain({
+      name: 'existing-domain.test',
+    });
+    await provider.verifyDomain(providerDomain.id);
+    const existing = await provider.createAlias({
+      domainId: providerDomain.id,
+      localPart: '*',
+      recipients: ['someone@elsewhere.test'],
+    });
+
+    const domain = await domains.create({
+      name: 'existing-domain.test',
+      createCatchAll: true,
+    });
+
+    expect(domain.catchAllAliasId).toBe(existing.id);
+    expect(await provider.listAliases('existing-domain.test')).toHaveLength(1);
+  });
+
+  it('leaves an adopted catch-all pointing where it already pointed', async () => {
+    // Pressing Add must not reroute mail as a side effect. Repointing is the
+    // Repair catch-all action, which the operator takes deliberately.
+    const providerDomain = await provider.createDomain({
+      name: 'existing-domain.test',
+    });
+    await provider.verifyDomain(providerDomain.id);
+    await provider.createAlias({
+      domainId: providerDomain.id,
+      localPart: '*',
+      recipients: ['someone@elsewhere.test'],
+    });
+
+    const domain = await domains.create({
+      name: 'existing-domain.test',
+      createCatchAll: true,
+    });
+
+    const [adopted] = await provider.listAliases('existing-domain.test');
+    expect(adopted.recipients).toEqual(['someone@elsewhere.test']);
+
+    // Repair is the action that repoints it, and it still works on an adopted
+    // alias — so the operator is one explicit click from correct routing.
+    await domains.repairCatchAll(domain.id);
+
+    const [repaired] = await provider.listAliases('existing-domain.test');
+    expect(repaired.recipients).toEqual([
+      expect.stringContaining('/api/providers/forward-email/inbound'),
+    ]);
+  });
+
   it('rejects a duplicate domain with a ConflictError, not a 500', async () => {
     await domains.create({ name: 'fixture-domain.test' });
 
@@ -235,6 +289,41 @@ describe('AddressService', () => {
 
     expect(updated.providerAliasId).not.toBeNull();
     expect(await provider.listAliases('fixture-domain.test')).toHaveLength(2);
+  });
+
+  it('adopts an existing provider alias when sending is turned on later', async () => {
+    const domain = await verifiedDomain('fixture-domain.test', true);
+
+    const address = await addresses.create({
+      domainId: domain.id,
+      localPart: 'notifications',
+      canSend: false,
+      enabled: true,
+    });
+
+    // The operator had already made this alias at the provider by hand. It was
+    // routed here by the catch-all, so we hold no alias id for it — and
+    // creating one is the provider's "already exists" 400, not a new alias.
+    const existing = await provider.createAlias({
+      domainId: domain.providerDomainId!,
+      localPart: 'notifications',
+      recipients: ['someone@elsewhere.test'],
+    });
+
+    const updated = await addresses.update(address.id, { canSend: true });
+
+    expect(updated.providerAliasId).toBe(existing.id);
+
+    // Adopting adds our ingress rather than replacing what was there: the
+    // operator's own forwarding keeps working and mail also reaches us.
+    const alias = await provider.findAlias(
+      domain.providerDomainId!,
+      'notifications',
+    );
+    expect(alias?.recipients).toEqual([
+      'someone@elsewhere.test',
+      expect.stringContaining('/api/providers/forward-email/inbound'),
+    ]);
   });
 
   it('deletes the provider alias alongside the row', async () => {

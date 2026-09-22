@@ -158,13 +158,33 @@ export class AddressService {
         throw new ConflictError(`Domain ${domain.name} has no provider record`);
       }
 
-      const alias = await this.provider.createAlias({
-        domainId: domain.providerDomainId,
-        localPart: address.localPart,
-        recipients: [inboundIngressUrl()],
-        enabled: input.enabled ?? address.enabled,
-        description: 'Managed by MailPiston',
-      });
+      const providerDomainId = domain.providerDomainId;
+      const ingressUrl = inboundIngressUrl();
+
+      // Adopt an alias the provider already holds, the way `create` does. The
+      // local part exists here as an inbound-only route, so the provider may
+      // well have its own alias for it already — creating a second one is a
+      // 400 ("Alias already exists for domain"), not a new alias.
+      const existing = await this.provider.findAlias(
+        providerDomainId,
+        address.localPart,
+      );
+
+      const alias = existing
+        ? await this.provider.updateAlias(existing.id, {
+            domainId: providerDomainId,
+            recipients: Array.from(
+              new Set([...existing.recipients, ingressUrl]),
+            ),
+            enabled: input.enabled ?? address.enabled,
+          })
+        : await this.provider.createAlias({
+            domainId: providerDomainId,
+            localPart: address.localPart,
+            recipients: [ingressUrl],
+            enabled: input.enabled ?? address.enabled,
+            description: 'Managed by MailPiston',
+          });
 
       providerAliasId = alias.id;
     } else if (

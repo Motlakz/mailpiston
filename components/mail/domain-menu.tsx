@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 export function DomainMenu({
   domainId,
@@ -36,11 +36,7 @@ export function DomainMenu({
       await apiRequest(path, { method });
       startTransition(() => router.refresh());
     } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : 'Something went wrong. Check the server logs.',
-      );
+      setError(messageFor(caught));
     }
   }
 

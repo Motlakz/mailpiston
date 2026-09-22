@@ -12,7 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 import { useOptimisticStore } from '@/lib/optimistic-store';
 import type { SpamVerdict } from '@/server/core/types';
 
@@ -77,10 +77,7 @@ export function MessageActions({
     } catch (caught) {
       // The guess was wrong; the server's version is what stays on screen.
       clearEmail(emailId);
-      const message =
-        caught instanceof ApiRequestError
-          ? caught.message
-          : 'Something went wrong. Check the server logs.';
+      const message = messageFor(caught);
       setError(message);
       toast.error(message);
     } finally {

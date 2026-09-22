@@ -17,13 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
-
-function messageFor(error: unknown): string {
-  return error instanceof ApiRequestError
-    ? error.message
-    : 'Something went wrong. Check the server logs.';
-}
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 export interface ApiKeyRow {
   id: string;
