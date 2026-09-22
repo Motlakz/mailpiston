@@ -75,7 +75,15 @@ export interface WithApiOptions<TBody> {
   audit?: AuditOptions;
 }
 
-type RouteContext = { params: Promise<Record<string, string>> };
+/**
+ * Next hands this to every route handler, dynamic or not — but it sets
+ * `params` to `undefined` when the segment has no dynamic parts (see
+ * `params: context.params ? … : undefined` in
+ * `next/dist/server/route-modules/app-route/module.js`). The context object
+ * being present therefore says nothing about whether the promise is, and
+ * typing `params` as always-present is what let the bug below compile.
+ */
+type RouteContext = { params?: Promise<Record<string, string>> };
 
 export function withApi<TBody = undefined>(
   handler: (context: ApiContext<TBody>) => Promise<Response>,
@@ -129,7 +137,11 @@ export function withApi<TBody = undefined>(
       }
 
       // 4. Run.
-      const params = routeContext ? await routeContext.params : {};
+      // Awaiting an absent promise yields `undefined`, not the empty object
+      // every reader downstream assumes — `recordAudit` reads `params.id`, so
+      // an audited route with no `[id]` segment threw a TypeError and lost its
+      // audit entry while the mutation itself succeeded.
+      const params = (await routeContext?.params) ?? {};
       const response = await handler({ request, body, actor, apiKey, params, tenantId });
 
       // 5. Record, on success only. A failed mutation changed nothing, and an
