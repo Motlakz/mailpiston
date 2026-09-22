@@ -53,7 +53,10 @@ describe('repository tenant scoping', () => {
      * predicate held in a variable, `const scope = and(eq(t.tenantId, …), …)`,
      * for a statement that then says only `.where(scope)`.
      */
-    const scopedNames = [...source.matchAll(/const (\w+)\s*=([\s\S]*?);\n/g)]
+    // Tolerant of CRLF, which is what git hands you on Windows after a
+    // checkout. Matching only a bare newline found nothing there, and
+    // reported scoped code as unscoped for a reason unrelated to tenancy.
+    const scopedNames = [...source.matchAll(/const (\w+)\s*=([\s\S]*?);\r?\n/g)]
       .filter((match) => match[2].includes('tenantId'))
       .map((match) => match[1]);
 
