@@ -184,4 +184,69 @@ describe('mailbox endpoints', () => {
       service.addRecipient(endpoint.id, 'second@personal.example'),
     ).rejects.toThrow(/exactly one mailbox/);
   });
+
+  it('widens an `email` endpoint into a group so a second mailbox fits', async () => {
+    // The way out of the dead end above. Deleting and recreating would mean
+    // verifying the first mailbox again and re-binding every address.
+    const { endpoint } = await service.create({ name: 'My inbox', type: 'email' });
+    await service.addRecipient(endpoint.id, 'first@personal.example');
+
+    const widened = await service.update(endpoint.id, { type: 'email_group' });
+    expect(widened.type).toBe('email_group');
+
+    await service.addRecipient(endpoint.id, 'second@personal.example');
+    expect(await service.listRecipients(endpoint.id)).toHaveLength(2);
+  });
+
+  it('keeps the verified mailbox it already had when widening', async () => {
+    const { endpoint } = await service.create({ name: 'My inbox', type: 'email' });
+    const recipient = await service.addRecipient(
+      endpoint.id,
+      'first@personal.example',
+    );
+
+    await service.update(endpoint.id, { type: 'email_group' });
+
+    const [kept] = await service.listRecipients(endpoint.id);
+    expect(kept.id).toBe(recipient.id);
+    expect(kept.email).toBe('first@personal.example');
+  });
+
+  it('refuses to narrow a group that would lose recipients', async () => {
+    const { endpoint } = await service.create({
+      name: 'Team',
+      type: 'email_group',
+    });
+    await service.addRecipient(endpoint.id, 'first@personal.example');
+    await service.addRecipient(endpoint.id, 'second@personal.example');
+
+    await expect(
+      service.update(endpoint.id, { type: 'email' }),
+    ).rejects.toThrow(/Remove the others first/);
+  });
+
+  it('narrows a group that holds one mailbox, which discards nothing', async () => {
+    const { endpoint } = await service.create({
+      name: 'Team',
+      type: 'email_group',
+    });
+    await service.addRecipient(endpoint.id, 'only@personal.example');
+
+    const narrowed = await service.update(endpoint.id, { type: 'email' });
+    expect(narrowed.type).toBe('email');
+  });
+
+  it('refuses to turn a webhook endpoint into a mailbox one', async () => {
+    // Not a wider or narrower version of the same thing: a webhook has a URL
+    // and a signing secret where these have verified recipients.
+    const { endpoint } = await service.create({
+      name: 'App',
+      type: 'webhook',
+      url: URL_PUBLIC,
+    });
+
+    await expect(
+      service.update(endpoint.id, { type: 'email' }),
+    ).rejects.toThrow(/delivers to a URL/);
+  });
 });

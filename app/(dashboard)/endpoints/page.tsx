@@ -169,6 +169,7 @@ export default async function EndpointsPage() {
                     <p className="endpoint-card__label">Forwards to</p>
                     <RecipientList
                       endpointId={endpoint.id}
+                      type={endpoint.type}
                       recipients={recipients}
                       addresses={sendable}
                     />
