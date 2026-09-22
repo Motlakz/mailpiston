@@ -31,7 +31,13 @@ export function BulkActions({ binned = false }: { binned?: boolean }) {
   const [running, setRunning] = useState(false);
   const { confirmProps, ask } = useConfirm();
 
-  const selected = useOptimisticStore((state) => Object.keys(state.selected));
+  // Subscribe to the selection map itself, not to an array derived from it.
+  // The store only replaces this object when the selection changes, so the
+  // snapshot is stable between renders; a selector returning `Object.keys(...)`
+  // hands back a new array on every read, which reads as a changed store on
+  // every render and loops until React gives up.
+  const selection = useOptimisticStore((state) => state.selected);
+  const selected = Object.keys(selection);
   const applyEmail = useOptimisticStore((state) => state.applyEmail);
   const clearSelection = useOptimisticStore((state) => state.clearSelection);
   const clearAll = useOptimisticStore((state) => state.clearAll);
