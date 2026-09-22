@@ -104,6 +104,26 @@ export class DomainService {
       throw new ConflictError(`Domain ${domain.name} has no provider record`);
     }
 
+    /**
+     * Adopt a catch-all the provider already has.
+     *
+     * The guard above only knows what *we* recorded, so importing a domain
+     * that was already set up at the provider reached `createAlias` and got
+     * back "Alias already exists for domain" — a 400 for a state that is not
+     * an error. The button says "Add or import"; this is the import half.
+     *
+     * Its recipients are deliberately left alone. An existing catch-all may be
+     * forwarding somewhere the operator depends on, and silently repointing it
+     * would reroute live mail as a side effect of pressing Add. Reconciliation
+     * reports it as `recipient_not_our_ingress` and the operator repoints it
+     * with Repair catch-all, which is the explicit action for that.
+     */
+    const existing = await this.provider.findAlias(domain.providerDomainId, '*');
+
+    if (existing) {
+      return this.domains.update(id, { catchAllAliasId: existing.id });
+    }
+
     const alias = await this.provider.createAlias({
       domainId: domain.providerDomainId,
       localPart: '*',
