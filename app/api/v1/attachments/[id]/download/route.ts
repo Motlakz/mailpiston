@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { GoneError, NotFoundError } from '@/server/core/errors';
 import { withApi } from '@/server/core/http';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 import { getStorage } from '@/server/storage';
 
 /** Long enough to click, short enough that a leaked URL expires by itself. */
@@ -21,7 +21,8 @@ const PRESIGNED_TTL_SECONDS = 300;
  * have it.
  */
 export const GET = withApi(
-  async ({ params }) => {
+  async ({ params, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const attachment = await repositories.emails.findAttachment(params.id);
     if (!attachment) throw new NotFoundError(`Attachment ${params.id} not found`);
 

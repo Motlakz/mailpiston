@@ -2,19 +2,19 @@ import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
 import { createDomainSchema } from '@/server/core/validation';
-import { getDomainService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 export const GET = withApi(
-  async () => {
-    const domains = await getDomainService().list();
+  async ({ tenantId }) => {
+    const domains = await servicesFor(tenantId).domains().list();
     return NextResponse.json({ data: domains });
   },
   { endpoint: '/v1/domains' },
 );
 
 export const POST = withApi(
-  async ({ body }) => {
-    const domain = await getDomainService().create(body);
+  async ({ body, tenantId }) => {
+    const domain = await servicesFor(tenantId).domains().create(body);
     return NextResponse.json({ data: domain }, { status: 201 });
   },
   {

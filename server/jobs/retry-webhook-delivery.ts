@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { getWebhookService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 import { inngest, webhookDeliveryFailed } from './inngest';
 
@@ -36,7 +36,7 @@ export const retryWebhookDelivery = inngest.createFunction(
     await step.sleep('wait-before-retry', event.data.delayMs);
 
     return step.run('deliver-webhook', () =>
-      getWebhookService().attempt(event.data.deliveryId),
+      servicesFor(event.data.tenantId).webhooks().attempt(event.data.deliveryId),
     );
   },
 );

@@ -6,9 +6,17 @@ import { ReplyForm } from '@/components/mail/compose';
 import { MessageActions } from '@/components/mail/message-actions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatBytes } from '@/lib/format';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
-export async function ReadingPane({ emailId }: { emailId: string }) {
+export async function ReadingPane({
+  emailId,
+  tenantId,
+}: {
+  emailId: string;
+  /** Passed down rather than resolved here: the page already has it. */
+  tenantId: string;
+}) {
+  const repositories = repositoriesFor(tenantId);
   const email = await repositories.emails.findById(emailId);
 
   if (!email) {

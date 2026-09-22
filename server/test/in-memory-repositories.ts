@@ -230,6 +230,12 @@ export class InMemoryAddressRepository implements AddressRepository {
  * would make the tests pass for the wrong reason.
  */
 export class InMemoryEmailRepository implements EmailRepository {
+  async countOutboundSince(since: Date): Promise<number> {
+    return [...this.rows.values()].filter(
+      (row) => row.direction === 'outbound' && row.createdAt >= since,
+    ).length;
+  }
+
   readonly rows = new Map<string, Email>();
   readonly attachments = new Map<string, EmailAttachment>();
   readonly events: MailEvent[] = [];

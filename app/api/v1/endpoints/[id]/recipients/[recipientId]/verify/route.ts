@@ -5,15 +5,15 @@ import {
   verifyRecipientSchema,
   type VerifyRecipientInput,
 } from '@/server/core/validation';
-import { getEndpointService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 /**
  * Proof of control, in two steps on one route: `send` mails a code to the
  * address, `confirm` presents it back.
  */
 export const POST = withApi<VerifyRecipientInput>(
-  async ({ body, params }) => {
-    const service = getEndpointService();
+  async ({ body, params, tenantId }) => {
+    const service = servicesFor(tenantId).endpoints();
 
     if (body.action === 'send') {
       const { expiresAt } = await service.sendRecipientChallenge(

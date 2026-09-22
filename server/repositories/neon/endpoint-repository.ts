@@ -24,6 +24,14 @@ type EndpointRow = typeof endpoints.$inferSelect;
 type RecipientRow = typeof endpointEmailRecipients.$inferSelect;
 
 export class NeonEndpointRepository implements EndpointRepository {
+  /**
+   * Scoped to one tenant. Child tables — webhook configs, recipients, the
+   * address binding — carry no tenant column of their own; each is reached
+   * through an endpoint or address id this instance has already filtered, so
+   * the guarantee holds one level down without denormalising further.
+   */
+  constructor(private readonly tenantId: string) {}
+
   async create(data: {
     name: string;
     type: Endpoint['type'];
@@ -31,7 +39,7 @@ export class NeonEndpointRepository implements EndpointRepository {
   }): Promise<Endpoint> {
     const [row] = await db
       .insert(endpoints)
-      .values({ id: newId('endpoint'), ...data })
+      .values({ id: newId('endpoint'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toEndpoint(row);
@@ -41,14 +49,18 @@ export class NeonEndpointRepository implements EndpointRepository {
     const [row] = await db
       .select()
       .from(endpoints)
-      .where(eq(endpoints.id, id))
+      .where(and(eq(endpoints.tenantId, this.tenantId), eq(endpoints.id, id)))
       .limit(1);
 
     return row ? toEndpoint(row) : null;
   }
 
   async list(): Promise<Endpoint[]> {
-    const rows = await db.select().from(endpoints).orderBy(asc(endpoints.name));
+    const rows = await db
+      .select()
+      .from(endpoints)
+      .where(eq(endpoints.tenantId, this.tenantId))
+      .orderBy(asc(endpoints.name));
     return rows.map(toEndpoint);
   }
 
@@ -59,7 +71,7 @@ export class NeonEndpointRepository implements EndpointRepository {
     const [row] = await db
       .update(endpoints)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(endpoints.id, id))
+      .where(and(eq(endpoints.tenantId, this.tenantId), eq(endpoints.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Endpoint ${id} not found`);
@@ -69,7 +81,7 @@ export class NeonEndpointRepository implements EndpointRepository {
   async delete(id: string): Promise<void> {
     const deleted = await db
       .delete(endpoints)
-      .where(eq(endpoints.id, id))
+      .where(and(eq(endpoints.tenantId, this.tenantId), eq(endpoints.id, id)))
       .returning({ id: endpoints.id });
 
     if (deleted.length === 0) throw new NotFoundError(`Endpoint ${id} not found`);
@@ -86,7 +98,11 @@ export class NeonEndpointRepository implements EndpointRepository {
       .from(addressEndpoints)
       .innerJoin(endpoints, eq(addressEndpoints.endpointId, endpoints.id))
       .where(
-        and(eq(addressEndpoints.addressId, addressId), eq(endpoints.enabled, true)),
+        and(
+          eq(endpoints.tenantId, this.tenantId),
+          eq(addressEndpoints.addressId, addressId),
+          eq(endpoints.enabled, true),
+        ),
       )
       .orderBy(asc(endpoints.name));
 

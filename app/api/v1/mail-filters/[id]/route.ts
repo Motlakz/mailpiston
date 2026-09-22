@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 export const DELETE = withApi(
-  async ({ params }) => {
+  async ({ params, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     await repositories.mailFilters.remove(params.id);
     return NextResponse.json({ data: { id: params.id, deleted: true } });
   },

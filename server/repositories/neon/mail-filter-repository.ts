@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 
 import { ConflictError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -12,10 +12,13 @@ import type { MailFilterRepository } from '@/server/repositories/types';
 import { isUniqueViolation } from './domain-repository';
 
 export class NeonMailFilterRepository implements MailFilterRepository {
+  constructor(private readonly tenantId: string) {}
+
   async list(): Promise<MailFilterEntry[]> {
     const rows = await db
       .select()
       .from(mailFilterEntries)
+      .where(eq(mailFilterEntries.tenantId, this.tenantId))
       .orderBy(asc(mailFilterEntries.kind), asc(mailFilterEntries.pattern));
 
     return rows.map(toEntry);
@@ -34,7 +37,8 @@ export class NeonMailFilterRepository implements MailFilterRepository {
         kind: mailFilterEntries.kind,
         pattern: mailFilterEntries.pattern,
       })
-      .from(mailFilterEntries);
+      .from(mailFilterEntries)
+      .where(eq(mailFilterEntries.tenantId, this.tenantId));
 
     return {
       allow: rows.filter((row) => row.kind === 'allow').map((row) => row.pattern),
@@ -52,6 +56,7 @@ export class NeonMailFilterRepository implements MailFilterRepository {
         .insert(mailFilterEntries)
         .values({
           id: newId('filter'),
+          tenantId: this.tenantId,
           kind: data.kind,
           // Lower-cased on the way in so the unique index and the classifier's
           // comparison agree without either having to remember.
@@ -72,7 +77,14 @@ export class NeonMailFilterRepository implements MailFilterRepository {
   }
 
   async remove(id: string): Promise<void> {
-    await db.delete(mailFilterEntries).where(eq(mailFilterEntries.id, id));
+    await db
+      .delete(mailFilterEntries)
+      .where(
+        and(
+          eq(mailFilterEntries.tenantId, this.tenantId),
+          eq(mailFilterEntries.id, id),
+        ),
+      );
   }
 }
 

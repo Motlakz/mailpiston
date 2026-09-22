@@ -7,7 +7,7 @@ import {
   deleteDomainWebhookKey,
   setDomainWebhookKey,
 } from '@/server/mail/domains/webhook-keys';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 const setWebhookKeySchema = z.object({
   webhookKey: z.string().min(8, 'A webhook key that short is not a real one'),
@@ -22,7 +22,8 @@ const setWebhookKeySchema = z.object({
  * whether a key is configured — which the domains list already reports.
  */
 export const PUT = withApi(
-  async ({ params, body }) => {
+  async ({ params, body, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const domain = await repositories.domains.findById(params.id);
     if (!domain) throw new NotFoundError(`Domain ${params.id} not found`);
 
@@ -38,7 +39,8 @@ export const PUT = withApi(
 );
 
 export const DELETE = withApi(
-  async ({ params }) => {
+  async ({ params, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const domain = await repositories.domains.findById(params.id);
     if (!domain) throw new NotFoundError(`Domain ${params.id} not found`);
 

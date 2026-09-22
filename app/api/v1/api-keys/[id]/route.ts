@@ -1,5 +1,5 @@
 import { withApi } from '@/server/core/http';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 /**
  * Revokes a key. It is a timestamp, not a delete: an audit trail that loses the
@@ -9,7 +9,8 @@ import { repositories } from '@/server/repositories';
  * and nothing about a key is cached.
  */
 export const DELETE = withApi(
-  async ({ params }) => {
+  async ({ params, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     await repositories.apiKeys.revoke(params.id);
     return new Response(null, { status: 204 });
   },

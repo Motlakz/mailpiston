@@ -14,12 +14,13 @@ import { inngest, webhookDeliveryFailed } from './inngest';
  * schedule would leave a delivery that looks queued forever.
  */
 export const inngestRetryScheduler: RetryScheduler = {
-  async scheduleRetry({ deliveryId, attempt, delayMs }) {
+  async scheduleRetry({ tenantId, deliveryId, attempt, delayMs }) {
     // Built through the event definition rather than as a loose object literal,
     // so the name and the data shape come from the same place the function's
     // trigger does. A typo in either is a compile error, not a retry that never
     // arrives.
     const { name, data } = webhookDeliveryFailed.create({
+      tenantId,
       deliveryId,
       attempt,
       delayMs,

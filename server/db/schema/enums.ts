@@ -91,3 +91,12 @@ export const reconciliationItemStatus = pgEnum('reconciliation_item_status', [
   'missing',
   'error',
 ]);
+
+/**
+ * What a member may do inside a tenant.
+ *
+ * `owner` is the only role the product enforces today — it exists as an enum
+ * rather than a boolean so adding `member` later is a migration of one value,
+ * not a column swap across every membership row.
+ */
+export const tenantRole = pgEnum('tenant_role', ['owner', 'member']);

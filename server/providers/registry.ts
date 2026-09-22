@@ -3,6 +3,7 @@ import 'server-only';
 import { env, inboundIngressUrl } from '@/server/core/config';
 import { NotFoundError } from '@/server/core/errors';
 import { resolveInboundWebhookKeys } from '@/server/mail/domains/webhook-keys';
+import { tenantApiToken } from '@/server/core/tenancy/credentials';
 
 import { ForwardEmailClient } from './forward-email/client';
 import { ForwardEmailProvider } from './forward-email/provider';
@@ -21,6 +22,7 @@ export type ProviderId = 'forward-email' | 'mock';
  */
 class MailProviderRegistry {
   private readonly instances = new Map<ProviderId, MailProvider>();
+  private readonly tenantInstances = new Map<string, MailProvider>();
 
   get(id: ProviderId): MailProvider {
     const existing = this.instances.get(id);
@@ -34,6 +36,42 @@ class MailProviderRegistry {
   /** The provider selected by `MAIL_PROVIDER`. */
   active(): MailProvider {
     return this.get(env.MAIL_PROVIDER);
+  }
+
+  /**
+   * The provider for one tenant, using that tenant's own credentials.
+   *
+   * This is the whole bring-your-own-provider model in one method. Each tenant
+   * holds their own account, so their sending reputation, their send quota and
+   * their provider bill stay theirs — and MailPiston never fronts anybody's
+   * mail under a shared key.
+   *
+   * The token is not read here. It is resolved inside the request, so this
+   * stays synchronous and the service graph above it does not have to become
+   * async to build.
+   */
+  forTenant(tenantId: string): MailProvider {
+    const id = env.MAIL_PROVIDER;
+
+    // The mock provider has no credentials to scope, so every tenant shares it.
+    if (id === 'mock') return this.get(id);
+
+    const existing = this.tenantInstances.get(tenantId);
+    if (existing) return existing;
+
+    const created = new ForwardEmailProvider(
+      new ForwardEmailClient({
+        apiToken: () => tenantApiToken(tenantId),
+        baseUrl: env.FORWARD_EMAIL_API_URL,
+        timeoutMs: env.FORWARD_EMAIL_TIMEOUT_MS,
+      }),
+      new ForwardEmailVerifier(resolveInboundWebhookKeys),
+      inboundIngressUrl(),
+      env.FORWARD_EMAIL_MONTHLY_ALLOWANCE ?? null,
+    );
+
+    this.tenantInstances.set(tenantId, created);
+    return created;
   }
 
   private create(id: ProviderId): MailProvider {

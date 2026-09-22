@@ -5,10 +5,11 @@ import {
   createEndpointSchema,
   type CreateEndpointInput,
 } from '@/server/core/validation';
-import { getEndpointService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 export const GET = withApi(
-  async () => NextResponse.json({ data: await getEndpointService().list() }),
+  async ({ tenantId }) =>
+    NextResponse.json({ data: await servicesFor(tenantId).endpoints().list() }),
   { endpoint: '/v1/endpoints' },
 );
 
@@ -21,8 +22,8 @@ export const GET = withApi(
  * hands it back. Losing it means rotating it, which is a button.
  */
 export const POST = withApi<CreateEndpointInput>(
-  async ({ body }) => {
-    const { endpoint, secret } = await getEndpointService().create(body);
+  async ({ body, tenantId }) => {
+    const { endpoint, secret } = await servicesFor(tenantId).endpoints().create(body);
     return NextResponse.json({ data: { ...endpoint, secret } }, { status: 201 });
   },
   {

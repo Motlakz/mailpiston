@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
 import { createMailFilterSchema } from '@/server/core/validation';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 /**
  * The operator's standing allow and deny decisions (roadmap Phase 12).
@@ -11,7 +11,8 @@ import { repositories } from '@/server/repositories';
  * worth blocking on one is worth blocking on all of them.
  */
 export const GET = withApi(
-  async () => {
+  async ({ tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const entries = await repositories.mailFilters.list();
     return NextResponse.json({ data: entries });
   },
@@ -19,7 +20,8 @@ export const GET = withApi(
 );
 
 export const POST = withApi(
-  async ({ body }) => {
+  async ({ body, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const entry = await repositories.mailFilters.add(body);
     return NextResponse.json({ data: entry }, { status: 201 });
   },

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getWebhookService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 /**
  * Retry one delivery now.
@@ -16,8 +16,8 @@ import { getWebhookService } from '@/server/mail/services';
  * nothing to do.
  */
 export const POST = withApi(
-  async ({ params }) => {
-    const result = await getWebhookService().retry(params.id);
+  async ({ params, tenantId }) => {
+    const result = await servicesFor(tenantId).webhooks().retry(params.id);
     return NextResponse.json({ data: result });
   },
   {

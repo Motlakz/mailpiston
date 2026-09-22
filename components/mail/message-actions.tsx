@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
 import { Icon, type IconName } from '@/components/icon';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { useOptimisticStore } from '@/lib/optimistic-store';
 import type { SpamVerdict } from '@/server/core/types';
 
 /**
@@ -44,33 +46,67 @@ export function MessageActions({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  // `isPending` stays true for the server re-render, not just the request. It
+  // used to be discarded, so the spinner switched off the instant the refresh
+  // was *scheduled* — and the operator watched a settled-looking screen for the
+  // whole round trip with nothing but the console to say it was working.
+  const [refreshing, startTransition] = useTransition();
   const { confirmProps, ask } = useConfirm();
+  const applyEmail = useOptimisticStore((state) => state.applyEmail);
+  const clearEmail = useOptimisticStore((state) => state.clearEmail);
 
-  async function run(key: string, call: () => Promise<unknown>) {
+  const pending = busy !== null || refreshing;
+
+  async function run(
+    key: string,
+    call: () => Promise<unknown>,
+    options?: {
+      /** Applied the moment the button is pressed, rolled back on failure. */
+      optimistic?: Parameters<typeof applyEmail>[1];
+      onDone?: () => void;
+    },
+  ) {
     setError(null);
     setBusy(key);
+    if (options?.optimistic) applyEmail(emailId, options.optimistic);
 
     try {
       await call();
       startTransition(() => router.refresh());
+      options?.onDone?.();
     } catch (caught) {
-      setError(
+      // The guess was wrong; the server's version is what stays on screen.
+      clearEmail(emailId);
+      const message =
         caught instanceof ApiRequestError
           ? caught.message
-          : 'Something went wrong. Check the server logs.',
-      );
+          : 'Something went wrong. Check the server logs.';
+      setError(message);
+      toast.error(message);
     } finally {
       setBusy(null);
     }
   }
 
   const reclassify = (spamVerdict: 'clean' | 'spam') =>
-    run(spamVerdict, () =>
-      apiRequest(`/api/v1/emails/${emailId}/classification`, {
-        method: 'PUT',
-        body: JSON.stringify({ spamVerdict }),
-      }),
+    run(
+      spamVerdict,
+      () =>
+        apiRequest(`/api/v1/emails/${emailId}/classification`, {
+          method: 'PUT',
+          body: JSON.stringify({ spamVerdict }),
+        }),
+      {
+        // Moving a message to or from quarantine takes it out of the list you
+        // are looking at, so the row goes at once rather than lingering.
+        optimistic: { spamVerdict, gone: true },
+        onDone: () =>
+          toast(
+            spamVerdict === 'spam'
+              ? 'Quarantined. It will not be fanned out.'
+              : 'Released from quarantine.',
+          ),
+      },
     );
 
   const actions: Array<{
@@ -137,12 +173,32 @@ export function MessageActions({
       key: 'bin',
       label: 'Bin',
       icon: 'delete',
-      // Binning is reversible and the bin is one click away, so it does not
-      // ask. Confirming a reversible action trains people to dismiss dialogs,
-      // which is exactly what you do not want by the time one matters.
+      // Undo, not a confirm. Confirming a reversible action trains people to
+      // dismiss dialogs, which is exactly what you do not want by the time one
+      // matters — and it puts the cost on every bin rather than on the rare
+      // mistake. The row leaves immediately and the toast carries the way back.
       onClick: () =>
-        run('bin', () =>
-          apiRequest(`/api/v1/emails/${emailId}`, { method: 'DELETE' }),
+        run(
+          'bin',
+          () => apiRequest(`/api/v1/emails/${emailId}`, { method: 'DELETE' }),
+          {
+            optimistic: { binned: true, gone: true },
+            onDone: () =>
+              toast('Moved to the bin.', {
+                action: {
+                  label: 'Undo',
+                  onClick: () =>
+                    run(
+                      'restore',
+                      () =>
+                        apiRequest(`/api/v1/emails/${emailId}/restore`, {
+                          method: 'PUT',
+                        }),
+                      { optimistic: { binned: false, gone: false } },
+                    ),
+                },
+              }),
+          },
         ),
     });
   }
@@ -157,7 +213,7 @@ export function MessageActions({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  disabled={busy !== null}
+                  disabled={pending}
                   aria-label={action.label}
                   className={
                     action.danger
@@ -182,7 +238,7 @@ export function MessageActions({
             key={action.key}
             variant={action.danger ? 'destructive' : 'outline'}
             size="sm"
-            disabled={busy !== null}
+            disabled={pending}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -190,7 +246,7 @@ export function MessageActions({
             }}
           >
             <Icon name={action.icon} size={13} />
-            {busy === action.key ? 'Working…' : action.label}
+            {busy === action.key || (refreshing && busy === null) ? 'Working…' : action.label}
           </Button>
         ),
       )}

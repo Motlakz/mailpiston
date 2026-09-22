@@ -35,6 +35,15 @@ export interface ApiContext<TBody = unknown> {
   body: TBody;
   actor: RateLimitActor;
   apiKey: ApiKeyIdentity | null;
+  /**
+   * The workspace this request acts inside.
+   *
+   * Resolved once here, from whichever credential authenticated — an API key
+   * names its tenant, a session names its membership. Handlers take it rather
+   * than looking it up, so there is one place that decides whose data a
+   * request can reach.
+   */
+  tenantId: string;
   params: Record<string, string>;
 }
 
@@ -80,10 +89,12 @@ export function withApi<TBody = undefined>(
       const authorization = request.headers.get('authorization');
       let apiKey: ApiKeyIdentity | null = null;
       let actor: RateLimitActor;
+      let tenantId: string;
 
       if (authorization) {
         apiKey = await resolveApiKey(authorization);
         actor = `apiKey:${apiKey.id}`;
+        tenantId = apiKey.tenantId;
       } else {
         const session =
           options.allowSession === false ? null : await getOperatorSession();
@@ -95,6 +106,7 @@ export function withApi<TBody = undefined>(
         }
 
         actor = `user:${session.userId}`;
+        tenantId = session.tenantId;
       }
 
       // 2. Rate limit. Throws RateLimitError, which rolls back its own
@@ -118,12 +130,12 @@ export function withApi<TBody = undefined>(
 
       // 4. Run.
       const params = routeContext ? await routeContext.params : {};
-      const response = await handler({ request, body, actor, apiKey, params });
+      const response = await handler({ request, body, actor, apiKey, params, tenantId });
 
       // 5. Record, on success only. A failed mutation changed nothing, and an
       //    audit trail full of attempts is one nobody reads.
       if (options.audit && response.status < 400) {
-        await recordAudit(options.audit, actor, params, body);
+        await recordAudit(options.audit, tenantId, actor, params, body);
       }
 
       for (const [key, value] of Object.entries(rateLimitInfo)) {
@@ -150,14 +162,15 @@ export function withApi<TBody = undefined>(
  */
 async function recordAudit(
   audit: AuditOptions,
+  tenantId: string,
   actor: RateLimitActor,
   params: Record<string, string>,
   body: unknown,
 ): Promise<void> {
   try {
-    const { repositories } = await import('@/server/repositories');
+    const { repositoriesFor } = await import('@/server/repositories');
 
-    await repositories.audit.record({
+    await repositoriesFor(tenantId).audit.record({
       actor,
       action: audit.action,
       resourceType: audit.resourceType,
@@ -180,6 +193,9 @@ const REDACTED_FIELDS = new Set([
   'webhookKey',
   'secret',
   'token',
+  // A tenant's provider token: written encrypted, and it must not be written
+  // in clear to the audit log on the way past.
+  'apiToken',
   'password',
   'text',
   'html',

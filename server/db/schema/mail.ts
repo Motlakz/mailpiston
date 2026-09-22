@@ -11,6 +11,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
+import { tenants } from './tenancy';
 import {
   deliveryStatus,
   domainStatus,
@@ -23,6 +24,21 @@ import {
 } from './enums';
 
 const id = () => text('id').primaryKey();
+/**
+ * Every root-scoped table carries this, denormalised on purpose.
+ *
+ * Scoping a child table through a join to its parent means one forgotten join
+ * is a cross-tenant read. A column the repository layer always filters on is a
+ * guarantee instead of a convention, and it costs one index per table.
+ *
+ * Tables reachable only through an already-scoped parent id — webhook configs,
+ * recipients, reconciliation items — do not carry it; their parent has been
+ * checked by the time they are touched.
+ */
+const tenantId = () =>
+  text('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' });
 const createdAt = () =>
   timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () =>
@@ -33,6 +49,7 @@ export const domains = pgTable(
   'domains',
   {
     id: id(),
+    tenantId: tenantId(),
     name: text('name').notNull(),
     providerDomainId: text('provider_domain_id'),
     status: domainStatus('status').notNull().default('pending'),
@@ -55,7 +72,13 @@ export const domains = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [uniqueIndex('domains_name_key').on(sql`lower(${table.name})`)],
+  (table) => [
+    uniqueIndex('domains_tenant_name_key').on(
+      table.tenantId,
+      sql`lower(${table.name})`,
+    ),
+    index('domains_tenant_id_idx').on(table.tenantId),
+  ],
 );
 
 /** §4.2 */
@@ -63,6 +86,7 @@ export const addresses = pgTable(
   'addresses',
   {
     id: id(),
+    tenantId: tenantId(),
     domainId: text('domain_id')
       .notNull()
       .references(() => domains.id, { onDelete: 'cascade' }),
@@ -110,6 +134,7 @@ export const domainWebhookKeys = pgTable('domain_webhook_keys', {
 /** §4.3 */
 export const endpoints = pgTable('endpoints', {
   id: id(),
+    tenantId: tenantId(),
   name: text('name').notNull(),
   type: endpointType('type').notNull(),
   enabled: boolean('enabled').notNull().default(true),
@@ -179,6 +204,7 @@ export const replyRelays = pgTable(
   'reply_relays',
   {
     id: id(),
+    tenantId: tenantId(),
     tokenHash: text('token_hash').notNull(),
     addressId: text('address_id')
       .notNull()
@@ -197,6 +223,7 @@ export const replyRelays = pgTable(
 /** §4.5 */
 export const threads = pgTable('threads', {
   id: id(),
+    tenantId: tenantId(),
   subject: text('subject'),
   lastMessageAt: timestamp('last_message_at', { withTimezone: true })
     .notNull()
@@ -210,6 +237,7 @@ export const emails = pgTable(
   'emails',
   {
     id: id(),
+    tenantId: tenantId(),
     threadId: text('thread_id').references(() => threads.id, {
       onDelete: 'set null',
     }),
@@ -300,8 +328,15 @@ export const emails = pgTable(
     index('emails_address_id_idx').on(table.addressId),
     index('emails_message_id_idx').on(table.messageId),
     index('emails_created_at_idx').on(table.createdAt),
-    uniqueIndex('emails_fingerprint_key').on(table.fingerprint),
-    // Every list view filters on these two before anything else.
+    // Per tenant: two workspaces can legitimately receive the same message,
+    // and a global fingerprint would silently drop the second delivery as a
+    // duplicate of a message its owner never saw.
+    uniqueIndex('emails_tenant_fingerprint_key').on(
+      table.tenantId,
+      table.fingerprint,
+    ),
+    // Every list view filters tenant first, then these.
+    index('emails_tenant_created_at_idx').on(table.tenantId, table.createdAt),
     index('emails_spam_verdict_idx').on(table.spamVerdict, table.createdAt),
     index('emails_deleted_at_idx').on(table.deletedAt),
   ],
@@ -323,6 +358,7 @@ export const mailFilterEntries = pgTable(
   'mail_filter_entries',
   {
     id: id(),
+    tenantId: tenantId(),
     kind: mailFilterKind('kind').notNull(),
     /** Lower-cased address or domain. */
     pattern: text('pattern').notNull(),
@@ -331,7 +367,8 @@ export const mailFilterEntries = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
-    uniqueIndex('mail_filter_entries_kind_pattern_key').on(
+    uniqueIndex('mail_filter_entries_tenant_kind_pattern_key').on(
+      table.tenantId,
       table.kind,
       sql`lower(${table.pattern})`,
     ),
@@ -343,6 +380,7 @@ export const emailAttachments = pgTable(
   'email_attachments',
   {
     id: id(),
+    tenantId: tenantId(),
     emailId: text('email_id')
       .notNull()
       .references(() => emails.id, { onDelete: 'cascade' }),
@@ -373,6 +411,7 @@ export const mailEvents = pgTable(
   'mail_events',
   {
     id: id(),
+    tenantId: tenantId(),
     emailId: text('email_id').references(() => emails.id, {
       onDelete: 'cascade',
     }),
@@ -383,6 +422,7 @@ export const mailEvents = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('mail_events_tenant_occurred_at_idx').on(table.tenantId, table.occurredAt),
     index('mail_events_email_id_idx').on(table.emailId),
     index('mail_events_occurred_at_idx').on(table.occurredAt),
   ],
@@ -393,6 +433,7 @@ export const endpointDeliveries = pgTable(
   'endpoint_deliveries',
   {
     id: id(),
+    tenantId: tenantId(),
     endpointId: text('endpoint_id')
       .notNull()
       .references(() => endpoints.id, { onDelete: 'cascade' }),

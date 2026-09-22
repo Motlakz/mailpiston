@@ -16,24 +16,54 @@ import { NeonThreadRepository } from './neon/thread-repository';
 export * from './types';
 
 /**
- * One instance per aggregate, constructed once.
+ * One scoped set of repositories per tenant.
  *
- * Services take repositories as constructor arguments so a test can pass a fake
- * without touching a database; this object is only the production wiring.
+ * Tenancy is enforced here rather than at the call sites, and the difference
+ * matters: there are twenty-seven places that read data and one place that
+ * builds a repository. Binding the tenant at construction means a caller
+ * cannot reach another tenant's row even holding a valid id belonging to it,
+ * because there is no unscoped instance to ask.
+ *
+ * Cached per tenant, because these are stateless query builders — the cost is
+ * a dozen object allocations, and a long-lived process would otherwise make
+ * them on every request.
  */
-export const repositories = {
-  domains: new NeonDomainRepository(),
-  addresses: new NeonAddressRepository(),
-  apiKeys: new NeonApiKeyRepository(),
-  audit: new NeonAuditRepository(),
-  events: new NeonEventRepository(),
-  emails: new NeonEmailRepository(),
-  threads: new NeonThreadRepository(),
-  endpoints: new NeonEndpointRepository(),
-  deliveries: new NeonDeliveryRepository(),
-  replyRelays: new NeonReplyRelayRepository(),
-  reconciliation: new NeonReconciliationRepository(),
-  mailFilters: new NeonMailFilterRepository(),
-} as const;
+const cache = new Map<string, Repositories>();
 
-export type Repositories = typeof repositories;
+export function repositoriesFor(tenantId: string): Repositories {
+  const existing = cache.get(tenantId);
+  if (existing) return existing;
+
+  const built = {
+    domains: new NeonDomainRepository(tenantId),
+    addresses: new NeonAddressRepository(tenantId),
+    apiKeys: new NeonApiKeyRepository(tenantId),
+    audit: new NeonAuditRepository(tenantId),
+    events: new NeonEventRepository(tenantId),
+    emails: new NeonEmailRepository(tenantId),
+    threads: new NeonThreadRepository(tenantId),
+    endpoints: new NeonEndpointRepository(tenantId),
+    deliveries: new NeonDeliveryRepository(tenantId),
+    replyRelays: new NeonReplyRelayRepository(tenantId),
+    reconciliation: new NeonReconciliationRepository(tenantId),
+    mailFilters: new NeonMailFilterRepository(tenantId),
+  } as const;
+
+  cache.set(tenantId, built);
+  return built;
+}
+
+export interface Repositories {
+  domains: NeonDomainRepository;
+  addresses: NeonAddressRepository;
+  apiKeys: NeonApiKeyRepository;
+  audit: NeonAuditRepository;
+  events: NeonEventRepository;
+  emails: NeonEmailRepository;
+  threads: NeonThreadRepository;
+  endpoints: NeonEndpointRepository;
+  deliveries: NeonDeliveryRepository;
+  replyRelays: NeonReplyRelayRepository;
+  reconciliation: NeonReconciliationRepository;
+  mailFilters: NeonMailFilterRepository;
+}

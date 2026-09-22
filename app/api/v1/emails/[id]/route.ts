@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 
 import { NotFoundError } from '@/server/core/errors';
 import { withApi } from '@/server/core/http';
-import { getMailboxService } from '@/server/mail/services';
-import { repositories } from '@/server/repositories';
+import { servicesFor } from '@/server/mail/services';
+import { repositoriesFor } from '@/server/repositories';
 
 export const GET = withApi(
-  async ({ params }) => {
+  async ({ params, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const email = await repositories.emails.findById(params.id);
     if (!email) throw new NotFoundError(`Email ${params.id} not found`);
 
@@ -45,16 +46,16 @@ export const GET = withApi(
  * guessing the URL.
  */
 export const DELETE = withApi(
-  async ({ params, request }) => {
+  async ({ params, request, tenantId }) => {
     const purge =
       new URL(request.url).searchParams.get('purge') === 'true';
 
     if (purge) {
-      await getMailboxService().purge(params.id);
+      await servicesFor(tenantId).mailbox().purge(params.id);
       return NextResponse.json({ data: { id: params.id, purged: true } });
     }
 
-    const email = await getMailboxService().bin(params.id);
+    const email = await servicesFor(tenantId).mailbox().bin(params.id);
     return NextResponse.json({ data: email });
   },
   {

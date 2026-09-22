@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 
 import { NotFoundError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -22,10 +22,12 @@ type ItemRow = typeof providerReconciliationItems.$inferSelect;
 const DEFAULT_RUN_LIMIT = 20;
 
 export class NeonReconciliationRepository implements ReconciliationRepository {
+  constructor(private readonly tenantId: string) {}
+
   async startRun(provider: string): Promise<ReconciliationRun> {
     const [row] = await db
       .insert(providerReconciliationRuns)
-      .values({ id: newId('run'), provider })
+      .values({ id: newId('run'), tenantId: this.tenantId, provider })
       .returning();
 
     return toRun(row);
@@ -39,7 +41,12 @@ export class NeonReconciliationRepository implements ReconciliationRepository {
     const [row] = await db
       .update(providerReconciliationRuns)
       .set({ status, error, finishedAt: new Date() })
-      .where(eq(providerReconciliationRuns.id, id))
+      .where(
+        and(
+          eq(providerReconciliationRuns.tenantId, this.tenantId),
+          eq(providerReconciliationRuns.id, id),
+        ),
+      )
       .returning();
 
     if (!row) throw new NotFoundError(`Reconciliation run ${id} not found`);
@@ -65,6 +72,7 @@ export class NeonReconciliationRepository implements ReconciliationRepository {
     const [row] = await db
       .select()
       .from(providerReconciliationRuns)
+      .where(eq(providerReconciliationRuns.tenantId, this.tenantId))
       .orderBy(desc(providerReconciliationRuns.startedAt))
       .limit(1);
 
@@ -75,21 +83,36 @@ export class NeonReconciliationRepository implements ReconciliationRepository {
     const rows = await db
       .select()
       .from(providerReconciliationRuns)
+      .where(eq(providerReconciliationRuns.tenantId, this.tenantId))
       .orderBy(desc(providerReconciliationRuns.startedAt))
       .limit(limit);
 
     return rows.map(toRun);
   }
 
-  /** Ascending: a run reads as the order things were checked in. */
+  /**
+   * Ascending: a run reads as the order things were checked in.
+   *
+   * Items carry no tenant column — they hang off a run, and the join below
+   * proves that run belongs to this tenant before a single item is returned.
+   */
   async listItems(runId: string): Promise<ReconciliationItem[]> {
     const rows = await db
-      .select()
+      .select({ item: providerReconciliationItems })
       .from(providerReconciliationItems)
-      .where(eq(providerReconciliationItems.runId, runId))
+      .innerJoin(
+        providerReconciliationRuns,
+        eq(providerReconciliationItems.runId, providerReconciliationRuns.id),
+      )
+      .where(
+        and(
+          eq(providerReconciliationRuns.tenantId, this.tenantId),
+          eq(providerReconciliationItems.runId, runId),
+        ),
+      )
       .orderBy(asc(providerReconciliationItems.createdAt));
 
-    return rows.map(toItem);
+    return rows.map((row) => toItem(row.item));
   }
 }
 

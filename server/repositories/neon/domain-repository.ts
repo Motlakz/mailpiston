@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { newId } from '@/server/core/ids';
 import { ConflictError, NotFoundError } from '@/server/core/errors';
@@ -16,12 +16,23 @@ import type {
 type DomainRow = typeof domains.$inferSelect;
 
 export class NeonDomainRepository implements DomainRepository {
+  /**
+   * Bound to one tenant for the life of the instance.
+   *
+   * Every statement below carries the filter, so a caller cannot reach another
+   * tenant's row even by passing a valid id belonging to one. That is the
+   * whole point of scoping here rather than at the call sites: there are
+   * twenty-seven of those and one of this.
+   */
+  constructor(private readonly tenantId: string) {}
+
   async create(data: CreateDomainData): Promise<Domain> {
     try {
       const [row] = await db
         .insert(domains)
         .values({
           id: newId('domain'),
+          tenantId: this.tenantId,
           name: data.name.toLowerCase(),
           providerDomainId: data.providerDomainId,
           status: data.status,
@@ -31,8 +42,9 @@ export class NeonDomainRepository implements DomainRepository {
 
       return toDomain(row);
     } catch (error) {
-      // The unique index is on lower(name), so this is the only way a duplicate
-      // can surface. Translate it rather than letting a driver error become a 500.
+      // The unique index is on (tenant_id, lower(name)), so this is the only
+      // way a duplicate can surface — and it is per tenant, because two
+      // workspaces may legitimately each hold the same domain. Translate it rather than letting a driver error become a 500.
       if (isUniqueViolation(error)) {
         throw new ConflictError(`Domain ${data.name} already exists`);
       }
@@ -41,7 +53,11 @@ export class NeonDomainRepository implements DomainRepository {
   }
 
   async findById(id: string): Promise<Domain | null> {
-    const [row] = await db.select().from(domains).where(eq(domains.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(domains)
+      .where(and(eq(domains.tenantId, this.tenantId), eq(domains.id, id)))
+      .limit(1);
     return row ? toDomain(row) : null;
   }
 
@@ -49,14 +65,23 @@ export class NeonDomainRepository implements DomainRepository {
     const [row] = await db
       .select()
       .from(domains)
-      .where(sql`lower(${domains.name}) = ${name.toLowerCase()}`)
+      .where(
+        and(
+          eq(domains.tenantId, this.tenantId),
+          sql`lower(${domains.name}) = ${name.toLowerCase()}`,
+        ),
+      )
       .limit(1);
 
     return row ? toDomain(row) : null;
   }
 
   async list(): Promise<Domain[]> {
-    const rows = await db.select().from(domains).orderBy(asc(domains.name));
+    const rows = await db
+      .select()
+      .from(domains)
+      .where(eq(domains.tenantId, this.tenantId))
+      .orderBy(asc(domains.name));
     return rows.map(toDomain);
   }
 
@@ -64,7 +89,7 @@ export class NeonDomainRepository implements DomainRepository {
     const [row] = await db
       .update(domains)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(domains.id, id))
+      .where(and(eq(domains.tenantId, this.tenantId), eq(domains.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Domain ${id} not found`);
@@ -72,9 +97,10 @@ export class NeonDomainRepository implements DomainRepository {
   }
 
   async delete(id: string): Promise<void> {
-    const deleted = await db.delete(domains).where(eq(domains.id, id)).returning({
-      id: domains.id,
-    });
+    const deleted = await db
+      .delete(domains)
+      .where(and(eq(domains.tenantId, this.tenantId), eq(domains.id, id)))
+      .returning({ id: domains.id });
 
     if (deleted.length === 0) throw new NotFoundError(`Domain ${id} not found`);
   }

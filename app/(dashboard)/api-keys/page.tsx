@@ -1,6 +1,7 @@
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import { ApiKeyManager } from '@/components/mail/api-key-actions';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'API Keys · MailPiston' };
 
@@ -10,6 +11,8 @@ export const metadata = { title: 'API Keys · MailPiston' };
  * door than any key-issuing endpoint we could leave open.
  */
 export default async function ApiKeysPage() {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const keys = (await repositories.apiKeys.list()).map((key) => ({
     id: key.id,
     name: key.name,

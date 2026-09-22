@@ -8,29 +8,15 @@
 
 /** Time for today, date for anything older — the usual mail-client shorthand. */
 export function formatWhen(date: Date): string {
-  const isToday = new Date().toDateString() === date.toDateString();
+  const now = new Date();
+  const isToday =
+    now.getUTCFullYear() === date.getUTCFullYear() &&
+    now.getUTCMonth() === date.getUTCMonth() &&
+    now.getUTCDate() === date.getUTCDate();
 
   return isToday
-    ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    ? `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`
     : date.toISOString().slice(0, 10);
-}
-
-/**
- * A one-line preview of a message body.
- *
- * Whitespace is collapsed first: mail arrives full of hard wraps and quoted
- * blocks, and a raw slice of it renders as ragged fragments rather than a
- * sentence.
- */
-export function previewOf(text: string | null, length = 140): string | null {
-  if (!text) return null;
-
-  const collapsed = text.replace(/\s+/g, ' ').trim();
-  if (!collapsed) return null;
-
-  return collapsed.length > length
-    ? `${collapsed.slice(0, length).trimEnd()}…`
-    : collapsed;
 }
 
 /**
@@ -60,7 +46,25 @@ function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-/** Byte counts for attachment rows. */
+/**
+ * A one-line preview of a message body.
+ *
+ * Whitespace is collapsed first: mail arrives full of hard wraps and quoted
+ * blocks, and a raw slice of it renders as ragged fragments rather than a
+ * sentence.
+ */
+export function previewOf(text: string | null, length = 140): string | null {
+  if (!text) return null;
+
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return null;
+
+  return collapsed.length > length
+    ? `${collapsed.slice(0, length).trimEnd()}…`
+    : collapsed;
+}
+
+/** Byte counts for attachment rows. Shared by the reading pane and the message page. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

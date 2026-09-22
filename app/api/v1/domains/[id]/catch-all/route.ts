@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getDomainService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 /**
  * The catch-all is opt-in and reversible. Turning it on means receiving mail
  * for every local part on the domain, including ones that do not exist.
  */
 export const POST = withApi(
-  async ({ params }) => {
-    const domain = await getDomainService().createCatchAll(params.id);
+  async ({ params, tenantId }) => {
+    const domain = await servicesFor(tenantId).domains().createCatchAll(params.id);
     return NextResponse.json({ data: domain }, { status: 201 });
   },
   {
@@ -28,8 +28,8 @@ export const POST = withApi(
  * somebody mid-change turns a visible problem into two writers disagreeing.
  */
 export const PUT = withApi(
-  async ({ params }) => {
-    const domain = await getDomainService().repairCatchAll(params.id);
+  async ({ params, tenantId }) => {
+    const domain = await servicesFor(tenantId).domains().repairCatchAll(params.id);
     return NextResponse.json({ data: domain });
   },
   {
@@ -39,8 +39,8 @@ export const PUT = withApi(
 );
 
 export const DELETE = withApi(
-  async ({ params }) => {
-    const domain = await getDomainService().removeCatchAll(params.id);
+  async ({ params, tenantId }) => {
+    const domain = await servicesFor(tenantId).domains().removeCatchAll(params.id);
     return NextResponse.json({ data: domain });
   },
   {

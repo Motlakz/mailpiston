@@ -5,6 +5,7 @@ import {
   asc,
   desc,
   eq,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -48,10 +49,12 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 export class NeonEmailRepository implements EmailRepository {
+  constructor(private readonly tenantId: string) {}
+
   async create(data: CreateEmailData): Promise<Email> {
     const [row] = await db
       .insert(emails)
-      .values({ id: newId('email'), ...data })
+      .values({ id: newId('email'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toEmail(row);
@@ -74,17 +77,23 @@ export class NeonEmailRepository implements EmailRepository {
   }): Promise<InboundCaptureResult> {
     try {
       return await db.transaction(async (tx) => {
-        const threadId = await attachToThread(tx, input.thread, input.email);
+        const threadId = await attachToThread(
+          tx,
+          this.tenantId,
+          input.thread,
+          input.email,
+        );
 
         const [emailRow] = await tx
           .insert(emails)
-          .values({ ...input.email, threadId })
+          .values({ ...input.email, tenantId: this.tenantId, threadId })
           .returning();
 
         if (input.attachments.length > 0) {
           await tx.insert(emailAttachments).values(
             input.attachments.map((attachment) => ({
               id: newId('attachment'),
+              tenantId: this.tenantId,
               emailId: emailRow.id,
               ...attachment,
             })),
@@ -95,6 +104,7 @@ export class NeonEmailRepository implements EmailRepository {
           .insert(mailEvents)
           .values({
             id: newId('event'),
+            tenantId: this.tenantId,
             emailId: emailRow.id,
             type: 'email.received' as const,
             metadata: input.eventMetadata,
@@ -121,8 +131,27 @@ export class NeonEmailRepository implements EmailRepository {
     }
   }
 
+  async countOutboundSince(since: Date): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(emails)
+      .where(
+        and(
+          eq(emails.tenantId, this.tenantId),
+          eq(emails.direction, 'outbound'),
+          gte(emails.createdAt, since),
+        ),
+      );
+
+    return row?.count ?? 0;
+  }
+
   async findById(id: string): Promise<Email | null> {
-    const [row] = await db.select().from(emails).where(eq(emails.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(emails)
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)))
+      .limit(1);
     return row ? toEmail(row) : null;
   }
 
@@ -130,7 +159,7 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .select()
       .from(emails)
-      .where(eq(emails.messageId, messageId))
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.messageId, messageId)))
       .orderBy(desc(emails.createdAt))
       .limit(1);
 
@@ -141,7 +170,12 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .select()
       .from(emails)
-      .where(eq(emails.providerMessageId, providerMessageId))
+      .where(
+        and(
+          eq(emails.tenantId, this.tenantId),
+          eq(emails.providerMessageId, providerMessageId),
+        ),
+      )
       .orderBy(desc(emails.createdAt))
       .limit(1);
 
@@ -170,6 +204,7 @@ export class NeonEmailRepository implements EmailRepository {
       .leftJoin(domains, eq(addresses.domainId, domains.id))
       .where(
         and(
+          eq(emails.tenantId, this.tenantId),
           filter.direction ? eq(emails.direction, filter.direction) : undefined,
           filter.statuses?.length
             ? inArray(emails.status, filter.statuses)
@@ -216,7 +251,7 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .update(emails)
       .set({ status, updatedAt: new Date() })
-      .where(eq(emails.id, id))
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Email ${id} not found`);
@@ -235,7 +270,7 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .update(emails)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(emails.id, id))
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Email ${id} not found`);
@@ -247,7 +282,7 @@ export class NeonEmailRepository implements EmailRepository {
   ): Promise<EmailAttachment> {
     const [row] = await db
       .insert(emailAttachments)
-      .values({ id: newId('attachment'), ...data })
+      .values({ id: newId('attachment'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toAttachment(row);
@@ -257,7 +292,12 @@ export class NeonEmailRepository implements EmailRepository {
     const rows = await db
       .select()
       .from(emailAttachments)
-      .where(eq(emailAttachments.emailId, emailId))
+      .where(
+        and(
+          eq(emailAttachments.tenantId, this.tenantId),
+          eq(emailAttachments.emailId, emailId),
+        ),
+      )
       .orderBy(emailAttachments.createdAt);
 
     return rows.map(toAttachment);
@@ -267,7 +307,12 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .select()
       .from(emailAttachments)
-      .where(eq(emailAttachments.id, id))
+      .where(
+        and(
+          eq(emailAttachments.tenantId, this.tenantId),
+          eq(emailAttachments.id, id),
+        ),
+      )
       .limit(1);
 
     return row ? toAttachment(row) : null;
@@ -283,7 +328,11 @@ export class NeonEmailRepository implements EmailRepository {
       .select({ id: emails.id, rawStorageKey: emails.rawStorageKey })
       .from(emails)
       .where(
-        and(isNotNull(emails.rawStorageKey), lt(emails.createdAt, before)),
+        and(
+          eq(emails.tenantId, this.tenantId),
+          isNotNull(emails.rawStorageKey),
+          lt(emails.createdAt, before),
+        ),
       )
       .orderBy(asc(emails.createdAt))
       .limit(limit);
@@ -298,7 +347,7 @@ export class NeonEmailRepository implements EmailRepository {
     await db
       .update(emails)
       .set({ rawStorageKey: null, updatedAt: new Date() })
-      .where(eq(emails.id, id));
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)));
   }
 
   async listPrunableAttachments(
@@ -310,6 +359,7 @@ export class NeonEmailRepository implements EmailRepository {
       .from(emailAttachments)
       .where(
         and(
+          eq(emailAttachments.tenantId, this.tenantId),
           isNull(emailAttachments.prunedAt),
           lt(emailAttachments.createdAt, before),
         ),
@@ -324,7 +374,12 @@ export class NeonEmailRepository implements EmailRepository {
     await db
       .update(emailAttachments)
       .set({ prunedAt: new Date() })
-      .where(eq(emailAttachments.id, id));
+      .where(
+        and(
+          eq(emailAttachments.tenantId, this.tenantId),
+          eq(emailAttachments.id, id),
+        ),
+      );
   }
 
   // --- Classification and the bin (Phase 12) --------------------------------
@@ -343,7 +398,7 @@ export class NeonEmailRepository implements EmailRepository {
         spamCategory: signals[0]?.category ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(emails.id, id))
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Email ${id} not found`);
@@ -354,7 +409,7 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .update(emails)
       .set({ deletedAt: new Date(), updatedAt: new Date() })
-      .where(eq(emails.id, id))
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Email ${id} not found`);
@@ -365,7 +420,7 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .update(emails)
       .set({ deletedAt: null, updatedAt: new Date() })
-      .where(eq(emails.id, id))
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)))
       .returning();
 
     if (!row) throw new NotFoundError(`Email ${id} not found`);
@@ -384,6 +439,7 @@ export class NeonEmailRepository implements EmailRepository {
     before?: Date,
   ): Promise<{ count: number; storageKeys: string[] }> {
     const scope = and(
+      eq(emails.tenantId, this.tenantId),
       isNotNull(emails.deletedAt),
       before ? lt(emails.deletedAt, before) : undefined,
     );
@@ -400,9 +456,16 @@ export class NeonEmailRepository implements EmailRepository {
     const attachments = await db
       .select({ storageKey: emailAttachments.storageKey })
       .from(emailAttachments)
-      .where(inArray(emailAttachments.emailId, ids));
+      .where(
+        and(
+          eq(emailAttachments.tenantId, this.tenantId),
+          inArray(emailAttachments.emailId, ids),
+        ),
+      );
 
-    await db.delete(emails).where(inArray(emails.id, ids));
+    await db
+      .delete(emails)
+      .where(and(eq(emails.tenantId, this.tenantId), inArray(emails.id, ids)));
 
     return {
       count: ids.length,
@@ -417,7 +480,7 @@ export class NeonEmailRepository implements EmailRepository {
     const [row] = await db
       .select({ rawStorageKey: emails.rawStorageKey })
       .from(emails)
-      .where(eq(emails.id, id))
+      .where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)))
       .limit(1);
 
     if (!row) throw new NotFoundError(`Email ${id} not found`);
@@ -425,9 +488,14 @@ export class NeonEmailRepository implements EmailRepository {
     const attachments = await db
       .select({ storageKey: emailAttachments.storageKey })
       .from(emailAttachments)
-      .where(eq(emailAttachments.emailId, id));
+      .where(
+        and(
+          eq(emailAttachments.tenantId, this.tenantId),
+          eq(emailAttachments.emailId, id),
+        ),
+      );
 
-    await db.delete(emails).where(eq(emails.id, id));
+    await db.delete(emails).where(and(eq(emails.tenantId, this.tenantId), eq(emails.id, id)));
 
     return {
       storageKeys: [
@@ -448,6 +516,7 @@ export class NeonEmailRepository implements EmailRepository {
  */
 async function attachToThread(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tenantId: string,
   target: InboundThreadTarget,
   email: CreateEmailData,
 ): Promise<string> {
@@ -460,14 +529,21 @@ async function attachToThread(
         lastMessageAt: sql`greatest(${threads.lastMessageAt}, ${lastMessageAt.toISOString()}::timestamptz)`,
         updatedAt: new Date(),
       })
-      .where(eq(threads.id, target.existingId));
+      .where(
+        and(eq(threads.tenantId, tenantId), eq(threads.id, target.existingId)),
+      );
 
     return target.existingId;
   }
 
   const [row] = await tx
     .insert(threads)
-    .values({ id: newId('thread'), subject: target.subject, lastMessageAt })
+    .values({
+      id: newId('thread'),
+      tenantId,
+      subject: target.subject,
+      lastMessageAt,
+    })
     .returning({ id: threads.id });
 
   return row.id;

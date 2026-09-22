@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { withProvider } from '@/server/core/http';
-import { getInboundService } from '@/server/mail/services';
+import { tenantForInboundRecipient } from '@/server/core/tenancy/resolve';
+import { servicesFor } from '@/server/mail/services';
 import { mailProviderRegistry } from '@/server/providers/registry';
 
 /**
@@ -18,9 +19,26 @@ import { mailProviderRegistry } from '@/server/providers/registry';
  */
 export const POST = withProvider(
   async ({ payload }) => {
+    // Normalising needs no credentials — it is pure parsing of a body whose
+    // signature the wrapper already verified.
     const provider = mailProviderRegistry.active();
     const normalized = await provider.normalizeInbound(payload);
-    const result = await getInboundService().capture(normalized);
+
+    // Nothing in the request says whose workspace this is; the recipient does.
+    const tenantId = await tenantForInboundRecipient(normalized.recipient);
+
+    if (!tenantId) {
+      // No tenant owns this recipient. Answered 200 on purpose: a catch-all
+      // receives mail for local parts that do not exist, and bouncing it is
+      // backscatter (roadmap §1.2).
+      return NextResponse.json({
+        received: true,
+        status: 'rejected',
+        reason: 'no_tenant_for_recipient',
+      });
+    }
+
+    const result = await servicesFor(tenantId).inbound().capture(normalized);
 
     return NextResponse.json({
       received: true,

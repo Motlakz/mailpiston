@@ -1,19 +1,19 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getDomainService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 export const GET = withApi(
-  async ({ params }) => {
-    const domain = await getDomainService().get(params.id);
+  async ({ params, tenantId }) => {
+    const domain = await servicesFor(tenantId).domains().get(params.id);
     return NextResponse.json({ data: domain });
   },
   { endpoint: '/v1/domains' },
 );
 
 export const DELETE = withApi(
-  async ({ params }) => {
-    await getDomainService().delete(params.id);
+  async ({ params, tenantId }) => {
+    await servicesFor(tenantId).domains().delete(params.id);
     return NextResponse.json({ data: { id: params.id, deleted: true } });
   },
   {

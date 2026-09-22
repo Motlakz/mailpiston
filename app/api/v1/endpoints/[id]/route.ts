@@ -6,11 +6,11 @@ import {
   updateEndpointSchema,
   type UpdateEndpointInput,
 } from '@/server/core/validation';
-import { getEndpointService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 export const GET = withApi(
-  async ({ params }) => {
-    const service = getEndpointService();
+  async ({ params, tenantId }) => {
+    const service = servicesFor(tenantId).endpoints();
     const endpoint = await service.get(params.id);
     if (!endpoint) throw new NotFoundError(`Endpoint ${params.id} not found`);
 
@@ -27,8 +27,8 @@ export const GET = withApi(
 );
 
 export const PATCH = withApi<UpdateEndpointInput>(
-  async ({ body, params }) => {
-    const endpoint = await getEndpointService().update(params.id, body);
+  async ({ body, params, tenantId }) => {
+    const endpoint = await servicesFor(tenantId).endpoints().update(params.id, body);
     return NextResponse.json({ data: endpoint });
   },
   {
@@ -39,8 +39,8 @@ export const PATCH = withApi<UpdateEndpointInput>(
 );
 
 export const DELETE = withApi(
-  async ({ params }) => {
-    await getEndpointService().delete(params.id);
+  async ({ params, tenantId }) => {
+    await servicesFor(tenantId).endpoints().delete(params.id);
     return new Response(null, { status: 204 });
   },
   {

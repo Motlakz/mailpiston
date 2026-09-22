@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 
 import { NotFoundError } from '@/server/core/errors';
 import { withApi } from '@/server/core/http';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 /** A thread with its messages, oldest first — the conversation as read. */
 export const GET = withApi(
-  async ({ params }) => {
+  async ({ params, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const thread = await repositories.threads.findById(params.id);
     if (!thread) throw new NotFoundError(`Thread ${params.id} not found`);
 

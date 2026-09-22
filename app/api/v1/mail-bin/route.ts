@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getMailboxService } from '@/server/mail/services';
-import { repositories } from '@/server/repositories';
+import { servicesFor } from '@/server/mail/services';
+import { repositoriesFor } from '@/server/repositories';
 
 /** Everything currently in the bin, newest first. */
 export const GET = withApi(
-  async () => {
+  async ({ tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const page = await repositories.emails.list({
       deleted: true,
       // The bin holds whatever was put in it, including quarantined mail an
@@ -30,8 +31,8 @@ export const GET = withApi(
  * enough to exist at all.
  */
 export const DELETE = withApi(
-  async () => {
-    const result = await getMailboxService().emptyBin();
+  async ({ tenantId }) => {
+    const result = await servicesFor(tenantId).mailbox().emptyBin();
     return NextResponse.json({ data: result });
   },
   {

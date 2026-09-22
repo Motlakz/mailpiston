@@ -82,7 +82,7 @@ function serviceWith(
     deliveries,
     emails,
     events,
-    { timeoutMs: 500, scheduler },
+    { tenantId: 'ten_test', timeoutMs: 500, scheduler },
     fetchImpl,
   );
 }

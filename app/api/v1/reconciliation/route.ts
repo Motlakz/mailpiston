@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getReconciliationService } from '@/server/mail/services';
-import { repositories } from '@/server/repositories';
+import { servicesFor } from '@/server/mail/services';
+import { repositoriesFor } from '@/server/repositories';
 
 /**
  * The latest sweep and everything it found (roadmap Phase 10).
@@ -13,7 +13,8 @@ import { repositories } from '@/server/repositories';
  * actually ran.
  */
 export const GET = withApi(
-  async () => {
+  async ({ tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const run = await repositories.reconciliation.latestRun();
 
     return NextResponse.json({
@@ -32,8 +33,8 @@ export const GET = withApi(
  * action per domain.
  */
 export const POST = withApi(
-  async () => {
-    const summary = await getReconciliationService().run();
+  async ({ tenantId }) => {
+    const summary = await servicesFor(tenantId).reconciliation().run();
     return NextResponse.json({ data: summary }, { status: 201 });
   },
   {

@@ -18,6 +18,8 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 export class NeonEventRepository implements EventRepository {
+  constructor(private readonly tenantId: string) {}
+
   async create(data: {
     emailId: string | null;
     type: MailEventType;
@@ -25,7 +27,7 @@ export class NeonEventRepository implements EventRepository {
   }): Promise<MailEvent> {
     const [row] = await db
       .insert(mailEvents)
-      .values({ id: newId('event'), ...data })
+      .values({ id: newId('event'), tenantId: this.tenantId, ...data })
       .returning();
 
     return toEvent(row);
@@ -35,7 +37,7 @@ export class NeonEventRepository implements EventRepository {
     const [row] = await db
       .select()
       .from(mailEvents)
-      .where(eq(mailEvents.id, id))
+      .where(and(eq(mailEvents.tenantId, this.tenantId), eq(mailEvents.id, id)))
       .limit(1);
 
     return row ? toEvent(row) : null;
@@ -57,6 +59,7 @@ export class NeonEventRepository implements EventRepository {
     const rows = await base
       .where(
         and(
+          eq(mailEvents.tenantId, this.tenantId),
           filter.emailId ? eq(mailEvents.emailId, filter.emailId) : undefined,
           filter.types?.length ? inArray(mailEvents.type, filter.types) : undefined,
           addressCondition(filter),

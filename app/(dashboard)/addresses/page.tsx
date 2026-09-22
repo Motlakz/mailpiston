@@ -17,7 +17,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { AddressWithDomain, Domain } from '@/server/core/types';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Addresses · MailPiston' };
 
@@ -38,6 +39,8 @@ export default async function AddressesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const params = await searchParams;
   const raw = Array.isArray(params.domain) ? params.domain[0] : params.domain;
 
@@ -68,16 +71,21 @@ export default async function AddressesPage({
       <PageHeader
         title="Addresses"
         description="Send-capable addresses get a concrete provider alias. Inbound-only addresses stay local, behind the domain catch-all."
-        actions={
-          <AddAddressForm
-            domains={domainOptions}
-            // Adding an address while looking at one app should default to that
-            // app. Getting this wrong creates support@ on the wrong domain,
-            // which is a provider alias and a DNS-shaped mistake to undo.
-            defaultDomainId={active ?? undefined}
-          />
-        }
         toolbar={
+          // Filter and create share one row. They were two floating boxes —
+          // the domain tabs below the heading and the domain Select up in the
+          // action slot — which read as unrelated controls despite both being
+          // about which domain you are working in.
+          <div className="dashboard-toolbar-stack">
+            <AddAddressForm
+              domains={domainOptions}
+              // Adding an address while looking at one app should default to
+              // that app. Getting this wrong creates support@ on the wrong
+              // domain, which is a provider alias and a DNS-shaped mistake.
+              defaultDomainId={active ?? undefined}
+            />
+
+            {
           // One domain is not a choice, so the tabs would be decoration.
           domains.length > 1 ? (
             <NavTabs
@@ -98,7 +106,8 @@ export default async function AddressesPage({
                 })),
               ]}
             />
-          ) : undefined
+          ) : null}
+          </div>
         }
       />
 

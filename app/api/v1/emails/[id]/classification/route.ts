@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
 import { reclassifyEmailSchema } from '@/server/core/validation';
-import { getMailboxService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 /**
  * "This is spam" / "this is not spam" (roadmap Phase 12).
@@ -12,8 +12,8 @@ import { getMailboxService } from '@/server/mail/services';
  * `MailboxService.reclassify`.
  */
 export const PUT = withApi(
-  async ({ params, body }) => {
-    const email = await getMailboxService().reclassify(
+  async ({ params, body, tenantId }) => {
+    const email = await servicesFor(tenantId).mailbox().reclassify(
       params.id,
       body.spamVerdict,
     );

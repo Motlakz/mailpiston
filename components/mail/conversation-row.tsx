@@ -1,8 +1,11 @@
+'use client';
+
 import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatDay, previewOf } from '@/lib/format';
+import { useEmailOverlay, useIsSelected, useOptimisticStore } from '@/lib/optimistic-store';
 import type { EmailListItem } from '@/server/core/types';
 
 export function ConversationRow({
@@ -14,6 +17,20 @@ export function ConversationRow({
   href: string;
   selected: boolean;
 }) {
+  /**
+   * The row's own in-flight state, layered over what the server rendered.
+   *
+   * A row that was just binned or reclassified is leaving this list, so it goes
+   * immediately rather than sitting there looking untouched until the server
+   * re-render lands. `gone` collapses it; `pending` dims what is still on its
+   * way.
+   */
+  const overlay = useEmailOverlay(email.id);
+  const checked = useIsSelected(email.id);
+  const toggleSelected = useOptimisticStore((state) => state.toggleSelected);
+
+  if (overlay?.gone) return null;
+
   const outbound = email.direction === 'outbound';
   const when = outbound
     ? (email.sentAt ?? email.createdAt)
@@ -30,9 +47,25 @@ export function ConversationRow({
       aria-current={selected ? 'true' : undefined}
       className="conversation-row"
       data-selected={selected ? '' : undefined}
+      data-pending={overlay?.pending ? '' : undefined}
+      data-checked={checked ? '' : undefined}
     >
-      <span className="conversation-row__avatar" aria-hidden>
-        {initialsOf(counterparty)}
+      <span className="conversation-row__pick">
+        {/* Label-free checkbox over the avatar: the row is a link, so this has
+            to stop the click before navigation rather than after it. */}
+        <input
+          type="checkbox"
+          checked={checked}
+          aria-label={`Select ${email.subject || 'message'}`}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            event.stopPropagation();
+            toggleSelected(email.id);
+          }}
+        />
+        <span className="conversation-row__avatar" aria-hidden>
+          {initialsOf(counterparty)}
+        </span>
       </span>
 
       <span className="conversation-row__body">

@@ -1,3 +1,4 @@
+import { tenants } from './tenancy';
 import { sql } from 'drizzle-orm';
 import {
   index,
@@ -20,6 +21,9 @@ export const apiKeys = pgTable(
   'api_keys',
   {
     id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     /** SHA-256 of the full plaintext key. Looked up directly, so it is unique. */
     keyHash: text('key_hash').notNull(),
@@ -69,6 +73,9 @@ export const providerReconciliationRuns = pgTable(
   'provider_reconciliation_runs',
   {
     id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
     provider: text('provider').notNull(),
     status: reconciliationRunStatus('status').notNull().default('running'),
     startedAt: timestamp('started_at', { withTimezone: true })
@@ -104,6 +111,9 @@ export const auditLogs = pgTable(
   'audit_logs',
   {
     id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
     actor: text('actor').notNull(),
     action: text('action').notNull(),
     resourceType: text('resource_type').notNull(),

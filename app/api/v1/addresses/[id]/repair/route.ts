@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
-import { getAddressService } from '@/server/mail/services';
+import { servicesFor } from '@/server/mail/services';
 
 /**
  * Repoints a drifted address alias at our current ingress (roadmap Phase 10).
@@ -17,8 +17,8 @@ import { getAddressService } from '@/server/mail/services';
  * the same recipient and changes nothing.
  */
 export const PUT = withApi(
-  async ({ params }) => {
-    const address = await getAddressService().repairAlias(params.id);
+  async ({ params, tenantId }) => {
+    const address = await servicesFor(tenantId).addresses().repairAlias(params.id);
     return NextResponse.json({ data: address });
   },
   {

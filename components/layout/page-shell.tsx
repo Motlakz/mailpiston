@@ -3,20 +3,6 @@ import type { ReactNode } from 'react';
 import { Icon, type IconName } from '@/components/icon';
 import { Separator } from '@/components/ui/separator';
 
-/**
- * Standard page header, so every dashboard page has the same shape.
- *
- * Three bands rather than two: title, then an optional description, then an
- * optional row of filters or tabs below a rule. The old version had the tabs
- * floating free underneath, which meant the gap between "what this page is" and
- * "which slice of it you are looking at" was the same gap as between the tabs
- * and the content — so the tabs read as belonging to the list rather than to
- * the page.
- *
- * `eyebrow` is for the parent a page belongs to when the breadcrumb is not
- * enough on its own, and `meta` for a count or a timestamp that qualifies the
- * title without competing with it.
- */
 export function PageHeader({
   title,
   description,
@@ -43,8 +29,8 @@ export function PageHeader({
             </p>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="font-serif text-2xl leading-tight tracking-tight text-balance">
+          <div className="flex flex-wrap items-center">
+            <h1 className="font-serif text-2xl mb-2 leading-tight tracking-tight text-balance">
               {title}
             </h1>
             {meta}
@@ -65,7 +51,9 @@ export function PageHeader({
       {toolbar ? (
         <>
           <Separator />
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Filters and search sit on a surface of their own. The heading above
+              does not — a title needs the page, not a box. */}
+          <div className="dashboard-page-toolbar flex flex-wrap items-center justify-between gap-3">
             {toolbar}
           </div>
         </>
@@ -76,12 +64,6 @@ export function PageHeader({
   );
 }
 
-/**
- * The empty state every page ships with.
- *
- * It names the phase on purpose: an empty screen that explains why it is empty
- * is a status report, and one that does not is a bug report waiting to happen.
- */
 export function EmptyState({
   icon,
   title,

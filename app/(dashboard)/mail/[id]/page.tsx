@@ -9,7 +9,8 @@ import { ReplyForm } from '@/components/mail/compose';
 import { MessageActions } from '@/components/mail/message-actions';
 import type { Email } from '@/server/core/types';
 import { formatBytes } from '@/lib/format';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Message · MailPiston' };
 
@@ -18,6 +19,8 @@ export default async function EmailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
   const { id } = await params;
 
   const email = await repositories.emails.findById(id);

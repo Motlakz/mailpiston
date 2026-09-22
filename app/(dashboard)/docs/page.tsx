@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { env } from '@/server/core/config';
 
 export const metadata = { title: 'Docs · MailPiston' };
@@ -42,7 +41,24 @@ export default function DocsPage() {
         description="The concepts behind the screens, and the parts that are easy to get wrong. Everything here reflects this deployment's live configuration."
       />
 
-      <div className="flex flex-col gap-8">
+      <div className="docs-layout">
+        <article className="docs-article">
+        <nav className="docs-index" aria-label="Documentation index">
+          {DOC_GROUPS.map((section) => (
+            <div key={section.group} className="docs-index__group">
+              <p className="docs-index__label">{section.group}</p>
+              <div className="docs-index__cards">
+                {section.entries.map((entry) => (
+                  <a key={entry.id} href={`#${entry.id}`} className="docs-index__card">
+                    <strong>{entry.label}</strong>
+                    <span>{entry.blurb}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
         <Section
           id="pipeline"
           icon="inbox"
@@ -237,6 +253,20 @@ export default function DocsPage() {
             surface shows up in our own UI first.
           </p>
         </Section>
+        </article>
+
+        {/* MDN's "In this article" rail. Sticky, because the whole point of it
+            is to stay reachable once you have scrolled away from the top. */}
+        <aside className="docs-toc" aria-label="On this page">
+          <p className="docs-toc__label">In this article</p>
+          <nav>
+            {CONTENTS.map((entry) => (
+              <a key={entry.id} href={`#${entry.id}`}>
+                {entry.label}
+              </a>
+            ))}
+          </nav>
+        </aside>
       </div>
     </>
   );
@@ -291,6 +321,79 @@ const VERDICTS = [
   },
 ];
 
+/**
+ * The contents rail.
+ *
+ * Kept as a hand-written list rather than derived from the DOM: the sections
+ * are a fixed, authored set, and a scroll-spy would be a client component and a
+ * resize observer for a list that changes when someone edits this file.
+ */
+interface DocEntry {
+  /** Matches the `id` of the Section it points at. */
+  id: string;
+  label: string;
+  blurb: string;
+}
+
+const DOC_GROUPS: ReadonlyArray<{
+  group: string;
+  entries: readonly DocEntry[];
+}> = [
+  {
+    group: 'How mail moves',
+    entries: [
+      {
+        id: 'pipeline',
+        label: 'Inbound pipeline',
+        blurb: 'The seven steps between a provider POST and a stored thread, and the two that can stop it.',
+      },
+      {
+        id: 'addresses',
+        label: 'Addresses',
+        blurb: 'Concrete aliases and local routes — which one the provider knows about, and why it matters.',
+      },
+      {
+        id: 'endpoints',
+        label: 'Endpoints',
+        blurb: 'Where a delivered message is fanned out to: a signed webhook, or a verified mailbox.',
+      },
+    ],
+  },
+  {
+    group: 'Keeping it correct',
+    entries: [
+      {
+        id: 'drift',
+        label: 'Drift and repair',
+        blurb: 'When our record and the provider disagree, what reconciliation reports and what repair changes.',
+      },
+      {
+        id: 'filtering',
+        label: 'Spam filtering',
+        blurb: 'Three verdicts, the signals behind each one, and why nothing is ever deleted.',
+      },
+      {
+        id: 'bin',
+        label: 'The bin',
+        blurb: 'Soft delete, what stays recoverable, and the one action that is not.',
+      },
+    ],
+  },
+  {
+    group: 'Building on it',
+    entries: [
+      {
+        id: 'api',
+        label: 'Using the API',
+        blurb: 'The same routes the dashboard calls, the auth header, and the replay window receivers must enforce.',
+      },
+    ],
+  },
+];
+
+/** Flattened for the contents rail, which wants one list rather than groups. */
+const CONTENTS = DOC_GROUPS.flatMap((section) => section.entries);
+
 function Section({
   id,
   icon,
@@ -305,21 +408,15 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-20">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+    <section id={id} className="docs-section">
+      <h2>
+        <span className="docs-section__icon" aria-hidden>
           <Icon name={icon} size={14} />
         </span>
-        <div className="min-w-0">
-          <h2 className="text-sm font-medium">{title}</h2>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {summary}
-          </p>
-        </div>
-      </div>
-
-      <Separator className="my-3" />
-      <div className="pl-0 sm:pl-10">{children}</div>
+        {title}
+      </h2>
+      <p className="docs-section__summary">{summary}</p>
+      <div className="docs-section__body">{children}</div>
     </section>
   );
 }

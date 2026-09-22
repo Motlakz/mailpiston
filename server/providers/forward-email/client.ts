@@ -87,7 +87,17 @@ export interface ForwardEmailLimitResponse {
 }
 
 export interface ForwardEmailClientOptions {
-  apiToken: string;
+  /**
+   * A literal token, or a resolver for one.
+   *
+   * The resolver form is what makes per-tenant credentials possible without
+   * turning every service constructor async: each tenant's token is encrypted
+   * in the database, and reading it is I/O. `fetchRaw` is already async, so
+   * the lookup happens there — once per request, behind whatever cache the
+   * resolver keeps — instead of cascading an await up through the service
+   * graph to the route handler.
+   */
+  apiToken: string | (() => Promise<string>);
   baseUrl: string;
   timeoutMs: number;
 }
@@ -273,6 +283,11 @@ export class ForwardEmailClient {
     path: string,
     body?: unknown,
   ): Promise<Response> {
+    const token =
+      typeof this.options.apiToken === 'function'
+        ? await this.options.apiToken()
+        : this.options.apiToken;
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
 
@@ -281,7 +296,7 @@ export class ForwardEmailClient {
         method,
         signal: controller.signal,
         headers: {
-          Authorization: `Basic ${Buffer.from(`${this.options.apiToken}:`).toString('base64')}`,
+          Authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}`,
           Accept: 'application/json',
           ...(body !== undefined && { 'Content-Type': 'application/json' }),
         },

@@ -6,7 +6,7 @@ import {
   createApiKeySchema,
   type CreateApiKeyInput,
 } from '@/server/core/validation';
-import { repositories } from '@/server/repositories';
+import { repositoriesFor } from '@/server/repositories';
 
 /**
  * Keys for the public `/v1` API (plan §24).
@@ -22,12 +22,14 @@ import { repositories } from '@/server/repositories';
  * any key-issuing endpoint we could leave open.
  */
 export const GET = withApi(
-  async () => NextResponse.json({ data: await repositories.apiKeys.list() }),
+  async ({ tenantId }) =>
+    NextResponse.json({ data: await repositoriesFor(tenantId).apiKeys.list() }),
   { endpoint: '/v1/api-keys' },
 );
 
 export const POST = withApi<CreateApiKeyInput>(
-  async ({ body }) => {
+  async ({ body, tenantId }) => {
+    const repositories = repositoriesFor(tenantId);
     const generated = generateApiKey();
 
     const key = await repositories.apiKeys.create({

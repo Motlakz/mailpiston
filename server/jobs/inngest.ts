@@ -23,6 +23,8 @@ import { env } from '@/server/core/config';
  */
 export const webhookDeliveryFailed = eventType('webhook/delivery.failed', {
   schema: z.object({
+    /** Whose workspace this delivery belongs to. */
+    tenantId: z.string().min(1),
     deliveryId: z.string().min(1),
     /** The attempt this schedules, 1-based. Advisory: the row is the truth. */
     attempt: z.number().int().positive(),

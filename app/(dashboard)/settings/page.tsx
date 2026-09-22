@@ -1,7 +1,11 @@
 import { PageHeader } from '@/components/layout/page-shell';
 import { FilterLists } from '@/components/mail/filter-lists';
+import { ProviderConnection } from '@/components/mail/provider-connection';
 import { env } from '@/server/core/config';
-import { repositories } from '@/server/repositories';
+import { hasTenantApiToken } from '@/server/core/tenancy/credentials';
+import { sendUsageFor } from '@/server/core/tenancy/limits';
+import { repositoriesFor } from '@/server/repositories';
+import { requireOperatorPage } from '@/server/core/auth';
 
 export const metadata = { title: 'Settings · MailPiston' };
 
@@ -17,9 +21,13 @@ export const metadata = { title: 'Settings · MailPiston' };
  * privileged mutations, which is worth nothing if nobody can read it.
  */
 export default async function SettingsPage() {
-  const [audit, filters] = await Promise.all([
+  const { tenantId } = await requireOperatorPage();
+  const repositories = repositoriesFor(tenantId);
+  const [audit, filters, providerConnected, sendUsage] = await Promise.all([
     repositories.audit.list({ limit: 50 }),
     repositories.mailFilters.list(),
+    hasTenantApiToken(tenantId),
+    sendUsageFor(tenantId, repositories.emails),
   ]);
 
   return (
@@ -28,6 +36,62 @@ export default async function SettingsPage() {
         title="Settings"
         description="Configuration is read-only here — it is parsed from the environment at boot. This page shows what is in force, and who changed what."
       />
+
+      <section className="rounded-lg bg-card ring-1 ring-foreground/10">
+        <header className="border-b border-border px-5 py-3">
+          <h2 className="text-sm font-medium">Mail provider</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            MailPiston is the control plane. Transport is bought from a
+            specialist on your own account, so the bill and the reputation
+            stay yours.
+          </p>
+        </header>
+
+        <div className="px-5 py-4">
+          <ProviderConnection connected={providerConnected} />
+        </div>
+      </section>
+
+      <section className="rounded-lg bg-card ring-1 ring-foreground/10">
+        <header className="border-b border-border px-5 py-3">
+          <h2 className="text-sm font-medium">Monthly sending</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Domains are never metered. Messages are — they are the part that
+            costs something.
+          </p>
+        </header>
+
+        <div className="send-usage">
+          <p className="send-usage__figure">
+            <strong>{sendUsage.used.toLocaleString()}</strong>
+            <span>of {sendUsage.limit.toLocaleString()} sent this month</span>
+          </p>
+
+          <div
+            className="send-usage__bar"
+            role="progressbar"
+            aria-valuenow={sendUsage.used}
+            aria-valuemin={0}
+            aria-valuemax={sendUsage.limit}
+          >
+            <span
+              style={{
+                width: `${Math.min(100, (sendUsage.used / Math.max(1, sendUsage.limit)) * 100)}%`,
+              }}
+              data-full={sendUsage.remaining === 0 ? '' : undefined}
+            />
+          </div>
+
+          <p className="send-usage__note">
+            {sendUsage.remaining === 0
+              ? 'The allowance is spent. Sending resumes when the window rolls over.'
+              : `${sendUsage.remaining.toLocaleString()} remaining.`}{' '}
+            Resets {sendUsage.resetsAt.toISOString().slice(0, 10)}. Receiving is
+            never blocked by this — losing a message somebody sent you is not a
+            failure worth trading for a limit.
+          </p>
+        </div>
+      </section>
 
       <section className="rounded-lg bg-card ring-1 ring-foreground/10">
         <header className="border-b border-border px-5 py-3">
