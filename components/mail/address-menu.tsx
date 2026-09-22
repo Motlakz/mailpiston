@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 export function AddressMenu({
   addressId,
@@ -43,11 +43,7 @@ export function AddressMenu({
       });
       startTransition(() => router.refresh());
     } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : 'Something went wrong. Check the server logs.',
-      );
+      setError(messageFor(caught));
     } finally {
       setBusy(false);
     }

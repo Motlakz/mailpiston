@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { keepWithin } from '@/lib/select-value';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 export interface DomainOption {
   id: string;
@@ -236,8 +236,3 @@ export function RepairAliasButton({ addressId }: { addressId: string }) {
   );
 }
 
-function messageFor(error: unknown): string {
-  return error instanceof ApiRequestError
-    ? error.message
-    : 'Something went wrong. Check the server logs.';
-}

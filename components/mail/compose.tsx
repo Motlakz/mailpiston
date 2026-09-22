@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 export interface SendableAddress {
   id: string;
@@ -70,11 +70,7 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
       setOpen(false);
       startTransition(() => router.refresh());
     } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : 'Something went wrong. Check the server logs.',
-      );
+      setError(messageFor(caught));
     }
   }
 
@@ -209,11 +205,7 @@ export function ReplyForm({
       setSent(true);
       startTransition(() => router.refresh());
     } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : 'Something went wrong. Check the server logs.',
-      );
+      setError(messageFor(caught));
     }
   }
 

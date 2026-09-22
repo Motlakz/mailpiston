@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ApiRequestError, apiRequest } from '@/lib/api-client';
+import { apiRequest, messageFor } from '@/lib/api-client';
 
 interface ConnectResult {
   connected: boolean;
@@ -60,10 +60,7 @@ export function ProviderConnection({ connected }: { connected: boolean }) {
 
       startTransition(() => router.refresh());
     } catch (caught) {
-      const message =
-        caught instanceof ApiRequestError
-          ? caught.message
-          : 'Something went wrong. Check the server logs.';
+      const message = messageFor(caught);
       setError(message);
       toast.error(message);
     } finally {
