@@ -123,6 +123,80 @@ describe('OutboundService.send', () => {
     ]);
   });
 
+  it('sends as a plain address, so a ported caller keeps the string it has', async () => {
+    const email = await outbound.send({
+      from: `support@${DOMAIN}`,
+      to: ['customer@example.com'],
+      subject: 'Scheduled maintenance',
+      text: 'We are upgrading on Friday.',
+    });
+
+    expect(email.addressId).toBe(sendableId);
+    expect(provider.sentMessages[0].from).toBe(`support@${DOMAIN}`);
+  });
+
+  it('carries a display name into the header but not into the row', async () => {
+    const email = await outbound.send({
+      from: `Speak Diary Support <SUPPORT@${DOMAIN.toUpperCase()}>`,
+      to: ['customer@example.com'],
+      subject: 'Scheduled maintenance',
+      text: 'We are upgrading on Friday.',
+    });
+
+    expect(provider.sentMessages[0].from).toBe(
+      `"Speak Diary Support" <support@${DOMAIN}>`,
+    );
+    // The row is what a reply addresses and a thread groups by, so it holds
+    // the address alone — a display name there would fork the sender in two.
+    expect(email.from).toBe(`support@${DOMAIN}`);
+  });
+
+  it('refuses a from that is not one of our addresses', async () => {
+    await expect(
+      outbound.send({
+        from: 'support@someone-elses-domain.test',
+        to: ['customer@example.com'],
+        subject: 'Nope',
+        text: 'No alias authorises this.',
+      }),
+    ).rejects.toThrow(/not one of your addresses/);
+
+    expect(provider.sentMessages).toHaveLength(0);
+    expect(emails.rows.size).toBe(0);
+  });
+
+  it('refuses an inbound-only address named by email, with the same reason as by id', async () => {
+    await expect(
+      outbound.send({
+        from: `notices@${DOMAIN}`,
+        to: ['customer@example.com'],
+        subject: 'Nope',
+        text: 'This address has no alias to authorise a From.',
+      }),
+    ).rejects.toThrow(/inbound-only/);
+  });
+
+  it('refuses a from that is not an address at all', async () => {
+    await expect(
+      outbound.send({
+        from: 'Speak Diary Support',
+        to: ['customer@example.com'],
+        subject: 'Nope',
+        text: 'body',
+      }),
+    ).rejects.toThrow(/not an email address/);
+  });
+
+  it('refuses a send that names neither a from nor an address', async () => {
+    await expect(
+      outbound.send({
+        to: ['customer@example.com'],
+        subject: 'Nope',
+        text: 'body',
+      }),
+    ).rejects.toThrow(/needs a `from` address/);
+  });
+
   it('refuses an inbound-only address rather than letting the provider refuse it', async () => {
     await expect(
       outbound.send({
@@ -177,6 +251,32 @@ describe('OutboundService.reply', () => {
 
     const [sent] = provider.sentMessages;
     expect(sent.from).toBe(`support@${DOMAIN}`);
+  });
+
+  it('takes a display name on a reply, since the address agrees', async () => {
+    const captured = await inbound.capture(delivery());
+
+    await outbound.reply(captured.emailId!, {
+      from: `Speak Diary Support <support@${DOMAIN}>`,
+      text: 'On it.',
+    });
+
+    expect(provider.sentMessages[0].from).toBe(
+      `"Speak Diary Support" <support@${DOMAIN}>`,
+    );
+  });
+
+  it('refuses a reply that tries to go out as a different address', async () => {
+    const captured = await inbound.capture(delivery());
+
+    await expect(
+      outbound.reply(captured.emailId!, {
+        from: `notices@${DOMAIN}`,
+        text: 'On it.',
+      }),
+    ).rejects.toThrow(/would start a new conversation/);
+
+    expect(provider.sentMessages).toHaveLength(0);
   });
 
   it('does not stack Re: on a subject that already has one', async () => {

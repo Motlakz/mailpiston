@@ -61,7 +61,7 @@ const mailpiston = new MailpistonClient({
 });
 
 const sent = await mailpiston.send({
-  addressId: 'addr_...',
+  from: 'Support <support@yourdomain.com>',
   to: ['customer@example.com'],
   subject: 'Thanks for writing in',
   text: 'We are on it.',
@@ -74,6 +74,12 @@ Use `reply` rather than composing a follow-up with `send`: MailPiston owns the
 threading headers, and a reply assembled by hand arrives as a new conversation
 in the recipient's mail client.
 
+`sent.id` is repliable immediately — including on a message you sent, as above.
+Store that id against whatever the conversation is in your application, and
+replace it with the id from an inbound webhook when one arrives. Keeping the
+newest id means a reply answers the newest message in the thread, which is what
+the recipient's client expects to see it below.
+
 ## Migrating an app off a bundled email SDK
 
 `sdk/.env.example` lists the environment an app needs, with the variables it
@@ -82,19 +88,13 @@ replaces named alongside. The short version, for a typical Inbound.new app:
 | Was | Becomes |
 | --- | --- |
 | `INBOUND_API_KEY` | `MAILPISTON_API_KEY`, plus `MAILPISTON_API_URL` |
-| `INBOUND_FROM_EMAIL` | `MAILPISTON_ADDRESS_ID` |
+| `INBOUND_FROM_EMAIL` | nothing — keep passing `from` |
 | `INBOUND_SENDING_DOMAIN` | nothing — the domain is the address's domain |
 | `INBOUND_REPLY_TO` | nothing — replies return to the sending address |
 | `INBOUND_WEBHOOK_TOKEN` | `MAILPISTON_ENDPOINT_SECRET` |
 
-Two differences are worth knowing before you start, because they are the only
-places the port is not mechanical.
-
-**You send as an address id, not a `from` string.** Sending as an address
-requires a concrete provider alias that authorises it, and a string cannot carry
-that fact. So a wrong value is a 404 at send time rather than mail that quietly
-fails SPF a week later. The id is on the Addresses page, on any address marked
-*Concrete alias · can send*.
+One difference is worth knowing before you start, because it is the only place
+the port is not mechanical.
 
 **The webhook is signed, not tokenised.** A shared token in a header stays valid
 forever and is equally valid replayed. Deliveries here carry an HMAC over
@@ -103,7 +103,23 @@ replay window. Replace the token comparison entirely — do not keep it as a
 fallback, because a fallback that accepts a bare token is the whole of the
 weakness you are removing.
 
-Everything else — subject, text, html, to, cc — maps across unchanged.
+Everything else — `from`, subject, text, html, to, cc — maps across unchanged.
+`from` takes a bare address or `Display Name <address>`, and has to name one of
+your managed addresses: sending is authorised by that address's provider alias,
+so an address you do not hold is refused at send time rather than quietly
+failing SPF a week later.
+
+Check the sender before you deploy — a `from` your account does not hold fails
+every send:
+
+```ts
+await mailpiston.send({ from: 'support@yourdomain.com', /* … */ });
+// MailpistonApiError: support@yourdomain.com is not one of your addresses…
+```
+
+The Addresses page shows which are sendable — anything marked
+*Concrete alias · can send*. An inbound-only address has no alias to authorise
+a `From:`, and is refused with that reason.
 
 ## The payload is a contract
 

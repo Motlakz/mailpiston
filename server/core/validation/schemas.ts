@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { parseSender } from './sender';
+
 /**
  * Shared validation, used by both the public API and the dashboard forms so a
  * rule cannot be enforced in one place and forgotten in the other.
@@ -72,22 +74,58 @@ const messageBody = {
 const hasBody = (value: { text?: string; html?: string }) =>
   Boolean(value.text?.trim() || value.html?.trim());
 
+/**
+ * Who to send as: the address itself, or its id.
+ *
+ * `from` takes what every other mail API takes — `user@example.com` or
+ * `Display Name <user@example.com>` — so a ported app can pass the string it
+ * already has. `addressId` stays because it is unambiguous and callers that
+ * hold one should not have to convert it back.
+ */
+const sender = {
+  from: z
+    .string()
+    .trim()
+    .max(320)
+    .refine((value) => parseSender(value) !== null, {
+      message: 'Must be an email address, optionally with a display name',
+    })
+    .optional(),
+  addressId: z.string().min(1).optional(),
+};
+
+const hasOneSender = (value: { from?: string; addressId?: string }) =>
+  Boolean(value.from) !== Boolean(value.addressId);
+
 export const sendEmailSchema = z
   .object({
-    addressId: z.string().min(1),
+    ...sender,
     to: recipients,
     cc: z.array(z.email()).max(50).optional(),
     bcc: z.array(z.email()).max(50).optional(),
     subject: z.string().trim().min(1).max(998),
     ...messageBody,
   })
-  .refine(hasBody, { message: 'A message needs a text or HTML body' });
+  .refine(hasBody, { message: 'A message needs a text or HTML body' })
+  .refine(hasOneSender, {
+    message: 'Send needs exactly one of `from` or `addressId`',
+    path: ['from'],
+  });
 
 export const replyEmailSchema = z
   .object({
     /** Defaults to the sender of the message being answered. */
     to: recipients.optional(),
     cc: z.array(z.email()).max(50).optional(),
+    /**
+     * Optional, and only ever a display name.
+     *
+     * A reply goes out as the address the message it answers belongs to —
+     * anything else is a new conversation wearing a thread's headers. It is
+     * accepted at all so a ported caller can keep passing the same `from`
+     * string it passes to send; the address in it has to agree.
+     */
+    from: sender.from,
     ...messageBody,
   })
   .refine(hasBody, { message: 'A reply needs a text or HTML body' });

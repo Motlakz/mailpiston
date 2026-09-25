@@ -5,7 +5,36 @@
  * session and this client with an API key, and both hit identical routes. A
  * bug in the public surface therefore shows up in our own UI first.
  */
-import type { MailpistonEmail } from './payload';
+
+/**
+ * What `/v1/emails/send` and `/v1/emails/:id/reply` hand back: the stored row,
+ * with its dates as ISO strings.
+ *
+ * Not `MailpistonEmail` — that is the *webhook* payload, a narrower shape built
+ * for a receiver, and the two are not interchangeable. Keep `id`: it is what a
+ * later `reply()` addresses, and it works straight away, with no round trip
+ * through a delivery first.
+ */
+export interface SentEmail {
+  id: string;
+  threadId: string | null;
+  addressId: string | null;
+  direction: 'inbound' | 'outbound';
+  status: string;
+  /** The RFC 5322 Message-ID, once the provider has assigned one. */
+  messageId: string | null;
+  providerMessageId: string | null;
+  from: string;
+  to: string[];
+  cc: string[];
+  subject: string | null;
+  text: string | null;
+  html: string | null;
+  inReplyTo: string | null;
+  references: string[];
+  sentAt: string | null;
+  createdAt: string;
+}
 
 export interface MailpistonClientOptions {
   /** Deployment origin, e.g. `https://mailpiston.com`. */
@@ -14,21 +43,41 @@ export interface MailpistonClientOptions {
   fetch?: typeof fetch;
 }
 
-export interface SendInput {
-  addressId: string;
+/**
+ * Who a message goes out as: `from`, or `addressId`. Exactly one.
+ *
+ * `from` is the one to reach for — `user@example.com`, or
+ * `Display Name <user@example.com>`, the same string every other mail API
+ * takes. It has to be one of your managed addresses, because sending is
+ * authorised by a provider alias and an address you do not hold has none.
+ *
+ * `addressId` says the same thing with our id for the address. It is here for
+ * callers that already hold one (the dashboard does); nothing needs it.
+ */
+export type Sender =
+  | { from: string; addressId?: never }
+  | { addressId: string; from?: never };
+
+export type SendInput = Sender & {
   to: string[];
   cc?: string[];
   bcc?: string[];
   subject: string;
   text?: string;
   html?: string;
-}
+};
 
 export interface ReplyInput {
   to?: string[];
   cc?: string[];
   text?: string;
   html?: string;
+  /**
+   * Optional, and only ever a display name: a reply goes out as the address
+   * the message it answers belongs to. Naming a different address is an error
+   * rather than a silent substitution.
+   */
+  from?: string;
 }
 
 export class MailpistonApiError extends Error {
@@ -54,7 +103,7 @@ export class MailpistonClient {
   }
 
   /** Sends a new message from one of your managed addresses. */
-  send(input: SendInput): Promise<MailpistonEmail> {
+  send(input: SendInput): Promise<SentEmail> {
     return this.post('/api/v1/emails/send', input);
   }
 
@@ -63,7 +112,7 @@ export class MailpistonClient {
    * reply built by hand would land as a new conversation in the recipient's
    * client.
    */
-  reply(emailId: string, input: ReplyInput): Promise<MailpistonEmail> {
+  reply(emailId: string, input: ReplyInput): Promise<SentEmail> {
     return this.post(`/api/v1/emails/${encodeURIComponent(emailId)}/reply`, input);
   }
 
