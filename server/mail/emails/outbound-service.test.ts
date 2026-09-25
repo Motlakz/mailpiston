@@ -303,6 +303,34 @@ describe('monthly send limit', () => {
     expect(sent.direction).toBe('outbound');
   });
 
+  it('reserves the provider-wide egress budget before writing a queued row', async () => {
+    const guarded = new OutboundService(
+      emails,
+      addresses,
+      events,
+      threads,
+      provider,
+      { async assert() {} },
+      {
+        async reserve() {
+          throw new Error('daily provider-send safety limit reached');
+        },
+      },
+    );
+    const before = (await emails.list({ limit: 100 })).items.length;
+
+    await expect(
+      guarded.send({
+        addressId: sendableId,
+        to: ['someone@example.test'],
+        subject: 'Over provider budget',
+        text: 'This should not be queued.',
+      }),
+    ).rejects.toThrow(/provider-send safety limit/);
+
+    expect((await emails.list({ limit: 100 })).items.length).toBe(before);
+  });
+
   it('counts only outbound mail in the window', async () => {
     // Inbound is counted for usage reporting but never gated — refusing mail
     // somebody sent you is the one failure a mail system does not get to have.

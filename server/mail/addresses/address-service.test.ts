@@ -123,6 +123,38 @@ describe('DomainService', () => {
     expect(domain.dnsRecords.every((record) => record.present)).toBe(true);
   });
 
+  it('selects a verified reply domain and explicitly points its catch-all at ingress', async () => {
+    const domain = await verifiedDomain('reply-domain.test');
+
+    const selected = await domains.configureRelay(domain.id);
+    const alias = await provider.findAlias(domain.providerDomainId!, '*');
+
+    expect(selected.relayEnabled).toBe(true);
+    expect(selected.catchAllAliasId).toBe(alias?.id);
+    expect(alias?.recipients).toEqual([
+      expect.stringContaining('/api/providers/forward-email/inbound'),
+    ]);
+  });
+
+  it('keeps only one reply domain selected per workspace', async () => {
+    const first = await verifiedDomain('first-relay.test');
+    const second = await verifiedDomain('second-relay.test');
+
+    await domains.configureRelay(first.id);
+    await domains.configureRelay(second.id);
+
+    expect((await domainRepo.findById(first.id))?.relayEnabled).toBe(false);
+    expect((await domainRepo.findById(second.id))?.relayEnabled).toBe(true);
+  });
+
+  it('refuses to select an unverified reply domain', async () => {
+    const pending = await domains.create({ name: 'pending-relay.test' });
+
+    await expect(domains.configureRelay(pending.id)).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+  });
+
   it('creates the catch-all only when asked, and only once', async () => {
     const domain = await domains.create({
       name: 'fixture-domain.test',

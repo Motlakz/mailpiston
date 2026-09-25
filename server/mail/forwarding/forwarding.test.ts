@@ -55,6 +55,7 @@ beforeEach(async () => {
     events,
     provider,
     30,
+    domains,
   );
 
   const relay = new RelayService(relays, endpoints, emails, events, outbound);
@@ -75,6 +76,14 @@ beforeEach(async () => {
     status: 'verified',
     dnsRecords: [],
   });
+
+  const replyDomain = await domains.create({
+    name: RELAY_DOMAIN,
+    providerDomainId: RELAY_DOMAIN,
+    status: 'verified',
+    dnsRecords: [],
+  });
+  await domains.setRelayDomain(replyDomain.id, true);
 
   const address = await addresses.create({
     domainId: domain.id,
@@ -178,6 +187,21 @@ describe('personal forwarding', () => {
 
     expect(relay.tokenHash).toBe(sha256Hex(token));
     expect(relay.tokenHash).not.toContain(token);
+    expect(relay.relayDomain).toBe(RELAY_DOMAIN);
+  });
+
+  it('fails closed when the workspace has not selected a reply domain', async () => {
+    const relayDomain = await domains.findRelayDomain();
+    await domains.setRelayDomain(relayDomain!.id, false);
+
+    const result = await inbound.capture(delivery());
+
+    expect(result.status).toBe('captured');
+    expect(provider.sentMessages).toHaveLength(0);
+    expect(events.rows.some((event) =>
+      event.type === 'personal_forward.failed' &&
+      String(event.metadata.error).includes('Domains page'),
+    )).toBe(true);
   });
 
   it('never forwards to an unverified recipient', async () => {
@@ -198,6 +222,29 @@ describe('personal forwarding', () => {
     expect(notified).not.toContain('stranger@example.net');
   });
 
+  it('fails a legacy managed-domain destination without feeding ingress again', async () => {
+    const endpoint = await endpoints.create({
+      name: 'Unsafe legacy route',
+      type: 'email',
+      enabled: true,
+    });
+    const recipient = await endpoints.addRecipient(
+      endpoint.id,
+      `support@${DOMAIN}`,
+    );
+    await endpoints.markRecipientVerified(recipient.id);
+    const [address] = await addresses.list();
+    await endpoints.bindToAddress(address.id, endpoint.id);
+
+    await inbound.capture(delivery());
+
+    expect(provider.sentMessages.flatMap((message) => message.to)).toEqual([PERSONAL]);
+    expect(events.rows.some((event) =>
+      event.type === 'personal_forward.failed' &&
+      String(event.metadata.error).includes('managed by this MailPiston workspace'),
+    )).toBe(true);
+  });
+
   it('keeps the message even when forwarding fails outright', async () => {
     const failing = new ForwardingService(
       endpoints,
@@ -210,6 +257,7 @@ describe('personal forwarding', () => {
         },
       } as unknown as MockMailProvider,
       30,
+      domains,
     );
 
     const service = new InboundService(
@@ -280,6 +328,37 @@ describe('relayed replies', () => {
     const result = await inbound.capture(relayReply());
 
     expect(result.reason).toBe('revoked_token');
+    expect(provider.sentMessages).toHaveLength(before);
+  });
+
+  it('keeps an issued reply address valid after the selected domain changes', async () => {
+    await inbound.capture(delivery());
+    const originalReply = relayReply();
+
+    const replacement = await domains.create({
+      name: 'new-relay.mailpiston.test',
+      providerDomainId: 'new-relay.mailpiston.test',
+      status: 'verified',
+      dnsRecords: [],
+    });
+    await domains.setRelayDomain(replacement.id, true);
+
+    const result = await inbound.capture(originalReply);
+
+    expect(result.status).toBe('relayed');
+  });
+
+  it('rejects a valid token delivered through a different hostname', async () => {
+    await inbound.capture(delivery());
+    const original = relayAddressFromNotification();
+    const wrongHost = original.replace(`@${RELAY_DOMAIN}`, '@wrong.example');
+    const before = provider.sentMessages.length;
+
+    const result = await inbound.capture(
+      relayReply({ recipient: wrongHost, to: [wrongHost] }),
+    );
+
+    expect(result.reason).toBe('relay_domain_mismatch');
     expect(provider.sentMessages).toHaveLength(before);
   });
 

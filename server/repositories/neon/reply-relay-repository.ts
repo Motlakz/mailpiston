@@ -28,6 +28,7 @@ export class NeonReplyRelayRepository implements ReplyRelayRepository {
 
   async create(data: {
     tokenHash: string;
+    relayDomain: string;
     addressId: string;
     threadId: string;
     endpointEmailRecipientId: string;
@@ -70,6 +71,7 @@ function toRelay(row: RelayRow): ReplyRelay {
   return {
     id: row.id,
     tokenHash: row.tokenHash,
+    relayDomain: row.relayDomain,
     addressId: row.addressId,
     threadId: row.threadId,
     endpointEmailRecipientId: row.endpointEmailRecipientId,

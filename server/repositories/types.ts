@@ -50,6 +50,7 @@ export interface UpdateDomainData {
   dnsRecords?: DomainDnsRecord[];
   verificationErrors?: string[];
   lastVerifiedAt?: Date | null;
+  relayEnabled?: boolean;
 }
 
 export interface DomainRepository {
@@ -57,6 +58,9 @@ export interface DomainRepository {
   findById(id: string): Promise<Domain | null>;
   findByName(name: string): Promise<Domain | null>;
   list(): Promise<Domain[]>;
+  findRelayDomain(): Promise<Domain | null>;
+  /** Atomically selects this domain, or clears it if `enabled` is false. */
+  setRelayDomain(id: string, enabled: boolean): Promise<Domain>;
   update(id: string, data: UpdateDomainData): Promise<Domain>;
   delete(id: string): Promise<void>;
 }
@@ -522,4 +526,6 @@ export interface ApiKeyRepository {
   }): Promise<ApiKey>;
   list(): Promise<ApiKey[]>;
   revoke(id: string): Promise<void>;
+  /** Physically removes a revoked key. Returns false if it is absent or active. */
+  deleteRevoked(id: string): Promise<boolean>;
 }

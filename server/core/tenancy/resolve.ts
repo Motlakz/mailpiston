@@ -2,7 +2,7 @@ import 'server-only';
 
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 
-import { isRelayRecipient, relayLocalToken } from '@/server/core/config';
+import { relayLocalToken } from '@/server/core/config';
 import { sha256Hex } from '@/server/core/crypto';
 import { db } from '@/server/db/client';
 import {
@@ -104,9 +104,8 @@ export async function tenantForAddress(email: string): Promise<string | null> {
 /**
  * The tenant behind a reply-relay token.
  *
- * A relay address is the one inbound recipient that names no domain of ours —
- * `reply+<token>@<relay-domain>` is platform infrastructure shared by every
- * tenant, and the token is the only thing that says whose thread it answers.
+ * The opaque token identifies the tenant, while the hostname stored with it
+ * proves the reply arrived through the workspace domain that issued it.
  * Looking it up therefore cannot be scoped: the lookup *is* the scoping.
  *
  * Revoked and expired tokens resolve to null here rather than being filtered
@@ -114,9 +113,14 @@ export async function tenantForAddress(email: string): Promise<string | null> {
  */
 export async function tenantForRelayTokenHash(
   tokenHash: string,
+  relayDomain: string,
 ): Promise<string | null> {
   const [row] = await db
-    .select({ tenantId: replyRelays.tenantId, expiresAt: replyRelays.expiresAt })
+    .select({
+      tenantId: replyRelays.tenantId,
+      expiresAt: replyRelays.expiresAt,
+      relayDomain: replyRelays.relayDomain,
+    })
     .from(replyRelays)
     .where(
       and(
@@ -128,6 +132,7 @@ export async function tenantForRelayTokenHash(
 
   if (!row) return null;
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
+  if (row.relayDomain?.toLowerCase() !== relayDomain.toLowerCase()) return null;
 
   return row.tenantId;
 }
@@ -152,10 +157,9 @@ export async function allTenantIds(): Promise<string[]> {
  * message and the request carries no session, no API key and no workspace —
  * only a recipient. Two shapes answer it:
  *
- *  - a **relay address**, `reply+<token>@<relay domain>`, which belongs to no
- *    tenant's domain at all. The relay domain is platform infrastructure
- *    shared by everyone, so the opaque token is the only thing that says whose
- *    thread is being answered.
+ *  - a **relay address**, `reply+<token>@<workspace reply domain>`. The token
+ *    identifies the workspace and records the hostname that issued it, so a
+ *    later dashboard switch does not break replies already delivered.
  *  - an **ordinary recipient** on a domain some tenant has verified.
  *
  * Null means nobody owns it. The caller must treat that as a rejection and
@@ -164,13 +168,17 @@ export async function allTenantIds(): Promise<string[]> {
 export async function tenantForInboundRecipient(
   recipient: string,
 ): Promise<string | null> {
-  if (isRelayRecipient(recipient)) {
-    const token = relayLocalToken(recipient);
-    return token ? tenantForRelayTokenHash(sha256Hex(token)) : null;
-  }
-
   const at = recipient.lastIndexOf('@');
   if (at <= 0) return null;
+
+  const token = relayLocalToken(recipient);
+  if (token) {
+    const tenantId = await tenantForRelayTokenHash(
+      sha256Hex(token),
+      recipient.slice(at + 1),
+    );
+    if (tenantId) return tenantId;
+  }
 
   return tenantForDomain(recipient.slice(at + 1));
 }

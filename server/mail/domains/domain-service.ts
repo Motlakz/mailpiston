@@ -63,6 +63,30 @@ export class DomainService {
   }
 
   /**
+   * Makes a verified managed domain the workspace's reply-relay domain.
+   *
+   * Configuring the relay is an explicit routing operation, so it also makes
+   * the provider catch-all point at this ingress. Merely toggling a database
+   * flag while the provider still delivers elsewhere would produce relay
+   * addresses that look valid and can never receive a reply.
+   */
+  async configureRelay(id: string): Promise<Domain> {
+    const domain = await this.get(id);
+    if (domain.status !== 'verified') {
+      throw new ConflictError(
+        `Domain ${domain.name} must be verified before it can carry replies`,
+      );
+    }
+
+    await this.repairCatchAll(id);
+    return this.domains.setRelayDomain(id, true);
+  }
+
+  async disableRelay(id: string): Promise<Domain> {
+    return this.domains.setRelayDomain(id, false);
+  }
+
+  /**
    * Polls the provider for the DNS records and records the outcome.
    *
    * `failed` is not terminal — DNS propagates, so an operator re-runs this

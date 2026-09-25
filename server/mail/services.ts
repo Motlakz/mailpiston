@@ -10,6 +10,7 @@ import { getStorage } from '@/server/storage';
 import { AddressService } from './addresses/address-service';
 import { DomainService } from './domains/domain-service';
 import { OutboundService } from './emails/outbound-service';
+import { egressBudgetFor } from './emails/egress-budget';
 import { EndpointService } from './endpoints/endpoint-service';
 import { ForwardingService } from './forwarding/forwarding-service';
 import { RelayService } from './forwarding/relay-service';
@@ -59,6 +60,7 @@ export function servicesFor(tenantId: string): MailServices {
 
   const repositories = repositoriesFor(tenantId);
   const provider = () => mailProviderRegistry.forTenant(tenantId);
+  const egressBudget = egressBudgetFor(tenantId);
 
   let domains: DomainService | undefined;
   let addresses: AddressService | undefined;
@@ -93,6 +95,7 @@ export function servicesFor(tenantId: string): MailServices {
         {
           assert: () => assertWithinSendLimit(tenantId, repositories.emails),
         },
+        egressBudget,
       )),
 
     forwarding: () =>
@@ -102,6 +105,8 @@ export function servicesFor(tenantId: string): MailServices {
         repositories.events,
         provider(),
         env.RELAY_TOKEN_TTL_DAYS,
+        repositories.domains,
+        egressBudget,
       )),
 
     relay: () =>
@@ -174,6 +179,7 @@ export function servicesFor(tenantId: string): MailServices {
         repositories.endpoints,
         repositories.addresses,
         bundle.outbound(),
+        repositories.domains,
       )),
   };
 

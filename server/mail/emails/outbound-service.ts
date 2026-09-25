@@ -3,6 +3,7 @@ import 'server-only';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/core/errors';
 import type { Email } from '@/server/core/types';
 import type { MailProvider } from '@/server/providers/types';
+import type { EgressBudget } from './egress-budget';
 import type {
   AddressRepository,
   EmailRepository,
@@ -66,6 +67,9 @@ export class OutboundService {
     private readonly sendLimit: { assert(): Promise<void> } = {
       async assert() {},
     },
+    private readonly egressBudget: EgressBudget = {
+      async reserve() {},
+    },
   ) {}
 
   async send(input: SendInput): Promise<Email> {
@@ -73,6 +77,7 @@ export class OutboundService {
     // behind — a queued message that never goes out is the kind of debris
     // that makes a mailbox untrustworthy.
     await this.sendLimit.assert();
+    await this.egressBudget.reserve({ kind: 'message' });
 
     const from = await this.requireSendableAddress(input.addressId);
 
@@ -119,6 +124,7 @@ export class OutboundService {
     // behind — a queued message that never goes out is the kind of debris
     // that makes a mailbox untrustworthy.
     await this.sendLimit.assert();
+    await this.egressBudget.reserve({ kind: 'message' });
 
     const parent = await this.emails.findById(emailId);
     if (!parent) throw new NotFoundError(`Email ${emailId} not found`);

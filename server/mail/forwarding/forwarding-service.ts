@@ -1,10 +1,12 @@
 import 'server-only';
 
-import { relayAddressFor } from '@/server/core/config';
 import { randomToken, sha256Hex } from '@/server/core/crypto';
+import { ConflictError, ValidationError } from '@/server/core/errors';
 import type { AddressWithDomain, Email } from '@/server/core/types';
+import type { EgressBudget } from '@/server/mail/emails/egress-budget';
 import type { MailProvider } from '@/server/providers/types';
 import type {
+  DomainRepository,
   EndpointRepository,
   EventRepository,
   ReplyRelayRepository,
@@ -53,6 +55,10 @@ export class ForwardingService {
     private readonly events: EventRepository,
     private readonly provider: MailProvider,
     private readonly ttlDays: number,
+    private readonly domains: DomainRepository,
+    private readonly egressBudget: EgressBudget = {
+      async reserve() {},
+    },
   ) {}
 
   async forward(input: {
@@ -60,12 +66,15 @@ export class ForwardingService {
     address: AddressWithDomain;
   }): Promise<{ delivered: number; failed: number }> {
     const targets = await this.targetsFor(input.address.id);
+    if (targets.length === 0) return { delivered: 0, failed: 0 };
+
+    const relayDomain = await this.domains.findRelayDomain();
     let delivered = 0;
     let failed = 0;
 
     for (const target of targets) {
       try {
-        await this.notify(target, input);
+        await this.notify(target, input, relayDomain?.name ?? null);
         delivered += 1;
       } catch (error) {
         failed += 1;
@@ -113,29 +122,45 @@ export class ForwardingService {
   private async notify(
     target: ForwardTarget,
     { email, address }: { email: Email; address: AddressWithDomain },
+    relayDomain: string | null,
   ): Promise<void> {
+    await this.assertExternalTarget(target.email);
+
+    if (!relayDomain) {
+      throw new ConflictError(
+        'Personal forwarding is disabled until a verified reply-relay domain is selected on the Domains page.',
+      );
+    }
+    if (!email.threadId) {
+      throw new ConflictError('Personal forwarding needs a thread for safe reply routing');
+    }
+
+    await this.egressBudget.reserve({
+      kind: 'personal_forward',
+      recipient: target.email,
+    });
+
     await this.events.create({
       emailId: email.id,
       type: 'personal_forward.queued',
       metadata: { endpointId: target.endpointId, recipientId: target.recipientId },
     });
 
-    const replyTo = email.threadId
-      ? await this.mintRelayAddress({
-          addressId: address.id,
-          threadId: email.threadId,
-          recipientId: target.recipientId,
-        })
-      : null;
+    const replyTo = await this.mintRelayAddress({
+      addressId: address.id,
+      threadId: email.threadId,
+      recipientId: target.recipientId,
+      relayDomain,
+    });
 
     await this.provider.send({
       // The managed address does the sending; the customer's name survives as
       // a display name so the notification reads like the original.
       from: `${quoteDisplayName(`${displayNameOf(email.from)} via ${address.email}`)} <${address.email}>`,
       to: [target.email],
-      ...(replyTo ? { replyTo } : {}),
+      replyTo,
       subject: email.subject ?? '(no subject)',
-      text: notificationBody(email, replyTo),
+      text: notificationBody(email),
       ...(email.html ? { html: email.html } : {}),
       headers: {
         // Loop prevention: our own ingress drops anything wearing these, and
@@ -151,7 +176,7 @@ export class ForwardingService {
       metadata: {
         endpointId: target.endpointId,
         recipientId: target.recipientId,
-        hasRelay: Boolean(replyTo),
+        hasRelay: true,
       },
     });
   }
@@ -160,17 +185,14 @@ export class ForwardingService {
     addressId: string;
     threadId: string;
     recipientId: string;
-  }): Promise<string | null> {
+    relayDomain: string;
+  }): Promise<string> {
     const token = randomToken(24);
-    const relayAddress = relayAddressFor(token);
-
-    // No relay domain configured: send the notification anyway, without a
-    // Reply-To. A reply then lands on the managed address as ordinary inbound
-    // mail — visible, and never forwarded on to the customer by accident.
-    if (!relayAddress) return null;
+    const relayAddress = `reply+${token}@${input.relayDomain}`;
 
     await this.relays.create({
       tokenHash: sha256Hex(token),
+      relayDomain: input.relayDomain,
       addressId: input.addressId,
       threadId: input.threadId,
       endpointEmailRecipientId: input.recipientId,
@@ -179,16 +201,30 @@ export class ForwardingService {
 
     return relayAddress;
   }
+
+  private async assertExternalTarget(email: string): Promise<void> {
+    const domainName = recipientDomain(email);
+    if (!domainName) throw new ValidationError('Forward target is not a valid email address');
+
+    if (await this.domains.findByName(domainName)) {
+      throw new ConflictError(
+        `Refusing to forward to ${email}: it belongs to a domain managed by this MailPiston workspace.`,
+      );
+    }
+  }
 }
 
-function notificationBody(email: Email, replyTo: string | null): string {
+function recipientDomain(email: string): string | null {
+  const separator = email.lastIndexOf('@');
+  return separator > 0 ? email.slice(separator + 1).trim().toLowerCase() : null;
+}
+
+function notificationBody(email: Email): string {
   const header = [
     `From: ${email.from}`,
     `To: ${email.to.join(', ')}`,
     email.cc.length > 0 ? `Cc: ${email.cc.join(', ')}` : null,
-    replyTo
-      ? 'Reply to this message and MailPiston sends it to the customer as the managed address.'
-      : 'No reply relay is configured, so replying here will not reach the customer.',
+    'Reply to this message and MailPiston sends it to the customer as the managed address.',
   ]
     .filter(Boolean)
     .join('\n');

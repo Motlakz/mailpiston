@@ -5,6 +5,7 @@ import { encryptSecret, randomToken, sha256Hex } from '@/server/core/crypto';
 import type { Endpoint, EndpointEmailRecipient } from '@/server/core/types';
 import type {
   AddressRepository,
+  DomainRepository,
   EndpointRepository,
 } from '@/server/repositories/types';
 
@@ -52,6 +53,7 @@ export class EndpointService {
     private readonly endpoints: EndpointRepository,
     private readonly addresses: AddressRepository,
     private readonly outbound: OutboundService,
+    private readonly domains?: DomainRepository,
   ) {}
 
   async create(input: {
@@ -247,6 +249,13 @@ export class EndpointService {
     if (!address) throw new NotFoundError(`Address ${addressId} not found`);
     if (!endpoint) throw new NotFoundError(`Endpoint ${endpointId} not found`);
 
+    if (endpoint.type !== 'webhook') {
+      const recipients = await this.endpoints.listRecipients(endpointId);
+      for (const recipient of recipients) {
+        await this.assertExternalRecipient(recipient.email);
+      }
+    }
+
     await this.endpoints.bindToAddress(addressId, endpointId);
   }
 
@@ -269,6 +278,7 @@ export class EndpointService {
     email: string,
   ): Promise<EndpointEmailRecipient> {
     const endpoint = await this.requireEmailEndpoint(endpointId);
+    await this.assertExternalRecipient(email);
 
     if (endpoint.type === 'email') {
       const existing = await this.endpoints.listRecipients(endpointId);
@@ -343,6 +353,20 @@ export class EndpointService {
 
   removeRecipient(recipientId: string): Promise<void> {
     return this.endpoints.removeRecipient(recipientId);
+  }
+
+  private async assertExternalRecipient(email: string): Promise<void> {
+    if (!this.domains) return;
+
+    const separator = email.lastIndexOf('@');
+    const domainName = separator > 0 ? email.slice(separator + 1).toLowerCase() : '';
+
+    if (!domainName) throw new ValidationError('Recipient must be a valid email address');
+    if (await this.domains.findByName(domainName)) {
+      throw new ConflictError(
+        `A personal forwarding destination cannot use the managed domain ${domainName}; that would create a mail loop.`,
+      );
+    }
   }
 
   private async requireWebhookEndpoint(endpointId: string): Promise<Endpoint> {

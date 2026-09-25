@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { isRelayRecipient } from '@/server/core/config';
+import { relayLocalToken } from '@/server/core/config';
 import { createInboundFingerprint } from '@/server/core/idempotency';
 import { newId } from '@/server/core/ids';
 import type { AddressWithDomain } from '@/server/core/types';
@@ -90,9 +90,16 @@ export class InboundService {
   }
 
   async capture(normalized: NormalizedInboundEmail): Promise<InboundResult> {
+    // Provider ids change on every hop, so ordinary fingerprint deduplication
+    // cannot stop a self-forwarding loop. Our marker can and must stop it
+    // before storage or any outbound fan-out occurs.
+    if (hasHeader(normalized.headers, 'x-mailpiston-forward')) {
+      return this.reject(normalized, 'mailpiston_forward_loop');
+    }
+
     // Relay mail is an instruction, not a message: it is a reply from a
     // verified personal inbox, and it is never stored as inbound customer mail.
-    if (this.handlers.relay && isRelayRecipient(normalized.recipient)) {
+    if (this.handlers.relay && relayLocalToken(normalized.recipient)) {
       const relayed = await this.handlers.relay.handle(normalized);
 
       return relayed.status === 'relayed'
@@ -361,6 +368,15 @@ export class InboundService {
 
     return key;
   }
+}
+
+function hasHeader(
+  headers: Record<string, string | string[]>,
+  expectedName: string,
+): boolean {
+  return Object.keys(headers).some(
+    (name) => name.toLowerCase() === expectedName.toLowerCase(),
+  );
 }
 
 /**

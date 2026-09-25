@@ -20,6 +20,7 @@ export interface Domain {
   providerDomainId: string | null;
   status: 'pending' | 'verified' | 'failed' | 'disabled';
   catchAllAliasId: string | null;
+  relayEnabled: boolean;
   dnsRecords: DomainDnsRecord[];
   /**
    * Why the last check did not pass, in the provider's own words. Empty once
@@ -87,6 +88,7 @@ export interface AddressEndpoint {
 export interface ReplyRelay {
   id: string;
   tokenHash: string;
+  relayDomain: string | null;
   addressId: string;
   threadId: string;
   endpointEmailRecipientId: string;

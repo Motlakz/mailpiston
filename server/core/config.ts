@@ -74,6 +74,10 @@ const envSchema = z.object({
    * an unset value shows as unknown rather than as a guess.
    */
   FORWARD_EMAIL_MONTHLY_ALLOWANCE: z.coerce.number().int().positive().optional(),
+  /** Safety ceilings across every billable provider send, including forwarding. */
+  OUTBOUND_DAILY_SEND_LIMIT: z.coerce.number().int().positive().default(240),
+  PERSONAL_FORWARD_DAILY_LIMIT: z.coerce.number().int().positive().default(150),
+  PERSONAL_FORWARD_TARGET_HOURLY_LIMIT: z.coerce.number().int().positive().default(30),
 
   // --- Crypto ---------------------------------------------------------------
   /** 32-byte key, base64 or hex, for endpoint-secret encryption at rest. */
@@ -98,15 +102,6 @@ const envSchema = z.object({
   STORE_RAW_MIME: booleanish.default(false),
 
   // --- Private reply relay (Phase 6) ---------------------------------------
-  /**
-   * Domain carrying opaque `reply+<token>@` addresses (roadmap §5.9). It must
-   * be a domain whose DNS we control — a Vercel subdomain cannot publish MX —
-   * but it is never customer-facing, so any owned domain works.
-   */
-  RELAY_DOMAIN: z
-    .string()
-    .transform((value) => value.toLowerCase())
-    .optional(),
   /**
    * How long a relay address stays usable. Unbounded tokens are a standing
    * invitation: the address is public the moment a notification is delivered.
@@ -325,17 +320,6 @@ export function attachmentDownloadUrl(attachmentId: string): string {
   ).toString();
 }
 
-/** The relay address a reply to this token should be sent to. */
-export function relayAddressFor(token: string): string | null {
-  return env.RELAY_DOMAIN ? `reply+${token}@${env.RELAY_DOMAIN}` : null;
-}
-
-/** Whether an inbound recipient belongs to the relay domain rather than a managed address. */
-export function isRelayRecipient(recipient: string): boolean {
-  if (!env.RELAY_DOMAIN) return false;
-  return recipient.toLowerCase().endsWith(`@${env.RELAY_DOMAIN}`);
-}
-
 /**
  * Whether GitHub OAuth is available on this deployment. Always true in
  * production, where the boot check above refuses to start without it.
@@ -369,13 +353,11 @@ export function isOperatorEmail(email: string | null | undefined): boolean {
  * cannot accidentally treat an ordinary recipient as one.
  */
 export function relayLocalToken(recipient: string): string | null {
-  if (!isRelayRecipient(recipient)) return null;
-
-  const local = recipient.slice(0, recipient.lastIndexOf('@'));
-  const plus = local.indexOf('+');
-
-  if (plus === -1) return null;
-
-  const token = local.slice(plus + 1).trim();
+  const at = recipient.lastIndexOf('@');
+  if (at <= 0) return null;
+  const local = recipient.slice(0, at);
+  const [prefix, ...rest] = local.split('+');
+  if (prefix.toLowerCase() !== 'reply' || rest.length === 0) return null;
+  const token = rest.join('+').trim();
   return token.length > 0 ? token : null;
 }

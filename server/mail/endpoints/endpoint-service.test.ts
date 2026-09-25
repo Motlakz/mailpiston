@@ -18,9 +18,10 @@ const URL_PUBLIC = 'https://93.184.216.34/hook';
 
 let endpoints: InMemoryEndpointRepository;
 let service: EndpointService;
+let domains: InMemoryDomainRepository;
 
-beforeEach(() => {
-  const domains = new InMemoryDomainRepository();
+beforeEach(async () => {
+  domains = new InMemoryDomainRepository();
   const addresses = new InMemoryAddressRepository(domains);
   const threads = new InMemoryThreadRepository();
   const emails = new InMemoryEmailRepository(threads);
@@ -38,7 +39,15 @@ beforeEach(() => {
       threads,
       new MockMailProvider(),
     ),
+    domains,
   );
+
+  await domains.create({
+    name: 'managed.example',
+    providerDomainId: 'managed.example',
+    status: 'verified',
+    dnsRecords: [],
+  });
 });
 
 describe('creating a webhook endpoint', () => {
@@ -163,6 +172,14 @@ describe('rotating and repointing', () => {
 });
 
 describe('mailbox endpoints', () => {
+  it('refuses a forwarding recipient on a managed domain', async () => {
+    const { endpoint } = await service.create({ name: 'Loop', type: 'email' });
+
+    await expect(
+      service.addRecipient(endpoint.id, 'support@managed.example'),
+    ).rejects.toThrow(/mail loop/);
+  });
+
   it('still refuses recipients on a webhook endpoint', async () => {
     const { endpoint } = await service.create({
       name: 'App',

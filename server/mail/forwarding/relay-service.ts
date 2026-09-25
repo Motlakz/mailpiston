@@ -62,6 +62,11 @@ export class RelayService {
     const relay = await this.relays.findByTokenHash(sha256Hex(token));
     if (!relay) return this.reject(normalized, 'unknown_token');
 
+    const relayDomain = domainOf(normalized.recipient);
+    if (!relay.relayDomain || relay.relayDomain.toLowerCase() !== relayDomain) {
+      return this.reject(normalized, 'relay_domain_mismatch');
+    }
+
     if (relay.revokedAt) return this.reject(normalized, 'revoked_token');
     if (relay.expiresAt && relay.expiresAt.getTime() < Date.now()) {
       return this.reject(normalized, 'expired_token');
@@ -154,6 +159,13 @@ function tokenFrom(recipient: string): string | null {
 
   if (prefix.toLowerCase() !== 'reply' || rest.length === 0) return null;
   return rest.join('+') || null;
+}
+
+function domainOf(recipient: string): string {
+  const separator = recipient.lastIndexOf('@');
+  return separator > 0
+    ? recipient.slice(separator + 1).trim().toLowerCase()
+    : '';
 }
 
 function addressOnly(value: string): string {

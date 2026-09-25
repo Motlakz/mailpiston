@@ -156,6 +156,20 @@ describe('InboundService', () => {
     expect(emails.rows.size).toBe(1);
   });
 
+  it('rejects a MailPiston forward marker before storage or fan-out', async () => {
+    const result = await inbound.capture(
+      delivery({ headers: { 'X-MailPiston-Forward': 'email_original' } }),
+    );
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      reason: 'mailpiston_forward_loop',
+      emailId: null,
+    });
+    expect(emails.rows.size).toBe(0);
+    expect(events.rows[0].metadata.reason).toBe('mailpiston_forward_loop');
+  });
+
   it('keeps both copies when one message is fanned out to two addresses', async () => {
     const domain = await domains.findByName(DOMAIN);
     await addresses.create({

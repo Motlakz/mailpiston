@@ -6,6 +6,7 @@ import { pool } from '@/server/db/client';
 import {
   rateLimitConfigFor,
   type RateLimitActor,
+  type RateLimitConfig,
   type RateLimitResult,
 } from './config';
 
@@ -33,8 +34,9 @@ interface RateLimitRow {
 export async function checkRateLimit(
   actor: RateLimitActor,
   endpoint: string,
+  override?: RateLimitConfig,
 ): Promise<RateLimitResult> {
-  const config = rateLimitConfigFor(endpoint);
+  const config = override ?? rateLimitConfigFor(endpoint);
 
   const now = new Date();
   const nowMs = now.getTime();
@@ -44,6 +46,18 @@ export async function checkRateLimit(
 
     try {
       await client.query('BEGIN');
+
+      // Seed a zero-count row before locking it. This closes the first-request
+      // race where two callers could both miss an initial SELECT and the
+      // losing UPSERT would increment without checking the configured limit.
+      await client.query(
+        `
+        INSERT INTO rate_limits (actor_key, endpoint, window_started_at, request_count)
+        VALUES ($1, $2, $3, 0)
+        ON CONFLICT (actor_key, endpoint) DO NOTHING
+        `,
+        [actor, endpoint, now],
+      );
 
       const selected = await client.query<RateLimitRow>(
         `

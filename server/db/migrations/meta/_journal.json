@@ -71,6 +71,13 @@
       "when": 1790011050063,
       "tag": "0009_overrated_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790283606997,
+      "tag": "0010_unique_vivisector",
+      "breakpoints": true
     }
   ]
 }

@@ -20,8 +20,8 @@ describe('withoutBlanks', () => {
   it('treats a whitespace-only value as unset', () => {
     // A trailing space after `FOO=` is invisible in an editor and would
     // otherwise satisfy `.min(1)` with a string that means nothing.
-    expect(withoutBlanks({ RELAY_DOMAIN: '   ' })).toEqual({
-      RELAY_DOMAIN: undefined,
+    expect(withoutBlanks({ INNGEST_EVENT_KEY: '   ' })).toEqual({
+      INNGEST_EVENT_KEY: undefined,
     });
   });
 
