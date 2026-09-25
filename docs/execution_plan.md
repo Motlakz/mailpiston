@@ -255,6 +255,7 @@ relayed reply.
 export interface ReplyRelay {
   id: string;
   tokenHash: string;
+  relayDomain: string | null;
   addressId: string;
   threadId: string;
   endpointEmailRecipientId: string;
@@ -265,9 +266,10 @@ export interface ReplyRelay {
 ```
 
 The public relay address contains only a random, opaque token, for example
-`reply+rr_opaque@reply.mailpiston.com`. It must not encode an email address, thread id, customer id,
+`reply+rr_opaque@the-selected-domain.example`. It must not encode an email address, thread id, customer id,
 or other discoverable state. Store the token hashed and show/store the plaintext only where it is
-needed to construct the relay address.
+needed to construct the relay address. Store the selected hostname with the token so changing the
+workspace setting does not invalidate reply addresses that are already in personal inboxes.
 
 ## 4.5 Thread
 
@@ -1646,7 +1648,7 @@ customer <customer@example.com>
        └→ verified personal inbox
 
 personal inbox replies
-  → reply+<opaque-token>@reply.mailpiston.com
+  → reply+<opaque-token>@<workspace-selected-domain>
   → MailPiston verifies token + personal sender
   → MailPiston creates a new customer-facing message
   → Forward Email sends From: managed-address@customer-domain.com
@@ -1662,7 +1664,7 @@ internal notification message with:
 ```text
 From: "Customer Name via Managed Address" <managed-address@customer-domain.com>
 To: operator-personal@example.com
-Reply-To: reply+<opaque-token>@reply.mailpiston.com
+Reply-To: reply+<opaque-token>@<workspace-selected-domain>
 Subject: original subject
 ```
 
@@ -1724,9 +1726,10 @@ Application-controlled forwarding is the default. Do not configure the personal 
 second Forward Email alias recipient: MailPiston needs to create the safe `Reply-To` relay, record the
 delivery, and prevent personal identity leakage.
 
-`reply.mailpiston.com` represents a MailPiston-owned, provider-verified relay domain with a catch-all
-alias routed only to MailPiston ingress. It is shared infrastructure for all managed domains; each
-opaque token resolves the correct managed address, thread, and verified email endpoint recipient.
+Each workspace selects one verified managed domain on the Domains dashboard. Selecting it is an
+explicit routing action that repairs the domain catch-all to MailPiston ingress. Each opaque token
+stores that hostname and resolves the correct managed address, thread, and verified endpoint recipient;
+switching the selected domain affects only newly issued tokens.
 
 ---
 
@@ -2009,7 +2012,7 @@ Also implement personal-inbox relay replies:
   `email_group` endpoint types;
 - verified email/email-group endpoint recipients and per-address endpoint bindings;
 - application-controlled forward notifications;
-- opaque reply addresses on a MailPiston-owned relay domain;
+- opaque reply addresses on a verified domain selected per workspace in the dashboard;
 - sender authorization, token expiry/revocation, and loop prevention;
 - reconstruction of clean customer-facing headers;
 - persistence in the original thread;

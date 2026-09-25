@@ -584,15 +584,16 @@ Index `emails.message_id`; add the `thread_id` FK. Thread list + conversation vi
   `email` and `email_group` subtypes; every recipient is independently verified and revocable.
 - Application-controlled forwarding after durable ingress. Construct a new internal notification;
   never configure the personal address as a direct provider forwarding recipient.
-- Opaque `reply+<token>@reply.mailpiston.com` routes bound to address + thread + verified forwarding
+- Opaque `reply+<token>@<workspace-selected-domain>` routes bound to address + thread + verified forwarding
   endpoint recipient. Store token hashes, support expiry/revocation, and require envelope-sender equality.
 - Relay replies are parsed and rebuilt as fresh customer-facing mail. Never reuse personal raw MIME,
   Message-ID, Return-Path, Received, Sender, or authentication headers.
 - Emit the relayed outbound/thread event to every HTTP endpoint bound to the managed address.
 - Public endpoint payloads contain only customer-facing message data. Personal destinations, relay
   tokens, and personal transport metadata remain private operator audit data.
-- Configure one MailPiston-owned relay domain (`reply.mailpiston.com`) with a catch-all
-  routed exclusively to MailPiston ingress; it serves every managed customer domain.
+- Let each workspace select one verified managed domain on the Domains dashboard. Selection is an
+  explicit action that repairs its catch-all to MailPiston ingress; switching domains changes only
+  newly issued tokens because each token retains its original hostname.
 - Count constructed personal notifications as internal outbound mail. A handled inbound message can
   consume two outbound sends—one notification to the operator and one relayed reply to the customer—
   and additional email endpoint recipients add additional sends.
@@ -787,7 +788,7 @@ Two different domains are in play and conflating them causes real breakage.
 | Role | Value | Notes |
 | --- | --- | --- |
 | **App origin** (dashboard, API, provider ingress) | `https://mailpiston.com` | In use now. `mailpiston.com` replaces it when the apex is registered. |
-| **Relay domain** (opaque reply addresses) | `reply.mailpiston.com` | ⚠️ Not yet registered. Any domain you control DNS for will do — see below. |
+| **Reply domain** (opaque reply addresses) | selected per workspace | A verified managed domain chosen from the Domains dashboard. |
 | **Managed domains** (customer-facing addresses) | the operator's own domains | Unaffected by either of the above. |
 
 **The app origin is not a free choice at runtime.** Every provider alias MailPiston creates carries
@@ -801,20 +802,11 @@ points at a dead URL. Two consequences:
    confirm zero drift before retiring the old URL. Do it before Phase 11's batch migration, while the
    alias count is small.
 
-**The relay domain is a separate requirement, and it is not a branding one.**
-`mailpiston.com` is a Vercel-owned subdomain: we cannot publish MX records on it, so it can
-never accept the relayed replies §19 depends on. Phase 6 therefore needs **a domain whose DNS we
-control** — but it does not need a new one, and it does not need to be `mailpiston.com`. A subdomain
-of any domain the operator already owns works, because the relay address only ever appears in the
-`Reply-To` of a notification sent to the operator's own private mailbox. It is never customer-facing.
-
-So the requirement is, in order of preference:
-
-1. `reply.mailpiston.com`, once the apex is registered — cleanest, and keeps relay traffic off any
-   domain that also serves customers;
-2. `reply.<any-domain-you-already-own>` — functionally identical, available today;
-3. a subdomain of a managed domain — works, but mixes relay tokens into a customer's namespace, so
-   prefer 1 or 2.
+**The reply domain is tenant configuration, not deployment configuration.** Each workspace selects
+one of its verified managed domains on the Domains dashboard. That explicit action creates or repairs
+the provider catch-all to this deployment before the domain is marked active. Forwarding fails closed
+until a selection exists. The selected hostname is stored with every opaque token, so changing the
+setting affects new notifications without breaking reply addresses already delivered to an inbox.
 
 Phases 1–5 need none of this: `mailpiston.com` is a complete app origin on its own.
 

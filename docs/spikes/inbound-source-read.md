@@ -66,7 +66,7 @@ original customer as `Reply-To`. MailPiston must instead use:
 ```text
 From: "Customer via managed-address" <managed-address@managed-domain>
 To: verified-operator@example.net
-Reply-To: reply+<opaque-token>@reply.mailpiston.com
+Reply-To: reply+<opaque-token>@<workspace-selected-domain>
 ```
 
 The relay binds the token to the endpoint recipient, managed address, and thread. On reply,
@@ -132,4 +132,3 @@ Before Phase 1 schema work:
 - `app/api/e2/endpoints/*`
 - `app/api/e2/emails/*`
 - `app/api/e2/mail/*`
-

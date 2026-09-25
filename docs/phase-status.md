@@ -338,9 +338,10 @@ Deliberately deferred:
 
 - **Attachments on outbound.** Send and reply carry text and HTML only.
 - **Reply-all.** The relay answers the original external sender, per §19.3.
-- **The relay domain itself.** `RELAY_DOMAIN` must be a domain whose DNS we
-  control, with a catch-all pointed at this deployment. Unset, notifications go
-  out with no `Reply-To` and a reply lands back on the managed address.
+- **The reply domain is workspace configuration.** Select a verified managed
+  domain on the Domains dashboard. That explicit action repairs its catch-all
+  to this deployment. Until one is selected, personal notifications fail
+  closed and consume no provider send.
 
 ---
 
@@ -901,4 +902,3 @@ Deliberately deferred:
   bulk pass is worth writing when there are enough endpoints to make it tedious.
 - **Audit log pagination in the UI.** The Settings page shows the most recent
   50; the repository pages properly.
-

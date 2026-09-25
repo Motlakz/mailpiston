@@ -30,11 +30,11 @@ export const frequentlyAskedQuestions = [
   },
   {
     question: "Can I receive support mail and reply from my personal inbox?",
-    answer: "Yes - it is the workflow MailPiston is built around. It forwards the message to your private destination, then turns your authorized reply into a thread-aware message from the public support identity. Header rewriting, signed reply tokens, loop prevention, and strict sender matching keep your private address off the wire entirely.",
+    answer: "Yes. Bind a verified personal-inbox endpoint, then select one of your verified domains for replies on the Domains dashboard. MailPiston sends a constructed notification with an opaque Reply-To address; your reply returns through MailPiston and leaves from the managed address. Forwarding is disabled when that safe route is missing.",
   },
   {
     question: "Does this work for every domain I manage?",
-    answer: "Yes. The architecture is domain-general and nothing in it scales with domain count. Once a domain and sending identity are verified, the same endpoint, routing, inbox, and reply concepts apply across all of its addresses.",
+    answer: "The same routing model works across multiple verified domains. Each domain still needs its own DNS and provider configuration, and each sending address needs a concrete provider alias; MailPiston shows and reconciles those records per domain.",
   },
   {
     question: "Do I have to self-host the mail infrastructure?",
@@ -42,11 +42,11 @@ export const frequentlyAskedQuestions = [
   },
   {
     question: "What happens if I want to leave, or switch provider?",
-    answer: "Your messages, threads, routes, and events are rows in your own Postgres database, and attachments are objects in your own bucket. Switching delivery providers means implementing one interface; leaving means taking a database with you.",
+    answer: "Messages, threads, routes, and events are stored in the Postgres database configured for this deployment. Attachment bytes—and raw MIME only when raw capture is enabled—use the configured object store. The provider adapter limits transport coupling, but a provider migration still requires implementation and validation work.",
   },
   {
     question: "What does it actually cost to run?",
-    answer: "You pay your delivery provider, your database, and your object storage directly, at their prices. Enhanced Protection at Forward Email covers unlimited domains and aliases for a few dollars a month, so the bill tracks mail volume rather than how many domains you added.",
+    answer: "A self-hosted deployment pays its mail provider, database, hosting, retry service, and any object storage directly. The exact total depends on the providers and message volume; MailPiston does not promise a fixed infrastructure price.",
   },
 ];
 
