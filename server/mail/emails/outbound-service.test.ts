@@ -431,6 +431,34 @@ describe('monthly send limit', () => {
     expect((await emails.list({ limit: 100 })).items.length).toBe(before);
   });
 
+  it('charges egress by unique recipients rather than one API call', async () => {
+    const reservations: number[] = [];
+    const guarded = new OutboundService(
+      emails,
+      addresses,
+      events,
+      threads,
+      provider,
+      { async assert() {} },
+      {
+        async reserve(input) {
+          reservations.push(input.units ?? 1);
+        },
+      },
+    );
+
+    await guarded.send({
+      addressId: sendableId,
+      to: ['one@example.test', 'TWO@example.test'],
+      cc: ['two@example.test', 'three@example.test'],
+      bcc: ['four@example.test'],
+      subject: 'One request, four deliveries',
+      text: 'Count every destination once.',
+    });
+
+    expect(reservations).toEqual([4]);
+  });
+
   it('counts only outbound mail in the window', async () => {
     // Inbound is counted for usage reporting but never gated — refusing mail
     // somebody sent you is the one failure a mail system does not get to have.

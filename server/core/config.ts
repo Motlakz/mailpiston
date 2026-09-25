@@ -79,6 +79,12 @@ const envSchema = z.object({
   PERSONAL_FORWARD_DAILY_LIMIT: z.coerce.number().int().positive().default(150),
   PERSONAL_FORWARD_TARGET_HOURLY_LIMIT: z.coerce.number().int().positive().default(30),
 
+  // --- Public HTTP boundaries ----------------------------------------------
+  /** Hard byte ceilings; stream readers enforce these even without Content-Length. */
+  API_MAX_BODY_BYTES: z.coerce.number().int().positive().max(10_000_000).default(2_500_000),
+  PROVIDER_MAX_BODY_BYTES: z.coerce.number().int().positive().max(50_000_000).default(25_000_000),
+  WEBHOOK_MAX_RESPONSE_BYTES: z.coerce.number().int().positive().max(1_000_000).default(16_384),
+
   // --- Crypto ---------------------------------------------------------------
   /** 32-byte key, base64 or hex, for endpoint-secret encryption at rest. */
   SECRET_ENCRYPTION_KEY: z.string().min(32),
@@ -107,6 +113,8 @@ const envSchema = z.object({
    * invitation: the address is public the moment a notification is delivered.
    */
   RELAY_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  /** Maximum distinct customer-facing replies a single relay token can send per day. */
+  RELAY_TOKEN_DAILY_REPLY_LIMIT: z.coerce.number().int().positive().max(1_000).default(10),
 
   // --- Webhook endpoints (Phase 7) -----------------------------------------
   /**

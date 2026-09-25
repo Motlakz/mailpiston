@@ -34,6 +34,7 @@ const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** 32 bytes, base64url. Long enough that guessing is not a strategy. */
 const SIGNING_SECRET_BYTES = 32;
+const MAX_EMAIL_GROUP_RECIPIENTS = 25;
 
 /**
  * A created endpoint, plus the signing secret if one was minted.
@@ -285,6 +286,13 @@ export class EndpointService {
       if (existing.length > 0) {
         throw new ConflictError(
           'An `email` endpoint holds exactly one mailbox. Use `email_group` for several.',
+        );
+      }
+    } else {
+      const existing = await this.endpoints.listRecipients(endpointId);
+      if (existing.length >= MAX_EMAIL_GROUP_RECIPIENTS) {
+        throw new ConflictError(
+          `An email group can hold at most ${MAX_EMAIL_GROUP_RECIPIENTS} recipients. Create another endpoint to keep forwarding fan-out explicit.`,
         );
       }
     }

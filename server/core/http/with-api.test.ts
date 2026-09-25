@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 /**
  * The audit trail, and the route context Next actually passes.
@@ -15,10 +16,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * and were writing entries normally the whole time.
  */
 const record = vi.fn();
+const claimIdempotencyRequest = vi.fn();
 
 vi.mock('@/server/repositories', () => ({
   repositoriesFor: () => ({ audit: { record } }),
 }));
+
+vi.mock('@/server/core/idempotency', () => ({ claimIdempotencyRequest }));
 
 vi.mock('@/server/core/auth/session', () => ({
   getOperatorSession: async () => ({
@@ -48,12 +52,66 @@ const route = withApi(
   },
 );
 
+const idempotentRoute = withApi(
+  async () => NextResponse.json({ data: { ok: true } }, { status: 201 }),
+  {
+    endpoint: '/v1/emails/send',
+    schema: z.object({ text: z.string() }),
+    idempotency: true,
+  },
+);
+
 const request = () =>
   new Request('https://mailpiston.test/v1/endpoints', { method: 'POST' });
 
 beforeEach(() => {
   record.mockReset();
   record.mockResolvedValue({ id: 'aud_test' });
+  claimIdempotencyRequest.mockReset();
+  claimIdempotencyRequest.mockResolvedValue('claimed');
+});
+
+describe('withApi idempotency', () => {
+  function send(key: string, text = 'hello') {
+    return new Request('https://mailpiston.test/v1/emails/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': key },
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  it('claims a namespaced hash without storing the plaintext key', async () => {
+    const response = await idempotentRoute(send('request-123'));
+
+    expect(response.status).toBe(201);
+    expect(claimIdempotencyRequest).toHaveBeenCalledTimes(1);
+    const [key, source] = claimIdempotencyRequest.mock.calls[0];
+    expect(key).toMatch(/^api:[0-9a-f]{64}$/);
+    expect(key).not.toContain('request-123');
+    expect(source).toMatch(/^payload:[0-9a-f]{64}$/);
+  });
+
+  it('refuses a replay instead of executing the send twice', async () => {
+    claimIdempotencyRequest.mockResolvedValue('replay');
+
+    const response = await idempotentRoute(send('request-123'));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'IDEMPOTENCY_REPLAY' },
+    });
+  });
+
+  it('refuses the same key with a different body', async () => {
+    claimIdempotencyRequest.mockResolvedValue('conflict');
+
+    const response = await idempotentRoute(send('request-123', 'different'));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'IDEMPOTENCY_KEY_REUSED' },
+    });
+  });
 });
 
 describe('withApi audit', () => {

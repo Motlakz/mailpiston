@@ -5,14 +5,20 @@ import type { ZodType } from 'zod';
 
 import { resolveApiKey, type ApiKeyIdentity } from '@/server/core/auth/api-key';
 import { getOperatorSession } from '@/server/core/auth/session';
+import { env } from '@/server/core/config';
+import { sha256Hex } from '@/server/core/crypto';
 import {
+  IdempotencyConflictError,
   RateLimitError,
   ValidationError,
   formatErrorResponse,
   statusCodeFor,
 } from '@/server/core/errors';
+import { claimIdempotencyRequest } from '@/server/core/idempotency';
 import { checkRateLimit, rateLimitHeaders } from '@/server/core/rate-limit';
 import type { RateLimitActor } from '@/server/core/rate-limit';
+
+import { readJsonBody } from './body';
 
 /**
  * Composition point for public API routes (roadmap §2.3).
@@ -73,6 +79,8 @@ export interface WithApiOptions<TBody> {
   allowSession?: boolean;
   /** Set on privileged mutations. Omitted on reads. */
   audit?: AuditOptions;
+  /** Prevent an ambiguous client retry from executing this mutation twice. */
+  idempotency?: boolean;
 }
 
 /**
@@ -126,7 +134,7 @@ export function withApi<TBody = undefined>(
       let body = undefined as TBody;
 
       if (options.schema) {
-        const raw = await readJson(request);
+        const raw = await readJsonBody(request, env.API_MAX_BODY_BYTES);
         const parsed = options.schema.safeParse(raw);
 
         if (!parsed.success) {
@@ -134,6 +142,10 @@ export function withApi<TBody = undefined>(
         }
 
         body = parsed.data;
+      }
+
+      if (options.idempotency) {
+        await claimRequestIdempotency(request, tenantId, options.endpoint, body);
       }
 
       // 4. Run.
@@ -159,6 +171,41 @@ export function withApi<TBody = undefined>(
       return errorResponse(error, rateLimitInfo);
     }
   };
+}
+
+async function claimRequestIdempotency(
+  request: Request,
+  tenantId: string,
+  endpoint: string,
+  body: unknown,
+): Promise<void> {
+  const supplied = request.headers.get('idempotency-key');
+  if (!supplied) return;
+
+  const key = supplied.trim();
+  if (key.length < 8 || key.length > 200 || /[^\x21-\x7e]/.test(key)) {
+    throw new ValidationError(
+      'Idempotency-Key must be 8 to 200 visible ASCII characters',
+    );
+  }
+
+  const claim = await claimIdempotencyRequest(
+    `api:${sha256Hex(`${tenantId}\0${endpoint}\0${key}`)}`,
+    `payload:${sha256Hex(JSON.stringify(body ?? null))}`,
+  );
+
+  if (claim === 'replay') {
+    throw new IdempotencyConflictError(
+      'A request with this Idempotency-Key was already accepted; inspect the mail log before sending again',
+    );
+  }
+
+  if (claim === 'conflict') {
+    throw new IdempotencyConflictError(
+      'This Idempotency-Key was already used with a different request body',
+      'IDEMPOTENCY_KEY_REUSED',
+    );
+  }
 }
 
 /**
@@ -223,13 +270,6 @@ function auditMetadata(body: unknown): Record<string, unknown> {
   );
 }
 
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    throw new ValidationError('Request body is not valid JSON');
-  }
-}
 
 export function errorResponse(
   error: unknown,

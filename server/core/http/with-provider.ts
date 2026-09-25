@@ -2,12 +2,14 @@ import 'server-only';
 
 import { NextResponse } from 'next/server';
 
+import { env } from '@/server/core/config';
 import { WebhookVerificationError } from '@/server/core/errors';
 import { checkRateLimit } from '@/server/core/rate-limit';
 import { mailProviderRegistry } from '@/server/providers/registry';
 import type { ProviderId } from '@/server/providers/registry';
 
 import { errorResponse } from './with-api';
+import { readBodyText } from './body';
 
 /**
  * Composition point for provider ingress (roadmap §2.3).
@@ -53,7 +55,7 @@ export function withProvider(
 
     try {
       // 1. Raw body first, always.
-      rawBody = await request.text();
+      rawBody = await readBodyText(request, env.PROVIDER_MAX_BODY_BYTES);
     } catch (error) {
       return errorResponse(error);
     }

@@ -13,5 +13,9 @@ export const POST = withApi<SendEmailInput>(
     const email = await servicesFor(tenantId).outbound().send(body);
     return NextResponse.json({ data: email }, { status: 201 });
   },
-  { endpoint: '/v1/emails/send', schema: sendEmailSchema },
+  {
+    endpoint: '/v1/emails/send',
+    schema: sendEmailSchema,
+    idempotency: true,
+  },
 );

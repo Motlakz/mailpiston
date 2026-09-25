@@ -62,6 +62,24 @@ export class RateLimitError extends APIError {
   }
 }
 
+export class PayloadTooLargeError extends APIError {
+  constructor(limitBytes: number) {
+    super(
+      `Request body exceeds the ${limitBytes} byte limit`,
+      413,
+      'PAYLOAD_TOO_LARGE',
+    );
+    this.name = 'PayloadTooLargeError';
+  }
+}
+
+export class IdempotencyConflictError extends APIError {
+  constructor(message: string, code = 'IDEMPOTENCY_REPLAY') {
+    super(message, 409, code);
+    this.name = 'IdempotencyConflictError';
+  }
+}
+
 export class ExternalAPIError extends APIError {
   constructor(
     message: string,

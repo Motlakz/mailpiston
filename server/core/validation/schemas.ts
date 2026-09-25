@@ -110,6 +110,21 @@ export const sendEmailSchema = z
   .refine(hasOneSender, {
     message: 'Send needs exactly one of `from` or `addressId`',
     path: ['from'],
+  })
+  .superRefine((value, context) => {
+    const unique = new Set(
+      [...value.to, ...(value.cc ?? []), ...(value.bcc ?? [])].map((email) =>
+        email.toLowerCase(),
+      ),
+    );
+
+    if (unique.size > 50) {
+      context.addIssue({
+        code: 'custom',
+        path: ['to'],
+        message: 'A message can have at most 50 unique recipients across To, Cc, and Bcc',
+      });
+    }
   });
 
 export const replyEmailSchema = z

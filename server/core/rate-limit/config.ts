@@ -29,7 +29,9 @@ export interface RateLimitConfig {
 export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
   requests: 100,
   windowMs: 60 * 60 * 1000,
-  failOpen: true,
+  // Unknown routes must be safe by default. A new mutation should not become
+  // fail-open merely because its author forgot to add a named bucket here.
+  failOpen: false,
 };
 
 export const RATE_LIMITS: Record<string, RateLimitConfig> = {

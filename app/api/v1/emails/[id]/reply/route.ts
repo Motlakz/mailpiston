@@ -9,5 +9,9 @@ export const POST = withApi<ReplyEmailInput>(
     const email = await servicesFor(tenantId).outbound().reply(params.id, body);
     return NextResponse.json({ data: email }, { status: 201 });
   },
-  { endpoint: '/v1/emails/reply', schema: replyEmailSchema },
+  {
+    endpoint: '/v1/emails/reply',
+    schema: replyEmailSchema,
+    idempotency: true,
+  },
 );

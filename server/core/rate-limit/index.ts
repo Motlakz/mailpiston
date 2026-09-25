@@ -35,8 +35,13 @@ export async function checkRateLimit(
   actor: RateLimitActor,
   endpoint: string,
   override?: RateLimitConfig,
+  cost = 1,
 ): Promise<RateLimitResult> {
   const config = override ?? rateLimitConfigFor(endpoint);
+
+  if (!Number.isSafeInteger(cost) || cost < 1) {
+    throw new TypeError('Rate-limit cost must be a positive safe integer');
+  }
 
   const now = new Date();
   const nowMs = now.getTime();
@@ -78,17 +83,21 @@ export async function checkRateLimit(
         await client.query(
           `
           INSERT INTO rate_limits (actor_key, endpoint, window_started_at, request_count)
-          VALUES ($1, $2, $3, 1)
+          VALUES ($1, $2, $3, $4)
           ON CONFLICT (actor_key, endpoint) DO UPDATE
-            SET request_count = rate_limits.request_count + 1,
+            SET request_count = rate_limits.request_count + $4,
                 updated_at = NOW()
           `,
-          [actor, endpoint, now],
+          [actor, endpoint, now, cost],
         );
+
+        if (cost > config.requests) {
+          throw new RateLimitError(nowMs + config.windowMs);
+        }
 
         result = {
           allowed: true,
-          remaining: config.requests - 1,
+          remaining: config.requests - cost,
           resetAt: nowMs + config.windowMs,
           limit: config.requests,
         };
@@ -102,25 +111,29 @@ export async function checkRateLimit(
             `
             UPDATE rate_limits
             SET window_started_at = $3,
-                request_count = 1,
+                request_count = $4,
                 updated_at = NOW()
             WHERE actor_key = $1
               AND endpoint = $2
             `,
-            [actor, endpoint, now],
+            [actor, endpoint, now, cost],
           );
+
+          if (cost > config.requests) {
+            throw new RateLimitError(nowMs + config.windowMs);
+          }
 
           result = {
             allowed: true,
-            remaining: config.requests - 1,
+            remaining: config.requests - cost,
             resetAt: nowMs + config.windowMs,
             limit: config.requests,
           };
-        } else if (row.request_count >= config.requests) {
+        } else if (row.request_count + cost > config.requests) {
           // Thrown inside the transaction on purpose — see the doc comment.
           throw new RateLimitError(windowStartedAt + config.windowMs);
         } else {
-          const nextCount = row.request_count + 1;
+          const nextCount = row.request_count + cost;
 
           await client.query(
             `

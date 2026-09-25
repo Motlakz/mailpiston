@@ -48,6 +48,25 @@ afterEach(() => {
 });
 
 describe('provider ingress', () => {
+  it('rejects an oversized delivery before signature work or JSON parsing', async () => {
+    const request = new Request(
+      'https://mailpiston.test/api/providers/forward-email/inbound',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': '50000001',
+        },
+        body: '{}',
+      },
+    );
+
+    const response = await route(request);
+
+    expect(response.status).toBe(413);
+    expect(verifyInboundWebhook).not.toHaveBeenCalled();
+  });
+
   it('logs a refusal, and says a signature header was present', async () => {
     verifyInboundWebhook.mockResolvedValue(false);
 

@@ -85,7 +85,10 @@ export class OutboundService {
     // behind — a queued message that never goes out is the kind of debris
     // that makes a mailbox untrustworthy.
     await this.sendLimit.assert();
-    await this.egressBudget.reserve({ kind: 'message' });
+    await this.egressBudget.reserve({
+      kind: 'message',
+      units: uniqueRecipients(input.to, input.cc, input.bcc),
+    });
 
     const { address: from, header } = await this.resolveSender(input);
 
@@ -135,7 +138,6 @@ export class OutboundService {
     // behind — a queued message that never goes out is the kind of debris
     // that makes a mailbox untrustworthy.
     await this.sendLimit.assert();
-    await this.egressBudget.reserve({ kind: 'message' });
 
     const parent = await this.emails.findById(emailId);
     if (!parent) throw new NotFoundError(`Email ${emailId} not found`);
@@ -157,6 +159,10 @@ export class OutboundService {
       : parent.references;
 
     const to = input.to?.length ? input.to : [parent.from];
+    await this.egressBudget.reserve({
+      kind: 'message',
+      units: uniqueRecipients(to, input.cc),
+    });
     const subject = replySubject(parent.subject);
 
     const threadId = parent.threadId ?? (await this.threadFor(parent)).id;
@@ -431,4 +437,10 @@ function replySubject(subject: string | null): string {
 
 function unique<T>(value: T, index: number, all: T[]): boolean {
   return all.indexOf(value) === index;
+}
+
+function uniqueRecipients(...groups: Array<string[] | undefined>): number {
+  return new Set(
+    groups.flatMap((group) => group ?? []).map((email) => email.trim().toLowerCase()),
+  ).size;
 }

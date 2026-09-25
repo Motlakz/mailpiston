@@ -29,6 +29,37 @@ export async function claimIdempotencyKey(
   return result.rowCount === 1;
 }
 
+export type IdempotencyClaim = 'claimed' | 'replay' | 'conflict';
+
+/**
+ * Claims a caller-supplied idempotency key and remembers its payload digest.
+ * Reusing the key with another payload is a client bug (or an attack), while a
+ * matching source is an ambiguous retry that must not execute twice.
+ */
+export async function claimIdempotencyRequest(
+  key: string,
+  source: string,
+): Promise<IdempotencyClaim> {
+  const inserted = await pool.query(
+    `
+    INSERT INTO idempotency_keys (key, source)
+    VALUES ($1, $2)
+    ON CONFLICT (key) DO NOTHING
+    RETURNING key
+    `,
+    [key, source],
+  );
+
+  if (inserted.rowCount === 1) return 'claimed';
+
+  const existing = await pool.query<{ source: string }>(
+    `SELECT source FROM idempotency_keys WHERE key = $1 LIMIT 1`,
+    [key],
+  );
+
+  return existing.rows[0]?.source === source ? 'replay' : 'conflict';
+}
+
 /**
  * Releases a claim so the provider's next retry can be processed.
  *
