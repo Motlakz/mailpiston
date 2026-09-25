@@ -26,9 +26,12 @@ export default async function EmailPage({
   const email = await repositories.emails.findById(id);
   if (!email) notFound();
 
-  const [attachments, events] = await Promise.all([
+  const [attachments, events, deliveredAddress] = await Promise.all([
     repositories.emails.listAttachments(email.id),
     repositories.events.list({ emailId: email.id, limit: 20 }),
+    email.addressId
+      ? repositories.addresses.findByIdWithDomain(email.addressId)
+      : null,
   ]);
 
   return (
@@ -58,6 +61,9 @@ export default async function EmailPage({
       <ClassificationPanel email={email} />
 
       <dl className="message-metadata mb-6 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 rounded-lg bg-card p-5 text-sm ring-1 ring-foreground/10">
+        {email.direction === 'inbound' ? (
+          <Field label="Delivered to">{deliveredAddress?.email ?? 'unknown address'}</Field>
+        ) : null}
         <Field label="To">{email.to.join(', ') || '—'}</Field>
         {email.cc.length > 0 ? <Field label="Cc">{email.cc.join(', ')}</Field> : null}
         <Field label="Received">

@@ -30,7 +30,12 @@ export async function ReadingPane({
     );
   }
 
-  const attachments = await repositories.emails.listAttachments(email.id);
+  const [attachments, deliveredAddress] = await Promise.all([
+    repositories.emails.listAttachments(email.id),
+    email.addressId
+      ? repositories.addresses.findByIdWithDomain(email.addressId)
+      : null,
+  ]);
   const outbound = email.direction === 'outbound';
   const when = outbound
     ? (email.sentAt ?? email.createdAt)
@@ -73,6 +78,9 @@ export async function ReadingPane({
           </span>
           <span>
             <strong>{email.from}</strong>
+            {!outbound ? (
+              <small>delivered to {deliveredAddress?.email ?? 'unknown address'}</small>
+            ) : null}
             <small>
               to {email.to.join(', ') || '—'}
               {email.cc.length > 0 ? ` · cc ${email.cc.join(', ')}` : null}
@@ -151,14 +159,24 @@ export function ReadingPaneSkeleton() {
 }
 
 /** Shown when nothing is selected — the pane is never an empty rectangle. */
-export function ReadingPanePlaceholder() {
+export function ReadingPanePlaceholder({ empty = false }: { empty?: boolean }) {
   return (
-    <div className="reading-pane reading-pane--empty">
-      <span className="reading-pane__placeholder-mark" aria-hidden>
-        <Icon name="inbox" size={20} />
-      </span>
-      <p>Pick a conversation to read it here.</p>
-      <small>Replies keep the thread and send from the managed address.</small>
+    <div className="reading-pane">
+      <header className="reading-pane__head reading-pane__head--placeholder">
+        <span className="reading-pane__crumbs">Message</span>
+        <h2>{empty ? 'Nothing to open yet' : 'No message selected'}</h2>
+      </header>
+      <div className="reading-pane--empty">
+        <span className="reading-pane__placeholder-mark" aria-hidden>
+          <Icon name="inbox" size={20} />
+        </span>
+        <p>{empty ? 'This view is clear' : 'Choose from the list'}</p>
+        <small>
+          {empty
+            ? 'New mail will open here without taking you away from the list.'
+            : 'Replies keep the thread and send from the managed address.'}
+        </small>
+      </div>
     </div>
   );
 }

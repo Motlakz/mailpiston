@@ -46,11 +46,11 @@ export default async function ThreadPage({
         }
       />
 
-      <div className="flex flex-col gap-4">
+      <div className="thread-timeline">
         {messages.map((message) => (
           <article
             key={message.id}
-            className="overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10"
+            className={`thread-message thread-message--${message.direction}`}
           >
             <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
               <span

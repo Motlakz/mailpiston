@@ -1,10 +1,14 @@
 'use client';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ConversationRow } from '@/components/mail/conversation-row';
-import { apiRequest } from '@/lib/api-client';
+import { BulkActions } from '@/components/mail/bulk-actions';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { apiEnvelope } from '@/lib/api-client';
+import { useOptimisticStore } from '@/lib/optimistic-store';
 import type { EmailListItem } from '@/server/core/types';
 
 interface Page {
@@ -38,6 +42,9 @@ export function ConversationList({
   show: string;
   selectedId?: string;
 }) {
+  const [selectingAll, setSelectingAll] = useState(false);
+  const selection = useOptimisticStore((state) => state.selected);
+  const selectMany = useOptimisticStore((state) => state.selectMany);
   const query = useInfiniteQuery<Page>({
     queryKey: ['emails', show],
     initialPageParam: null as string | null,
@@ -46,7 +53,7 @@ export function ConversationList({
       params.set('limit', String(PAGE_SIZE));
       if (pageParam) params.set('cursor', String(pageParam));
 
-      const body = await apiRequest<{
+      const body = await apiEnvelope<{
         data: EmailListItem[];
         nextCursor: string | null;
       }>(`/api/v1/emails?${params}`);
@@ -90,9 +97,71 @@ export function ConversationList({
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const items = query.data.pages.flatMap((page) => page.items);
+  const loadedIds = items.map((item) => item.id);
+  const allLoadedSelected =
+    loadedIds.length > 0 && loadedIds.every((id) => selection[id]);
+
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const allItems = [...items];
+      let cursor = query.data.pages.at(-1)?.nextCursor ?? null;
+
+      while (cursor && allItems.length < 500) {
+        const params = new URLSearchParams(FILTER_PARAMS[show] ?? '');
+        params.set('limit', String(Math.min(PAGE_SIZE, 500 - allItems.length)));
+        params.set('cursor', cursor);
+        const body = await apiEnvelope<{
+          data: EmailListItem[];
+          nextCursor: string | null;
+        }>(`/api/v1/emails?${params}`);
+        allItems.push(...body.data.map(reviveDates));
+        cursor = body.nextCursor;
+      }
+
+      selectMany(allItems.slice(0, 500).map((item) => item.id));
+    } finally {
+      setSelectingAll(false);
+    }
+  }
 
   return (
     <>
+      {items.length > 0 ? (
+        <div className="conversation-select-all">
+          <Checkbox
+            checked={allLoadedSelected}
+            onCheckedChange={() => selectMany(loadedIds)}
+            aria-label={
+              allLoadedSelected
+                ? 'Clear loaded messages'
+                : 'Select loaded messages'
+            }
+          />
+          <button
+            type="button"
+            className="conversation-select-all__label"
+            onClick={() => selectMany(loadedIds)}
+          >
+            {allLoadedSelected
+              ? 'Loaded messages selected'
+              : `Select ${loadedIds.length} loaded`}
+          </button>
+          {Object.keys(selection).length > 0 ? (
+            <BulkActions binned={show === 'bin'} />
+          ) : hasNextPage ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectingAll}
+              onClick={selectAllMatching}
+              className="ml-auto"
+            >
+              {selectingAll ? 'Loading messages…' : 'Select all matching'}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {items.map((email) => (
         <ConversationRow
           key={email.id}

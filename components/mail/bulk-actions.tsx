@@ -1,5 +1,6 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -10,32 +11,17 @@ import { ConfirmDialog, useConfirm } from '@/components/ui/confirm-dialog';
 import { apiRequest } from '@/lib/api-client';
 import { useOptimisticStore } from '@/lib/optimistic-store';
 
-/**
- * Acting on many messages at once.
- *
- * There is no bulk route on the API, so this fans out one request per message
- * — deliberately, rather than adding an endpoint that takes a list of ids. A
- * bulk delete that half-succeeds has to report *which* half, and per-message
- * requests give that for free: each one either worked or did not, and the
- * failures are counted and named rather than collapsing into one 207.
- *
- * Concurrency is capped. Fifty parallel deletes against the provider is a way
- * to get rate-limited, and the operator gains nothing from it finishing in one
- * second instead of three.
- */
-const CONCURRENCY = 5;
+interface EmailPageCache {
+  pages: Array<{ items: Array<{ id: string }>; nextCursor?: string | null }>;
+  pageParams: Array<string | null>;
+}
 
 export function BulkActions({ binned = false }: { binned?: boolean }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [, startTransition] = useTransition();
   const [running, setRunning] = useState(false);
   const { confirmProps, ask } = useConfirm();
-
-  // Subscribe to the selection map itself, not to an array derived from it.
-  // The store only replaces this object when the selection changes, so the
-  // snapshot is stable between renders; a selector returning `Object.keys(...)`
-  // hands back a new array on every read, which reads as a changed store on
-  // every render and loops until React gives up.
   const selection = useOptimisticStore((state) => state.selected);
   const selected = Object.keys(selection);
   const applyEmail = useOptimisticStore((state) => state.applyEmail);
@@ -47,73 +33,62 @@ export function BulkActions({ binned = false }: { binned?: boolean }) {
   const count = selected.length;
   const noun = count === 1 ? 'message' : 'messages';
 
-  async function runAll(
-    ids: string[],
-    call: (id: string) => Promise<unknown>,
-  ): Promise<number> {
-    let failed = 0;
-    const queue = [...ids];
-
-    await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-        for (let id = queue.shift(); id; id = queue.shift()) {
-          try {
-            await call(id);
-          } catch {
-            failed += 1;
-          }
-        }
-      }),
-    );
-
-    return failed;
-  }
-
-  async function bin() {
+  async function run(action: 'bin' | 'purge', verb: string) {
     setRunning(true);
     const ids = [...selected];
-    for (const id of ids) applyEmail(id, { binned: true, gone: true });
+    for (const id of ids) {
+      applyEmail(id, action === 'bin' ? { binned: true, gone: true } : { gone: true });
+    }
 
-    const failed = await runAll(ids, (id) =>
-      apiRequest(`/api/v1/emails/${id}`, { method: 'DELETE' }),
-    );
+    try {
+      const response = await apiRequest<{
+        changed: number;
+        failures: Array<{ id: string }>;
+      }>('/api/v1/emails/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ ids, action }),
+      });
 
-    finish(ids.length - failed, failed, 'Moved to the bin');
-  }
+      const failedIds = new Set(response.failures.map((failure) => failure.id));
+      const changedIds = ids.filter((id) => !failedIds.has(id));
 
-  async function purge() {
-    setRunning(true);
-    const ids = [...selected];
-    for (const id of ids) applyEmail(id, { gone: true });
-
-    const failed = await runAll(ids, (id) =>
-      apiRequest(`/api/v1/emails/${id}?purge=true`, { method: 'DELETE' }),
-    );
-
-    finish(ids.length - failed, failed, 'Deleted for good');
-  }
-
-  function finish(done: number, failed: number, verb: string) {
-    setRunning(false);
-    clearSelection();
-    // Every overlay is about to be answered by the refreshed markup.
-    clearAll();
-    startTransition(() => router.refresh());
-
-    if (failed > 0) {
-      toast.error(
-        `${verb}: ${done} of ${done + failed}. ${failed} could not be changed.`,
+      queryClient.setQueriesData<EmailPageCache>(
+        { queryKey: ['emails'] },
+        (current) =>
+          current
+            ? {
+                ...current,
+                pages: current.pages.map((page) => ({
+                  ...page,
+                  items: page.items.filter((item) => !changedIds.includes(item.id)),
+                })),
+              }
+            : current,
       );
-    } else {
-      toast(`${verb} — ${done} ${done === 1 ? 'message' : 'messages'}.`);
+      clearSelection();
+      clearAll();
+      void queryClient.invalidateQueries({ queryKey: ['emails'] });
+      startTransition(() => router.refresh());
+
+      const failed = response.failures.length;
+      if (failed) {
+        toast.error(
+          `${verb}: ${response.changed} of ${count}. ${failed} could not be changed.`,
+        );
+      } else {
+        toast(`${verb} — ${response.changed} ${noun}.`);
+      }
+    } catch (error) {
+      for (const id of ids) useOptimisticStore.getState().clearEmail(id);
+      toast.error((error as Error).message || 'The bulk action failed.');
+    } finally {
+      setRunning(false);
     }
   }
 
   return (
     <div className="bulk-actions" role="status">
-      <span className="bulk-actions__count">
-        {count} selected
-      </span>
+      <span className="bulk-actions__count">{count} selected</span>
 
       {binned ? (
         <Button
@@ -127,7 +102,7 @@ export function BulkActions({ binned = false }: { binned?: boolean }) {
                 'These messages and their attachments are removed for good. This cannot be undone.',
               confirmLabel: `Delete ${count} ${noun}`,
               destructive: true,
-              onConfirm: purge,
+              onConfirm: () => run('purge', 'Deleted for good'),
             })
           }
         >
@@ -135,20 +110,18 @@ export function BulkActions({ binned = false }: { binned?: boolean }) {
           {running ? 'Deleting…' : 'Delete forever'}
         </Button>
       ) : (
-        // Reversible, and the bin is one click away — so no dialog, the way a
-        // single bin has none either.
-        <Button variant="outline" size="sm" disabled={running} onClick={bin}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={running}
+          onClick={() => run('bin', 'Moved to the bin')}
+        >
           <Icon name="delete" size={13} />
           {running ? 'Binning…' : `Bin ${count}`}
         </Button>
       )}
 
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={running}
-        onClick={clearSelection}
-      >
+      <Button variant="ghost" size="sm" disabled={running} onClick={clearSelection}>
         Clear
       </Button>
 

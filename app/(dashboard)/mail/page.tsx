@@ -3,9 +3,8 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
-import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import { PageHeader } from '@/components/layout/page-shell';
 import { ComposeForm } from '@/components/mail/compose';
-import { BulkActions } from '@/components/mail/bulk-actions';
 import { ConversationList } from '@/components/mail/conversation-list';
 import {
   ReadingPane,
@@ -136,11 +135,46 @@ export default async function MailPage({
 
       <div>
         {page.items.length === 0 ? (
-          <EmptyState
-            icon={EMPTY_ICON[active]}
-            title={emptyTitle(active)}
-            description={emptyDescription(active)}
-          />
+          <div className="mail-split">
+            <div className="mail-list-col">
+              <div className="mail-list-sticky">
+                <div className="mail-list-head">
+                  <div className="mail-list-title">
+                    <strong>{FILTERS[active].label}</strong>
+                    <span>0 messages</span>
+                  </div>
+
+                  <nav className="mail-list-filters" aria-label="Filter mail">
+                    {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
+                      <Link
+                        key={key}
+                        href={key === 'all' ? '/mail' : `/mail?show=${key}`}
+                        aria-current={key === active ? 'page' : undefined}
+                        data-active={key === active ? '' : undefined}
+                      >
+                        {FILTERS[key].label}
+                      </Link>
+                    ))}
+                  </nav>
+                </div>
+
+                <div className="mail-list-scroll">
+                  <div className="mail-list-empty">
+                    <span className="mail-list-empty__mark" aria-hidden>
+                      <Icon name={EMPTY_ICON[active]} size={18} />
+                    </span>
+                    <div>
+                      <p>{emptyTitle(active)}</p>
+                      <small>{emptyDescription(active)}</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mail-read-col">
+              <ReadingPanePlaceholder empty />
+            </div>
+          </div>
         ) : (
           <div className="mail-split" data-reading={selectedId ? '' : undefined}>
             <div className="mail-list-col">
@@ -158,8 +192,6 @@ export default async function MailPage({
                     {page.items.length === 1 ? '' : 's'}
                   </span>
                 </div>
-
-                <BulkActions binned={active === 'bin'} />
 
                 <nav className="mail-list-filters" aria-label="Filter mail">
                   {(Object.keys(FILTERS) as FilterKey[]).map((key) => (

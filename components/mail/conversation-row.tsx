@@ -3,6 +3,7 @@
 import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatDay, previewOf } from '@/lib/format';
 import { useEmailOverlay, useIsSelected, useOptimisticStore } from '@/lib/optimistic-store';
@@ -40,35 +41,31 @@ export function ConversationRow({
   const preview = previewOf(email.text);
 
   return (
-    <Link
-      href={href}
-      // The list is pinned; jumping to the top on every selection undoes that.
-      scroll={false}
-      aria-current={selected ? 'true' : undefined}
+    <div
       className="conversation-row"
       data-selected={selected ? '' : undefined}
       data-pending={overlay?.pending ? '' : undefined}
       data-checked={checked ? '' : undefined}
     >
       <span className="conversation-row__pick">
-        {/* Label-free checkbox over the avatar: the row is a link, so this has
-            to stop the click before navigation rather than after it. */}
-        <input
-          type="checkbox"
+        <Checkbox
           checked={checked}
           aria-label={`Select ${email.subject || 'message'}`}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(event) => {
-            event.stopPropagation();
-            toggleSelected(email.id);
-          }}
+          onCheckedChange={() => toggleSelected(email.id)}
+          className="conversation-row__checkbox"
         />
         <span className="conversation-row__avatar" aria-hidden>
           {initialsOf(counterparty)}
         </span>
       </span>
 
-      <span className="conversation-row__body">
+      <Link
+        href={href}
+        // The list is pinned; jumping to the top on every selection undoes that.
+        scroll={false}
+        aria-current={selected ? 'true' : undefined}
+        className="conversation-row__body"
+      >
         <span className="conversation-row__top">
           <strong>{displayNameOf(counterparty)}</strong>
           <time
@@ -113,8 +110,8 @@ export function ConversationRow({
           ) : null}
 
         </span>
-      </span>
-    </Link>
+      </Link>
+    </div>
   );
 }
 

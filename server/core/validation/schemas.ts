@@ -188,6 +188,11 @@ export const reclassifyEmailSchema = z.object({
   spamVerdict: z.enum(['clean', 'spam']),
 });
 
+export const bulkEmailActionSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(500),
+  action: z.enum(['bin', 'purge']),
+});
+
 /** Sender patterns are a full address or a bare domain, never a wildcard. */
 export const mailFilterPatternSchema = z
   .string()
@@ -209,4 +214,5 @@ export const createMailFilterSchema = z.object({
 });
 
 export type ReclassifyEmailInput = z.infer<typeof reclassifyEmailSchema>;
+export type BulkEmailActionInput = z.infer<typeof bulkEmailActionSchema>;
 export type CreateMailFilterInput = z.infer<typeof createMailFilterSchema>;

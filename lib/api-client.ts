@@ -102,3 +102,31 @@ export async function apiRequest<T>(
 
   return (parsed as { data: T }).data;
 }
+
+/** Use when pagination metadata sits beside `data` in the response envelope. */
+export async function apiEnvelope<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
+  });
+  const text = await response.text();
+  const parsed: unknown = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    const body = parsed as ApiErrorBody | null;
+    throw new ApiRequestError(
+      body?.error?.message ?? `Request failed with ${response.status}`,
+      body?.error?.code ?? 'UNKNOWN',
+      response.status,
+      body?.error?.details,
+    );
+  }
+
+  return parsed as T;
+}
