@@ -152,7 +152,7 @@ export default function DocsPage() {
             Every alias MailPiston creates carries this deployment&apos;s absolute
             ingress URL as its recipient:
           </p>
-          <code className="mt-2 block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-[11px]">
+          <code className="docs-url mt-2 block rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px]">
             {ingress}
           </code>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">

@@ -58,7 +58,9 @@ export function Accordion({
           links, and a collapsed-but-present one is still in the tab order. */}
       {open ? (
         <div id={panelId} className="accordion__panel">
-          {children}
+          {/* The grid row this sits in is what animates from 0fr to 1fr, so the
+              panel grows into place instead of appearing at full height. */}
+          <div className="accordion__panel-inner">{children}</div>
         </div>
       ) : null}
     </div>

@@ -582,12 +582,54 @@
 .docs-section__body > p { max-width: 68ch; }
 .docs-section__body > ol,
 .docs-section__body > ul { gap: .85rem; }
-.docs-section__body code {
+/* Inline code only. `nowrap` here is what turned every snippet into a single
+   horizontal string: the `<code>` inside a `<pre>` inherited it, so the block
+   could only be read by dragging it sideways. Inline spans still resist
+   breaking mid-token, but they break rather than push the column open. */
+.docs-section__body :not(pre) > code {
   background: color-mix(in srgb, var(--foreground) 6%, transparent);
   border-radius: .3rem;
   font-size: .82em;
+  overflow-wrap: anywhere;
   padding: .12em .36em;
-  white-space: nowrap;
+  white-space: pre-wrap;
+}
+
+/* Code blocks wrap. An indent-preserving wrap keeps the shape of the source
+   readable at the widths this column actually gets. */
+.copy-snippet__code,
+.copy-snippet__code code {
+  background: none;
+  overflow-wrap: anywhere;
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: normal;
+}
+.copy-snippet {
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.docs-url {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Cards inside the article: a hairline that reads as an edge rather than a box,
+   plus a shadow shallow enough to survive being stacked next to five others. */
+.docs-section__body [data-slot="card"] {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 6px 16px -8px color-mix(in srgb, var(--foreground) 10%, transparent);
+  transition: border-color .22s ease, box-shadow .22s ease;
+}
+.docs-section__body [data-slot="card"]:hover {
+  border-color: color-mix(in srgb, var(--border) 100%, transparent);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent),
+    0 10px 26px -10px color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+.dark .docs-section__body [data-slot="card"] {
+  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, .55);
 }
 
 /* Contents rail. */
@@ -615,7 +657,7 @@
   font-size: .78rem;
   line-height: 1.4;
   padding: .32rem 0;
-  transition: color .16s ease;
+  transition: color .22s cubic-bezier(.32, .72, 0, 1), background-color .22s cubic-bezier(.32, .72, 0, 1);
 }
 .docs-toc a:hover { color: var(--foreground); }
 
@@ -699,13 +741,21 @@
   flex-direction: column;
   gap: .25rem;
   padding: .85rem .95rem;
-  transition: background-color .16s ease, border-color .16s ease, transform .16s ease;
+  transition:
+    background-color .24s cubic-bezier(.32, .72, 0, 1),
+    border-color .24s cubic-bezier(.32, .72, 0, 1),
+    box-shadow .24s cubic-bezier(.32, .72, 0, 1),
+    transform .24s cubic-bezier(.32, .72, 0, 1);
 }
 .docs-index__card:hover {
   background: var(--card);
   border-color: color-mix(in srgb, var(--orange) 40%, var(--border));
-  transform: translateY(-1px);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent),
+    0 12px 28px -12px color-mix(in srgb, var(--foreground) 18%, transparent);
+  transform: translateY(-2px);
 }
+.dark .docs-index__card:hover { box-shadow: 0 12px 28px -14px rgba(0, 0, 0, .6); }
 .docs-index__card strong { font-size: .82rem; font-weight: 600; }
 .docs-index__card span { color: var(--muted-foreground); font-size: .74rem; line-height: 1.5; }
 
@@ -850,17 +900,32 @@
   justify-content: space-between;
   padding: .7rem .95rem;
   text-align: left;
-  transition: background-color .16s ease;
+  transition: background-color .22s cubic-bezier(.32, .72, 0, 1);
   width: 100%;
 }
 .accordion__trigger:hover { background: color-mix(in srgb, var(--foreground) 4%, transparent); }
 .accordion__chevron {
   color: var(--muted-foreground);
   flex: 0 0 auto;
-  transition: transform .18s ease;
+  transition: transform .3s cubic-bezier(.32, .72, 0, 1);
 }
 .accordion[data-open] .accordion__chevron { transform: rotate(180deg); }
-.accordion__panel { border-top: 1px solid var(--border); }
+
+/* The panel is unmounted when closed, so there is no closed state to
+   transition *from* — a keyframe on mount does the same job. `grid-template-rows`
+   animates the row the content sits in, which is how you get a height
+   transition without knowing the height. */
+.accordion__panel {
+  animation: accordion-expand .3s cubic-bezier(.32, .72, 0, 1);
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-rows: 1fr;
+}
+.accordion__panel-inner { min-height: 0; overflow: hidden; }
+@keyframes accordion-expand {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to { grid-template-rows: 1fr; opacity: 1; }
+}
 
 .endpoint-guide { margin-top: 1rem; }
 .endpoint-guide__body {
@@ -957,6 +1022,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .accordion__chevron { transition: none; }
+  .accordion__panel { animation: none; }
 }
 
 .endpoint-card {
