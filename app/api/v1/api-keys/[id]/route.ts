@@ -1,21 +1,31 @@
 import { withApi } from '@/server/core/http';
+import { ConflictError } from '@/server/core/errors';
 import { repositoriesFor } from '@/server/repositories';
 
 /**
- * Revokes a key. It is a timestamp, not a delete: an audit trail that loses the
- * key a request was made with is not an audit trail.
+ * Revokes an active key, or removes it after revocation when `remove=true`.
  *
- * Effective immediately — `resolveApiKey` checks `revoked_at` on every request
- * and nothing about a key is cached.
+ * Revocation is effective immediately. Removal is a deliberate second step;
+ * audit entries keep the historical actor id after the credential row is gone.
  */
 export const DELETE = withApi(
-  async ({ params, tenantId }) => {
+  async ({ params, tenantId, request }) => {
     const repositories = repositoriesFor(tenantId);
+    const remove = new URL(request.url).searchParams.get('remove') === 'true';
+
+    if (remove) {
+      const deleted = await repositories.apiKeys.deleteRevoked(params.id);
+      if (!deleted) {
+        throw new ConflictError('Only a revoked API key can be removed');
+      }
+      return new Response(null, { status: 204 });
+    }
+
     await repositories.apiKeys.revoke(params.id);
     return new Response(null, { status: 204 });
   },
   {
     endpoint: '/v1/api-keys',
-    audit: { action: 'api_key.revoke', resourceType: 'api_key' },
+    audit: { action: 'api_key.revoke_or_remove', resourceType: 'api_key' },
   },
 );

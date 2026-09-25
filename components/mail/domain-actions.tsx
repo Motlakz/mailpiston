@@ -36,6 +36,7 @@ const REPOINTABLE = new Set([
   'disabled_at_provider',
   'local_part_changed',
   'not_found_at_provider',
+  'untracked_at_provider',
 ]);
 
 function repairFor(finding: DriftFinding, known: boolean): Repair {
@@ -479,6 +480,56 @@ export function VerifyDomainButton({ domainId }: { domainId: string }) {
   );
 }
 
+export function RelayDomainButton({
+  domainId,
+  active,
+  eligible,
+}: {
+  domainId: string;
+  active: boolean;
+  eligible: boolean;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function update() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      await apiRequest(`/api/v1/domains/${domainId}/relay`, {
+        method: active ? 'DELETE' : 'PUT',
+      });
+      router.refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <Button
+        variant={active ? 'outline' : 'default'}
+        size="sm"
+        onClick={update}
+        disabled={busy || (!active && !eligible)}
+      >
+        {busy
+          ? active
+            ? 'Stopping…'
+            : 'Configuring…'
+          : active
+            ? 'Stop using for replies'
+            : 'Use for replies'}
+      </Button>
+      {error ? <span className="text-xs text-destructive">{error}</span> : null}
+    </span>
+  );
+}
+
 /**
  * The provider's reasons a check did not pass, behind a disclosure.
  *
@@ -601,8 +652,8 @@ export function WebhookKeyForm({
         type="password"
         value={value}
         onChange={(event) => setValue(event.target.value)}
-        placeholder={configured ? 'Replace stored key' : 'Paste webhook key'}
-        aria-label="Inbound webhook key"
+        placeholder={configured ? 'Replace verification key' : 'Paste verification key'}
+        aria-label="Forward Email webhook verification key"
         autoComplete="off"
         required
         className="w-56 font-mono"

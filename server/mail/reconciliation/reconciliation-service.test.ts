@@ -67,6 +67,19 @@ describe('a healthy account', () => {
 });
 
 describe('drift the sweep must catch', () => {
+  it('reports a provider catch-all that is not tracked locally', async () => {
+    await domains.update(domainId, { catchAllAliasId: null });
+
+    const summary = await service.run();
+
+    expect(summary.drift).toBe(1);
+    expect((await findings())[0]).toMatchObject({
+      resourceType: 'alias',
+      resourceId: domainId,
+      detail: { localPart: '*', reason: 'untracked_at_provider' },
+    });
+  });
+
   it('notices a catch-all deleted in the provider dashboard', async () => {
     const domain = await domains.findById(domainId);
     await provider.deleteAlias(domain!.catchAllAliasId!);

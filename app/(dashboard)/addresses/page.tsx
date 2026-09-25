@@ -2,10 +2,16 @@ import { Icon } from '@/components/icon';
 import { NavTabs } from '@/components/layout/nav-tabs';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import {
+  numberedPageLinks,
+  pageNumber,
+  TablePagination,
+} from '@/components/layout/pagination';
+import {
   AddAddressForm,
   RepairAliasButton,
 } from '@/components/mail/address-actions';
 import { AddressMenu } from '@/components/mail/address-menu';
+import { AddressEndpointBindings } from '@/components/mail/endpoint-actions';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
@@ -16,9 +22,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { AddressWithDomain, Domain } from '@/server/core/types';
+import type { AddressWithDomain, Domain, Endpoint } from '@/server/core/types';
 import { repositoriesFor } from '@/server/repositories';
 import { requireOperatorPage } from '@/server/core/auth';
+
+const PAGE_SIZE = 10;
 
 export const metadata = { title: 'Addresses · MailPiston' };
 
@@ -44,10 +52,19 @@ export default async function AddressesPage({
   const params = await searchParams;
   const raw = Array.isArray(params.domain) ? params.domain[0] : params.domain;
 
-  const [addresses, domains] = await Promise.all([
+  const [addresses, domains, endpoints] = await Promise.all([
     repositories.addresses.list(),
     repositories.domains.list(),
+    repositories.endpoints.list(),
   ]);
+  const bindings = Object.fromEntries(
+    await Promise.all(
+      addresses.map(async (address) => [
+        address.id,
+        (await repositories.endpoints.listForAddress(address.id)).map((endpoint) => endpoint.id),
+      ] as const),
+    ),
+  );
 
   const domainOptions = domains.map((domain) => ({
     id: domain.id,
@@ -62,6 +79,18 @@ export default async function AddressesPage({
   const visible = active
     ? addresses.filter((address) => address.domainId === active)
     : addresses;
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(pageNumber(params.page), totalPages);
+  const visiblePage = visible.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+  const pagination = numberedPageLinks({
+    pathname: '/addresses',
+    params,
+    page: currentPage,
+    totalPages,
+  });
 
   const countFor = (domainId: string) =>
     addresses.filter((address) => address.domainId === domainId).length;
@@ -131,7 +160,21 @@ export default async function AddressesPage({
                 description="Create support@ on this domain with sending enabled — that is the address the end-to-end loop runs through."
               />
             ) : (
-              <AddressTable addresses={visible} showDomain={active === null} />
+              <>
+                <AddressTable
+                  addresses={visiblePage}
+                  showDomain={active === null}
+                  endpoints={endpoints}
+                  bindings={bindings}
+                />
+                <TablePagination
+                  page={currentPage}
+                  itemCount={visiblePage.length}
+                  noun="address"
+                  previousHref={pagination.previousHref}
+                  nextHref={pagination.nextHref}
+                />
+              </>
             )}
           </div>
         </>
@@ -165,9 +208,13 @@ function DomainNote({ domain }: { domain: Domain }) {
 function AddressTable({
   addresses,
   showDomain,
+  endpoints,
+  bindings,
 }: {
   addresses: AddressWithDomain[];
   showDomain: boolean;
+  endpoints: Endpoint[];
+  bindings: Record<string, string[]>;
 }) {
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -179,6 +226,7 @@ function AddressTable({
             </TableHead>
             <TableHead className="h-10 px-4">Routing</TableHead>
             <TableHead className="h-10 px-4">State</TableHead>
+            <TableHead className="h-10 px-4">Destinations</TableHead>
             <TableHead className="h-10 px-4">Created</TableHead>
             <TableHead className="h-10 px-4" />
           </TableRow>
@@ -208,6 +256,13 @@ function AddressTable({
                 <StatusBadge
                   status={address.enabled ? 'verified' : 'disabled'}
                   label={address.enabled ? 'enabled' : 'disabled'}
+                />
+              </TableCell>
+              <TableCell className="px-4 py-3.5">
+                <AddressEndpointBindings
+                  addressId={address.id}
+                  bound={bindings[address.id] ?? []}
+                  endpoints={endpoints}
                 />
               </TableCell>
               <TableCell className="px-4 py-3.5 text-muted-foreground tabular-nums">

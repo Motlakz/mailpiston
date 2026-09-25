@@ -74,6 +74,16 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
     }
   }
 
+  async function remove(id: string) {
+    setError(null);
+    try {
+      await apiRequest(`/api/v1/api-keys/${id}?remove=true`, { method: 'DELETE' });
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <form onSubmit={create} className="dashboard-inline-form flex flex-wrap items-center gap-2">
@@ -152,7 +162,26 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
                   </TableCell>
                   <TableCell className="px-4 py-3.5 text-right">
                     {key.revokedAt ? (
-                      <StatusBadge status="disabled" label="revoked" />
+                      <span className="inline-flex items-center gap-2">
+                        <StatusBadge status="disabled" label="revoked" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() =>
+                            ask({
+                              title: `Remove "${key.name}"?`,
+                              description:
+                                'This removes the revoked credential row. Existing audit entries keep the key id, but the name and prefix disappear.',
+                              confirmLabel: 'Remove key',
+                              destructive: true,
+                              onConfirm: () => remove(key.id),
+                            })
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </span>
                     ) : (
                       <Button
                         variant="ghost"

@@ -1,9 +1,15 @@
 import { Icon } from '@/components/icon';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
 import {
+  numberedPageLinks,
+  pageNumber,
+  TablePagination,
+} from '@/components/layout/pagination';
+import {
   AddDomainForm,
   CopyButton,
   DriftBanner,
+  RelayDomainButton,
   VerificationIssues,
   VerifyDomainButton,
   WebhookKeyForm,
@@ -41,6 +47,7 @@ export const metadata = { title: 'Domains · MailPiston' };
  * skipped, and it is otherwise completely silent.
  */
 type WebhookKeyState = 'fallback' | 'stored' | 'unreadable';
+const PAGE_SIZE = 10;
 
 const KEY_LABEL: Record<WebhookKeyState, string> = {
   fallback: 'using env fallback',
@@ -48,8 +55,13 @@ const KEY_LABEL: Record<WebhookKeyState, string> = {
   unreadable: 'unreadable',
 };
 
-export default async function DomainsPage() {
+export default async function DomainsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { tenantId } = await requireOperatorPage();
+  const params = await searchParams;
   const repositories = repositoriesFor(tenantId);
   const [domains, withKeys, latestRun] = await Promise.all([
     repositories.domains.list(),
@@ -84,6 +96,18 @@ export default async function DomainsPage() {
   const domainNames = Object.fromEntries(
     domains.map((domain) => [domain.id, domain.name]),
   );
+  const totalPages = Math.max(1, Math.ceil(domains.length / PAGE_SIZE));
+  const currentPage = Math.min(pageNumber(params.page), totalPages);
+  const visibleDomains = domains.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+  const pagination = numberedPageLinks({
+    pathname: '/domains',
+    params,
+    page: currentPage,
+    totalPages,
+  });
 
   return (
     <>
@@ -113,13 +137,20 @@ export default async function DomainsPage() {
         />
       ) : (
         <div className="flex flex-col gap-5">
-          {domains.map((domain) => (
+          {visibleDomains.map((domain) => (
             <DomainCard
               key={domain.id}
               domain={domain}
               webhookKey={keyState.get(domain.id) ?? 'fallback'}
             />
           ))}
+          <TablePagination
+            page={currentPage}
+            itemCount={visibleDomains.length}
+            noun="domain"
+            previousHref={pagination.previousHref}
+            nextHref={pagination.nextHref}
+          />
         </div>
       )}
     </>
@@ -153,6 +184,9 @@ function DomainCard({
           {domain.catchAllAliasId ? (
             <StatusBadge status="catch-all" tone="info" label="catch-all" />
           ) : null}
+          {domain.relayEnabled ? (
+            <StatusBadge status="verified" tone="info" label="reply relay" />
+          ) : null}
           <VerificationIssues issues={domain.verificationErrors} />
         </div>
 
@@ -166,14 +200,39 @@ function DomainCard({
         </div>
       </CardHeader>
 
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5">
+        <div className="min-w-0">
+          <p className="text-xs font-medium">Personal-inbox reply route</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            {domain.relayEnabled
+              ? `New reply tokens use reply+token@${domain.name}. Existing tokens keep working if you switch domains.`
+              : domain.status === 'verified'
+                ? 'Use this domain for secure Reply-To addresses. MailPiston will explicitly point its catch-all at this ingress.'
+                : 'Verify this domain before using it for personal-inbox replies.'}
+          </p>
+        </div>
+        <RelayDomainButton
+          domainId={domain.id}
+          active={domain.relayEnabled}
+          eligible={domain.status === 'verified'}
+        />
+      </CardContent>
+
       <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b px-5 py-3.5">
-        <span className="text-xs font-medium">Inbound webhook key</span>
+        <span className="text-xs font-medium">Forward Email verification key</span>
         <StatusBadge status={webhookKey} label={KEY_LABEL[webhookKey]} />
 
         <WebhookKeyForm
           domainId={domain.id}
           configured={webhookKey !== 'fallback'}
         />
+
+        <p className="w-full text-xs leading-relaxed text-muted-foreground">
+          Copy the “Webhook Signature Payload Verification Key” from Forward
+          Email → My Account → Domains → Settings. MailPiston cannot generate
+          this value: Forward Email must hold the matching key used to sign its
+          inbound POSTs.
+        </p>
 
         {webhookKey === 'unreadable' ? (
           <p className="w-full text-xs leading-relaxed text-destructive">

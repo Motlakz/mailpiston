@@ -1,4 +1,9 @@
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import {
+  numberedPageLinks,
+  pageNumber,
+  TablePagination,
+} from '@/components/layout/pagination';
 import { ApiKeyManager } from '@/components/mail/api-key-actions';
 import { repositoriesFor } from '@/server/repositories';
 import { requireOperatorPage } from '@/server/core/auth';
@@ -10,8 +15,15 @@ export const metadata = { title: 'API Keys · MailPiston' };
  * intended bootstrap: GitHub OAuth behind an allow-list is a stronger front
  * door than any key-issuing endpoint we could leave open.
  */
-export default async function ApiKeysPage() {
+const PAGE_SIZE = 10;
+
+export default async function ApiKeysPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { tenantId } = await requireOperatorPage();
+  const params = await searchParams;
   const repositories = repositoriesFor(tenantId);
   const keys = (await repositories.apiKeys.list()).map((key) => ({
     id: key.id,
@@ -22,6 +34,18 @@ export default async function ApiKeysPage() {
     revokedAt: key.revokedAt?.toISOString() ?? null,
     createdAt: key.createdAt.toISOString(),
   }));
+  const totalPages = Math.max(1, Math.ceil(keys.length / PAGE_SIZE));
+  const currentPage = Math.min(pageNumber(params.page), totalPages);
+  const visibleKeys = keys.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+  const pagination = numberedPageLinks({
+    pathname: '/api-keys',
+    params,
+    page: currentPage,
+    totalPages,
+  });
 
   return (
     <>
@@ -31,7 +55,14 @@ export default async function ApiKeysPage() {
       />
 
       <div className="mt-4">
-        <ApiKeyManager keys={keys} />
+        <ApiKeyManager keys={visibleKeys} />
+        <TablePagination
+          page={currentPage}
+          itemCount={visibleKeys.length}
+          noun="key"
+          previousHref={pagination.previousHref}
+          nextHref={pagination.nextHref}
+        />
       </div>
 
       {keys.length === 0 ? (

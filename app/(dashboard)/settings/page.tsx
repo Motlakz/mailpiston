@@ -1,4 +1,10 @@
+import Link from 'next/link';
+
 import { PageHeader } from '@/components/layout/page-shell';
+import {
+  cursorPageLinks,
+  TablePagination,
+} from '@/components/layout/pagination';
 import { FilterLists } from '@/components/mail/filter-lists';
 import { ProviderConnection } from '@/components/mail/provider-connection';
 import { env } from '@/server/core/config';
@@ -20,15 +26,31 @@ export const metadata = { title: 'Settings · MailPiston' };
  * What this page is actually for is the second half of §24: the audit trail of
  * privileged mutations, which is worth nothing if nobody can read it.
  */
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { tenantId } = await requireOperatorPage();
+  const params = await searchParams;
+  const cursor = Array.isArray(params.auditCursor)
+    ? params.auditCursor[0]
+    : params.auditCursor;
   const repositories = repositoriesFor(tenantId);
-  const [audit, filters, providerConnected, sendUsage] = await Promise.all([
-    repositories.audit.list({ limit: 50 }),
+  const [audit, filters, providerConnected, sendUsage, relayDomain] = await Promise.all([
+    repositories.audit.list({ limit: 50, cursor: cursor || undefined }),
     repositories.mailFilters.list(),
     hasTenantApiToken(tenantId),
     sendUsageFor(tenantId, repositories.emails),
+    repositories.domains.findRelayDomain(),
   ]);
+  const auditPagination = cursorPageLinks({
+    pathname: '/settings',
+    params,
+    nextCursor: audit.nextCursor,
+    cursorParam: 'auditCursor',
+    trailParam: 'auditTrail',
+  });
 
   return (
     <>
@@ -105,12 +127,24 @@ export default async function SettingsPage() {
           </Setting>
 
           <Setting
-            label="Relay domain"
-            value={env.RELAY_DOMAIN ?? 'not configured'}
+            label="Reply domain"
+            value={relayDomain?.name ?? 'not selected'}
           >
-            {env.RELAY_DOMAIN
-              ? `Reply tokens expire after ${env.RELAY_TOKEN_TTL_DAYS} days.`
-              : 'Forwarded mail carries no reply relay, so replying to it lands back on the managed address instead of reaching the customer.'}
+            {relayDomain ? (
+              <>Selected per workspace on <Link href="/domains" className="underline">Domains</Link>. Reply tokens expire after {env.RELAY_TOKEN_TTL_DAYS} days.</>
+            ) : (
+              <>Personal-inbox forwarding is paused. Select a verified domain on <Link href="/domains" className="underline">Domains</Link>.</>
+            )}
+          </Setting>
+
+          <Setting
+            label="Provider-send safety"
+            value={`${env.OUTBOUND_DAILY_SEND_LIMIT}/24h`}
+          >
+            Includes API sends, replies, verification mail, and personal
+            forwarding. Personal forwarding is also capped at{' '}
+            {env.PERSONAL_FORWARD_DAILY_LIMIT}/24h and{' '}
+            {env.PERSONAL_FORWARD_TARGET_HOURLY_LIMIT}/hour per destination.
           </Setting>
 
           <Setting
@@ -193,6 +227,16 @@ export default async function SettingsPage() {
             ))}
           </ul>
         )}
+        <div className="px-4 pb-4">
+          <TablePagination
+            page={auditPagination.page}
+            itemCount={audit.items.length}
+            noun="entry"
+            plural="entries"
+            previousHref={auditPagination.previousHref}
+            nextHref={auditPagination.nextHref}
+          />
+        </div>
       </section>
     </>
   );

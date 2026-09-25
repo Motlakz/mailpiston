@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 
 import { NotFoundError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -49,6 +49,21 @@ export class NeonApiKeyRepository implements ApiKeyRepository {
       .returning({ id: apiKeys.id });
 
     if (!row) throw new NotFoundError(`API key ${id} not found`);
+  }
+
+  async deleteRevoked(id: string): Promise<boolean> {
+    const [row] = await db
+      .delete(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.tenantId, this.tenantId),
+          eq(apiKeys.id, id),
+          isNotNull(apiKeys.revokedAt),
+        ),
+      )
+      .returning({ id: apiKeys.id });
+
+    return Boolean(row);
   }
 }
 

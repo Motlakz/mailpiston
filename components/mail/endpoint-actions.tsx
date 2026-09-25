@@ -562,8 +562,6 @@ export function WebhookPanel({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-muted-foreground">Destination</p>
-
       <form onSubmit={save} className="flex flex-wrap items-center gap-2">
         <Input
           type="url"
@@ -746,10 +744,11 @@ export function EndpointBindings({
   const selectedId = keepWithin(addressId, unbound);
 
   async function bind() {
+    if (!selectedId) return;
     setError(null);
 
     try {
-      await apiRequest(`/api/v1/addresses/${addressId}/endpoints`, {
+      await apiRequest(`/api/v1/addresses/${selectedId}/endpoints`, {
         method: 'POST',
         body: JSON.stringify({ endpointId }),
       });
@@ -773,36 +772,39 @@ export function EndpointBindings({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="endpoint-source-picker">
       {bound.length === 0 ? (
-        <span className="text-xs text-muted-foreground">
+        <p className="endpoint-source-picker__empty">
           Not bound to any address yet.
-        </span>
+        </p>
       ) : (
-        bound.map((id) => {
-          const address = addresses.find((candidate) => candidate.id === id);
-          return (
-            <span
-              key={id}
-              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]"
-            >
-              {address?.email ?? id}
-              <button
-                type="button"
-                onClick={() => unbind(id)}
-                disabled={pending}
-                aria-label="Unbind"
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Icon name="close" size={11} />
-              </button>
-            </span>
-          );
-        })
+        <div className="endpoint-source-list" role="list">
+          {bound.map((id) => {
+            const address = addresses.find((candidate) => candidate.id === id);
+            return (
+              <div key={id} className="endpoint-source-row" role="listitem">
+                <span className="endpoint-source-row__mark" aria-hidden />
+                <code>{address?.email ?? id}</code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => unbind(id)}
+                  disabled={pending}
+                  aria-label={`Unbind ${address?.email ?? id}`}
+                  title="Unbind address"
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Icon name="close" size={11} />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {unbound.length > 0 ? (
-        <>
+        <div className="endpoint-source-add">
           <Select
             items={unbound.map((address) => ({
               value: address.id,
@@ -811,7 +813,7 @@ export function EndpointBindings({
             value={selectedId}
             onValueChange={(value) => setAddressId(String(value))}
           >
-            <SelectTrigger aria-label="Address to bind" className="w-auto min-w-48">
+            <SelectTrigger aria-label="Address to bind" className="min-w-0 flex-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -822,13 +824,127 @@ export function EndpointBindings({
               ))}
             </SelectContent>
           </Select>
-          <Button type="button" variant="outline" size="sm" onClick={bind}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={bind}
+            disabled={pending || !selectedId}
+          >
             Bind
           </Button>
-        </>
+        </div>
       ) : null}
 
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
     </div>
+  );
+}
+
+/** Manage one address's fan-out without leaving the Addresses screen. */
+export function AddressEndpointBindings({
+  addressId,
+  bound,
+  endpoints,
+}: {
+  addressId: string;
+  bound: string[];
+  endpoints: Array<{ id: string; name: string; type: EndpointType; enabled: boolean }>;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [endpointId, setEndpointId] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const unbound = endpoints.filter((endpoint) => !bound.includes(endpoint.id));
+  const selectedId = keepWithin(endpointId, unbound);
+
+  async function bind() {
+    if (!selectedId) return;
+    setError(null);
+    try {
+      await apiRequest(`/api/v1/addresses/${addressId}/endpoints`, {
+        method: 'POST',
+        body: JSON.stringify({ endpointId: selectedId }),
+      });
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
+
+  async function unbind(id: string) {
+    setError(null);
+    try {
+      await apiRequest(`/api/v1/addresses/${addressId}/endpoints/${id}`, {
+        method: 'DELETE',
+      });
+      startTransition(() => router.refresh());
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
+
+  return (
+    <>
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        {bound.length === 0 ? 'Add route' : `${bound.length} route${bound.length === 1 ? '' : 's'}`}
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Address destinations"
+        description="Choose where mail captured for this address is delivered."
+      >
+        <div className="flex flex-col gap-3">
+          {bound.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No endpoint is bound yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {bound.map((id) => {
+                const endpoint = endpoints.find((candidate) => candidate.id === id);
+                return (
+                  <div key={id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+                    <span className="min-w-0">
+                      <strong className="block truncate text-sm">{endpoint?.name ?? id}</strong>
+                      <small className="text-muted-foreground">{endpoint?.type ?? 'endpoint'}</small>
+                    </span>
+                    <Button variant="ghost" size="sm" disabled={pending} onClick={() => unbind(id)}>
+                      Unbind
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {unbound.length > 0 ? (
+            <div className="flex items-center gap-2 border-t border-border pt-3">
+              <Select
+                items={unbound.map((endpoint) => ({ value: endpoint.id, label: endpoint.name }))}
+                value={selectedId}
+                onValueChange={(value) => setEndpointId(String(value))}
+              >
+                <SelectTrigger className="min-w-52 flex-1" aria-label="Endpoint to bind">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {unbound.map((endpoint) => (
+                    <SelectItem key={endpoint.id} value={endpoint.id}>
+                      {endpoint.name} · {endpoint.type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button disabled={pending || !selectedId} onClick={bind}>Bind</Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Every endpoint is already bound.</p>
+          )}
+
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        </div>
+      </Dialog>
+    </>
   );
 }

@@ -209,10 +209,23 @@ export class ReconciliationService {
         })),
     ];
 
-    if (tracked.length === 0) return;
-
     const aliases = await this.provider.listAliases(providerDomainId);
     const byId = new Map(aliases.map((alias) => [alias.id, alias]));
+
+    if (!domain.catchAllAliasId) {
+      const untrackedCatchAll = aliases.find(
+        (alias) => alias.localPart.toLowerCase() === '*',
+      );
+      if (untrackedCatchAll) {
+        await record('alias', domain.id, 'drift', {
+          domain: domain.name,
+          localPart: '*',
+          aliasId: untrackedCatchAll.id,
+          reason: 'untracked_at_provider',
+          actual: untrackedCatchAll.recipients,
+        });
+      }
+    }
 
     for (const expected of tracked) {
       const alias = byId.get(expected.id);
