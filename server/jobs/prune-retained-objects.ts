@@ -3,6 +3,7 @@ import 'server-only';
 import { cron } from 'inngest';
 
 import { allTenantIds } from '@/server/core/tenancy/resolve';
+import { mapWithConcurrency } from '@/server/core/concurrency';
 import { servicesFor } from '@/server/mail/services';
 
 import { inngest } from './inngest';
@@ -26,15 +27,16 @@ export const pruneRetainedObjects = inngest.createFunction(
 
     // Retention is per tenant because the policy is: one workspace's window
     // must never decide when another's bytes are deleted.
-    return Promise.all(
-      tenants.map((tenantId) =>
+    return mapWithConcurrency(
+      tenants,
+      3,
+      (tenantId) =>
         step
           .run(`prune-${tenantId}`, () => servicesFor(tenantId).retention().prune())
           .catch((error: unknown) => {
             console.error('Retention prune failed for tenant', tenantId, error);
             return null;
           }),
-      ),
     );
   },
 );

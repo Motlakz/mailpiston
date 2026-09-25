@@ -102,9 +102,13 @@ export class InboundService {
     if (this.handlers.relay && relayLocalToken(normalized.recipient)) {
       const relayed = await this.handlers.relay.handle(normalized);
 
-      return relayed.status === 'relayed'
-        ? { status: 'relayed', emailId: relayed.emailId }
-        : { status: 'rejected', emailId: null, reason: relayed.reason };
+      if (relayed.status === 'relayed') {
+        return { status: 'relayed', emailId: relayed.emailId };
+      }
+      if (relayed.status === 'duplicate') {
+        return { status: 'duplicate', emailId: null, reason: relayed.reason };
+      }
+      return { status: 'rejected', emailId: null, reason: relayed.reason };
     }
 
     const address = await this.addresses.findByEmail(normalized.recipient);

@@ -26,6 +26,9 @@ export const retryWebhookDelivery = inngest.createFunction(
   {
     id: 'retry-webhook-delivery',
     retries: 0,
+    // A receiver outage can schedule thousands of retries for one workspace.
+    // Keep those from becoming thousands of simultaneous outbound sockets.
+    concurrency: { limit: 10, key: 'event.data.tenantId' },
     triggers: [webhookDeliveryFailed],
   },
   async ({ event, step }) => {

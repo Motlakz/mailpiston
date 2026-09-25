@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { decryptSecret } from '@/server/core/crypto';
+import { mapWithConcurrency } from '@/server/core/concurrency';
 import { NotFoundError, ValidationError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
 import type {
@@ -81,6 +82,8 @@ export interface WebhookServiceOptions {
    */
   tenantId: string;
   timeoutMs: number;
+  /** Maximum bytes read from an untrusted receiver's error response. */
+  maxResponseBytes?: number;
   /**
    * Required, not defaulted. A deployment that ends up never retrying should
    * have had to write that down.
@@ -147,7 +150,7 @@ export class WebhookService {
       attachments: await this.emails.listAttachments(input.email.id),
     };
 
-    for (const endpoint of bound) {
+    const outcomes = await mapWithConcurrency(bound, 5, async (endpoint) => {
       const { delivery, created } = await this.deliveries.enqueue({
         endpointId: endpoint.id,
         eventId: input.event.id,
@@ -155,8 +158,7 @@ export class WebhookService {
       });
 
       if (!created) {
-        result.skipped += 1;
-        continue;
+        return 'skipped' as const;
       }
 
       await this.events.create({
@@ -167,10 +169,11 @@ export class WebhookService {
 
       const outcome = await this.attemptDelivery(delivery.id, context);
 
-      if (outcome.skipped) result.skipped += 1;
-      else if (outcome.ok) result.delivered += 1;
-      else result.failed += 1;
-    }
+      if (outcome.skipped) return 'skipped' as const;
+      return outcome.ok ? ('delivered' as const) : ('failed' as const);
+    });
+
+    for (const outcome of outcomes) result[outcome] += 1;
 
     return result;
   }
@@ -206,6 +209,33 @@ export class WebhookService {
     if (!requeued) return { skipped: true, reason: 'not-retryable' };
 
     return this.attemptDelivery(deliveryId);
+  }
+
+  /**
+   * Self-heals rows whose scheduler event was lost and claims abandoned leases.
+   * The same atomic claim as every other path makes overlap with Inngest safe.
+   */
+  async recoverDue(
+    limit = 50,
+    concurrency = 5,
+  ): Promise<{ found: number; attempted: number; skipped: number; errors: number }> {
+    const due = await this.deliveries.listDue(new Date(), limit);
+    let attempted = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    await mapWithConcurrency(due, concurrency, async (delivery) => {
+      try {
+        const outcome = await this.attempt(delivery.id);
+        if (outcome.skipped) skipped += 1;
+        else attempted += 1;
+      } catch (error) {
+        errors += 1;
+        console.error('Webhook recovery attempt failed', delivery.id, error);
+      }
+    });
+
+    return { found: due.length, attempted, skipped, errors };
   }
 
   /**
@@ -481,7 +511,10 @@ export class WebhookService {
         };
       }
 
-      return fail(await excerpt(response), response.status);
+      return fail(
+        await excerpt(response, this.options.maxResponseBytes ?? 16_384),
+        response.status,
+      );
     } catch (error) {
       const name = (error as Error).name;
 
@@ -514,11 +547,38 @@ export class WebhookService {
 }
 
 /** A failing receiver's body, truncated. The useful part is always at the front. */
-async function excerpt(response: Response): Promise<string> {
+async function excerpt(response: Response, maxBytes: number): Promise<string> {
   let detail = '';
 
   try {
-    detail = (await response.text()).slice(0, ERROR_EXCERPT).trim();
+    if (response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let read = 0;
+
+      try {
+        while (read < maxBytes) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const remaining = maxBytes - read;
+          const chunk = value.subarray(0, remaining);
+          read += chunk.byteLength;
+          detail += decoder.decode(chunk, { stream: read < maxBytes });
+
+          if (value.byteLength > remaining || read >= maxBytes) {
+            await reader.cancel().catch(() => undefined);
+            break;
+          }
+        }
+
+        detail += decoder.decode();
+      } finally {
+        reader.releaseLock();
+      }
+    }
+
+    detail = detail.slice(0, ERROR_EXCERPT).trim();
   } catch {
     // A body that will not read is not worth failing the failure over.
   }

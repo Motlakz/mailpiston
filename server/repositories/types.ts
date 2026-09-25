@@ -421,6 +421,8 @@ export interface DeliveryRepository {
     recipientId: string | null;
   }): Promise<EnqueueResult>;
   findById(id: string): Promise<EndpointDelivery | null>;
+  /** Pending work whose backoff elapsed, plus abandoned expired leases. */
+  listDue(now: Date, limit: number): Promise<EndpointDelivery[]>;
   /**
    * Atomic claim (plan §15.5). Two executions must never receive the same row.
    *

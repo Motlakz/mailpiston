@@ -1,6 +1,8 @@
 import 'server-only';
 
 import { env } from '@/server/core/config';
+import { claimIdempotencyKey } from '@/server/core/idempotency';
+import { checkRateLimit } from '@/server/core/rate-limit';
 import { inngestRetryScheduler } from '@/server/jobs/inngest-scheduler';
 import { mailProviderRegistry } from '@/server/providers/registry';
 import { assertWithinSendLimit } from '@/server/core/tenancy/limits';
@@ -116,6 +118,20 @@ export function servicesFor(tenantId: string): MailServices {
         repositories.emails,
         repositories.events,
         bundle.outbound(),
+        { claim: claimIdempotencyKey },
+        {
+          assert: async (relayId) => {
+            await checkRateLimit(
+              `endpoint:${relayId}`,
+              '/relay/replies',
+              {
+                requests: env.RELAY_TOKEN_DAILY_REPLY_LIMIT,
+                windowMs: 24 * 60 * 60 * 1000,
+                failOpen: false,
+              },
+            );
+          },
+        },
       )),
 
     webhooks: () =>
@@ -127,6 +143,7 @@ export function servicesFor(tenantId: string): MailServices {
         {
           tenantId,
           timeoutMs: env.WEBHOOK_TIMEOUT_MS,
+          maxResponseBytes: env.WEBHOOK_MAX_RESPONSE_BYTES,
           scheduler: inngestRetryScheduler,
         },
       )),

@@ -3,7 +3,9 @@ import { serve } from 'inngest/next';
 import { env } from '@/server/core/config';
 import { inngest } from '@/server/jobs/inngest';
 import { pruneRetainedObjects } from '@/server/jobs/prune-retained-objects';
+import { pruneOperationalState } from '@/server/jobs/prune-operational-state';
 import { reconcileProvider } from '@/server/jobs/reconcile-provider';
+import { recoverWebhookDeliveries } from '@/server/jobs/recover-webhook-deliveries';
 import { retryWebhookDelivery } from '@/server/jobs/retry-webhook-delivery';
 
 /**
@@ -19,6 +21,15 @@ import { retryWebhookDelivery } from '@/server/jobs/retry-webhook-delivery';
  */
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [retryWebhookDelivery, reconcileProvider, pruneRetainedObjects],
+  // Production registration is driven by the signed Inngest control plane.
+  // The unauthenticated PUT sync hook is useful only to the local dev server.
+  enableUnauthedSync: env.NODE_ENV !== 'production',
+  functions: [
+    retryWebhookDelivery,
+    recoverWebhookDeliveries,
+    reconcileProvider,
+    pruneRetainedObjects,
+    pruneOperationalState,
+  ],
   ...(env.INNGEST_SIGNING_KEY ? { signingKey: env.INNGEST_SIGNING_KEY } : {}),
 });

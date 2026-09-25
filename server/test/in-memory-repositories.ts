@@ -891,6 +891,19 @@ export class InMemoryDeliveryRepository implements DeliveryRepository {
     return this.rows.get(id) ?? null;
   }
 
+  async listDue(now: Date, limit: number): Promise<EndpointDelivery[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          (row.status === 'pending' && row.nextAttemptAt.getTime() <= now.getTime()) ||
+          (row.status === 'delivering' &&
+            row.leaseExpiresAt !== null &&
+            row.leaseExpiresAt.getTime() < now.getTime()),
+      )
+      .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
+      .slice(0, limit);
+  }
+
   /**
    * The same transition the Neon `UPDATE … WHERE status IN (…) RETURNING *`
    * makes, reproduced exactly: `pending`, or `delivering` with an expired

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { randomToken, sha256Hex } from '@/server/core/crypto';
+import { mapWithConcurrency } from '@/server/core/concurrency';
 import { ConflictError, ValidationError } from '@/server/core/errors';
 import type { AddressWithDomain, Email } from '@/server/core/types';
 import type { EgressBudget } from '@/server/mail/emails/egress-budget';
@@ -69,15 +70,11 @@ export class ForwardingService {
     if (targets.length === 0) return { delivered: 0, failed: 0 };
 
     const relayDomain = await this.domains.findRelayDomain();
-    let delivered = 0;
-    let failed = 0;
-
-    for (const target of targets) {
+    const outcomes = await mapWithConcurrency(targets, 5, async (target) => {
       try {
         await this.notify(target, input, relayDomain?.name ?? null);
-        delivered += 1;
+        return true;
       } catch (error) {
-        failed += 1;
         await this.events.create({
           emailId: input.email.id,
           type: 'personal_forward.failed',
@@ -87,10 +84,12 @@ export class ForwardingService {
             error: (error as Error).message,
           },
         });
+        return false;
       }
-    }
+    });
 
-    return { delivered, failed };
+    const delivered = outcomes.filter(Boolean).length;
+    return { delivered, failed: outcomes.length - delivered };
   }
 
   /** Verified, enabled recipients of every enabled email endpoint on the address. */
@@ -160,8 +159,10 @@ export class ForwardingService {
       to: [target.email],
       replyTo,
       subject: email.subject ?? '(no subject)',
-      text: notificationBody(email),
-      ...(email.html ? { html: email.html } : {}),
+      text: notificationBody(email, address.email),
+      ...(email.html
+        ? { html: notificationHtml(email, address.email) }
+        : {}),
       headers: {
         // Loop prevention: our own ingress drops anything wearing these, and
         // well-behaved autoresponders stay quiet for `auto-generated`.
@@ -219,17 +220,47 @@ function recipientDomain(email: string): string | null {
   return separator > 0 ? email.slice(separator + 1).trim().toLowerCase() : null;
 }
 
-function notificationBody(email: Email): string {
+function notificationBody(email: Email, managedAddress: string): string {
   const header = [
-    `From: ${email.from}`,
-    `To: ${email.to.join(', ')}`,
-    email.cc.length > 0 ? `Cc: ${email.cc.join(', ')}` : null,
+    'MailPiston delivery',
+    `Original sender: ${email.from}`,
+    `Received by MailPiston at: ${managedAddress}`,
     'Reply to this message and MailPiston sends it to the customer as the managed address.',
   ]
-    .filter(Boolean)
     .join('\n');
 
   return `${header}\n\n---\n\n${email.text ?? '(no plain-text body)'}`;
+}
+
+/**
+ * HTML messages previously hid the explanatory text-part entirely in most mail
+ * clients, making the managed address in `From` and the relay-domain
+ * `Reply-To` look like an accidental loop. Keep the original HTML intact, but
+ * put an escaped routing explanation in the visible HTML alternative too.
+ */
+function notificationHtml(email: Email, managedAddress: string): string {
+  const sender = escapeHtml(email.from);
+  const receivedAt = escapeHtml(managedAddress);
+
+  return [
+    '<div style="border:1px solid #d4d4d4;padding:12px;margin:0 0 16px;font-family:system-ui,sans-serif;font-size:14px;line-height:1.5">',
+    '<strong>MailPiston delivery</strong><br>',
+    `Original sender: ${sender}<br>`,
+    `Received by MailPiston at: ${receivedAt}<br>`,
+    'Reply to this message and MailPiston will send your response to the customer as the managed address.',
+    '</div>',
+    email.html ?? '',
+  ].join('');
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]!);
 }
 
 /** `"Ada Lovelace" <ada@example.com>` → `Ada Lovelace`; a bare address → itself. */

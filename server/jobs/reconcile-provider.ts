@@ -3,6 +3,7 @@ import 'server-only';
 import { cron } from 'inngest';
 
 import { allTenantIds } from '@/server/core/tenancy/resolve';
+import { mapWithConcurrency } from '@/server/core/concurrency';
 import { servicesFor } from '@/server/mail/services';
 
 import { inngest } from './inngest';
@@ -33,8 +34,10 @@ export const reconcileProvider = inngest.createFunction(
 
     // One step per tenant, so a workspace whose provider token is missing or
     // revoked fails on its own line and the rest of the sweep still runs.
-    return Promise.all(
-      tenants.map((tenantId) =>
+    return mapWithConcurrency(
+      tenants,
+      3,
+      (tenantId) =>
         step
           .run(`reconcile-${tenantId}`, () =>
             servicesFor(tenantId).reconciliation().run(),
@@ -43,7 +46,6 @@ export const reconcileProvider = inngest.createFunction(
             console.error('Reconciliation failed for tenant', tenantId, error);
             return null;
           }),
-      ),
     );
   },
 );

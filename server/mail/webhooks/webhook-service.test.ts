@@ -76,13 +76,14 @@ function recordingScheduler() {
 function serviceWith(
   fetchImpl: typeof fetch,
   scheduler: RetryScheduler = noRetryScheduler,
+  maxResponseBytes = 16_384,
 ): WebhookService {
   return new WebhookService(
     endpoints,
     deliveries,
     emails,
     events,
-    { tenantId: 'ten_test', timeoutMs: 500, scheduler },
+    { tenantId: 'ten_test', timeoutMs: 500, maxResponseBytes, scheduler },
     fetchImpl,
   );
 }
@@ -294,6 +295,26 @@ describe('failure', () => {
     expect(row.status).toBe('pending');
     expect(row.responseCode).toBeNull();
     expect(row.lastError).toContain('ECONNREFUSED');
+  });
+
+  it('cancels an oversized receiver error body after the configured byte cap', async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1024)));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const { impl } = recordingFetch(
+      () => new Response(stream, { status: 500 }),
+    );
+
+    const result = await serviceWith(impl, noRetryScheduler, 32).test(endpointId);
+
+    expect(cancelled).toBe(true);
+    expect(result.error).toBe(`HTTP 500: ${'x'.repeat(32)}`);
   });
 
   it('fails an endpoint that resolves into private space without sending anything', async () => {
@@ -590,6 +611,24 @@ describe('retries', () => {
 
     expect(outcome.skipped).toBe(false);
     expect((await deliveries.findById(delivery.id))?.status).toBe('delivered');
+  });
+
+  it('self-heals a due delivery when its scheduler event was lost', async () => {
+    const failing = recordingFetch(() => new Response('down', { status: 502 }));
+    await serviceWith(failing.impl).dispatch({ email, address, event });
+
+    const [pending] = await deliveries.listForEndpoint(endpointId);
+    deliveries.rows.set(pending.id, {
+      ...pending,
+      nextAttemptAt: new Date(Date.now() - 1_000),
+    });
+
+    const succeeding = recordingFetch(() => new Response('ok', { status: 200 }));
+    const result = await serviceWith(succeeding.impl).recoverDue();
+
+    expect(result).toEqual({ found: 1, attempted: 1, skipped: 0, errors: 0 });
+    expect((await deliveries.findById(pending.id))?.status).toBe('delivered');
+    expect(succeeding.calls).toHaveLength(1);
   });
 });
 

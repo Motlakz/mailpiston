@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { sha256Hex, timingSafeEqual } from '@/server/core/crypto';
+import { createInboundFingerprint } from '@/server/core/idempotency';
 import type { Email } from '@/server/core/types';
 import type { NormalizedInboundEmail } from '@/server/providers/types';
 import type {
@@ -41,7 +42,7 @@ import type { OutboundService } from '../emails/outbound-service';
  * authentication headers are left behind with the original.
  */
 export interface RelayResult {
-  status: 'relayed' | 'rejected';
+  status: 'relayed' | 'rejected' | 'duplicate';
   emailId: string | null;
   reason?: string;
 }
@@ -53,6 +54,12 @@ export class RelayService {
     private readonly emails: EmailRepository,
     private readonly events: EventRepository,
     private readonly outbound: OutboundService,
+    private readonly idempotency: {
+      claim(key: string, source: string): Promise<boolean>;
+    } = { async claim() { return true; } },
+    private readonly replyGuard: {
+      assert(relayId: string): Promise<void>;
+    } = { async assert() {} },
   ) {}
 
   async handle(normalized: NormalizedInboundEmail): Promise<RelayResult> {
@@ -92,6 +99,29 @@ export class RelayService {
 
     const parent = await this.newestCustomerMessage(relay.threadId);
     if (!parent) return this.reject(normalized, 'no_customer_message');
+
+    // Relay deliveries bypass ordinary inbound persistence, so they do not get
+    // the email row's unique fingerprint for free. Claim their fingerprint
+    // here before any outbound send: a provider retry, replayed webhook, or two
+    // concurrent deliveries of the same reply must collapse into one send.
+    const claimed = await this.idempotency.claim(
+      relayFingerprint(normalized, relay.addressId),
+      `relay:${relay.id}`,
+    );
+
+    if (!claimed) {
+      return {
+        status: 'duplicate',
+        emailId: null,
+        reason: 'duplicate_relay_reply',
+      };
+    }
+
+    // A relay address is a bearer capability once it reaches a personal
+    // mailbox. Sender verification and idempotency stop spoofing and replay;
+    // this per-token ceiling limits the damage if that mailbox or token is
+    // compromised and an attacker generates fresh Message-IDs.
+    await this.replyGuard.assert(relay.id);
 
     await this.events.create({
       emailId: parent.id,
@@ -150,6 +180,31 @@ export class RelayService {
 
     return { status: 'rejected', emailId: null, reason };
   }
+}
+
+function relayFingerprint(
+  normalized: NormalizedInboundEmail,
+  addressId: string,
+): string {
+  const fingerprint = createInboundFingerprint({
+    provider: normalized.provider,
+    providerMessageId: normalized.providerMessageId,
+    messageId: normalized.messageId,
+    recipient: normalized.recipient,
+    addressId,
+    contentFallback:
+      normalized.raw ??
+      [
+        normalized.envelopeSender ?? '',
+        normalized.from,
+        normalized.subject ?? '',
+        normalized.text ?? normalized.html ?? '',
+      ].join('\0'),
+  });
+
+  // Keep the primary key fixed-size; raw addresses and Message-IDs are attacker
+  // input and should not be allowed to grow an operational index arbitrarily.
+  return `relay:${sha256Hex(fingerprint)}`;
 }
 
 /** `reply+<token>@relay.example` → `<token>`. */

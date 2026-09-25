@@ -36,6 +36,7 @@ let provider: MockMailProvider;
 let inbound: InboundService;
 let outbound: OutboundService;
 let recipientId: string;
+let relayAttempts: number;
 
 beforeEach(async () => {
   domains = new InMemoryDomainRepository();
@@ -46,6 +47,7 @@ beforeEach(async () => {
   endpoints = new InMemoryEndpointRepository();
   relays = new InMemoryReplyRelayRepository();
   provider = new MockMailProvider();
+  relayAttempts = 0;
 
   outbound = new OutboundService(emails, addresses, events, threads, provider);
 
@@ -58,7 +60,27 @@ beforeEach(async () => {
     domains,
   );
 
-  const relay = new RelayService(relays, endpoints, emails, events, outbound);
+  const claimedRelayReplies = new Set<string>();
+  const relay = new RelayService(
+    relays,
+    endpoints,
+    emails,
+    events,
+    outbound,
+    {
+      async claim(key) {
+        if (claimedRelayReplies.has(key)) return false;
+        claimedRelayReplies.add(key);
+        return true;
+      },
+    },
+    {
+      async assert() {
+        relayAttempts += 1;
+        if (relayAttempts > 1) throw new Error('relay reply limit reached');
+      },
+    },
+  );
 
   inbound = new InboundService(
     emails,
@@ -140,9 +162,8 @@ function relayAddressFromNotification(): string {
 
 function relayReply(
   overrides: Partial<NormalizedInboundEmail> = {},
+  relayAddress = relayAddressFromNotification(),
 ): NormalizedInboundEmail {
-  const relayAddress = relayAddressFromNotification();
-
   return delivery({
     recipient: relayAddress,
     envelopeRecipients: [relayAddress],
@@ -171,12 +192,28 @@ describe('personal forwarding', () => {
     expect(notification.replyTo).toMatch(
       new RegExp(`^reply\\+.+@${RELAY_DOMAIN}$`),
     );
+    expect(notification.replyTo).not.toBe(notification.to[0]);
+    expect(notification.text).toContain(`Received by MailPiston at: support@${DOMAIN}`);
+    expect(notification.text).not.toContain(`\nTo: support@${DOMAIN}`);
     // Loop prevention, so an autoresponder does not answer this forever.
     expect(notification.headers?.['Auto-Submitted']).toBe('auto-generated');
 
     expect(events.rows.map((row) => row.type)).toContain(
       'personal_forward.delivered',
     );
+  });
+
+  it('explains relay routing in the visible HTML alternative without injecting header markup', async () => {
+    await inbound.capture(delivery({
+      from: 'Customer <customer@example.com><script>alert(1)</script>',
+      html: '<p>It broke.</p>',
+    }));
+
+    const notification = provider.sentMessages[0];
+    expect(notification.to).toEqual([PERSONAL]);
+    expect(notification.html).toContain('Received by MailPiston at:');
+    expect(notification.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(notification.html).toContain('<p>It broke.</p>');
   });
 
   it('stores only the hash of the relay token', async () => {
@@ -303,6 +340,36 @@ describe('relayed replies', () => {
     expect(relayed!.threadId).toBe(parent!.threadId);
     expect(relayed!.direction).toBe('outbound');
     expect(events.rows.map((row) => row.type)).toContain('relay.reply_sent');
+  });
+
+  it('collapses a replayed provider delivery into one customer reply', async () => {
+    await inbound.capture(delivery());
+    const reply = relayReply();
+    const before = provider.sentMessages.length;
+
+    const [first, replay] = await Promise.all([
+      inbound.capture(reply),
+      inbound.capture(reply),
+    ]);
+
+    expect([first.status, replay.status].sort()).toEqual(['duplicate', 'relayed']);
+    expect(provider.sentMessages).toHaveLength(before + 1);
+    expect(relayAttempts).toBe(1);
+  });
+
+  it('stops fresh-message abuse after the relay token reaches its ceiling', async () => {
+    await inbound.capture(delivery());
+    const relayAddress = relayAddressFromNotification();
+    await inbound.capture(relayReply());
+    const before = provider.sentMessages.length;
+
+    await expect(inbound.capture(relayReply({
+      messageId: '<personal-2@personal.example>',
+      providerMessageId: 'fe_personal_2',
+      text: 'A second distinct reply.',
+    }, relayAddress))).rejects.toThrow('relay reply limit reached');
+
+    expect(provider.sentMessages).toHaveLength(before);
   });
 
   it('sends nothing when the sender is not the verified recipient', async () => {

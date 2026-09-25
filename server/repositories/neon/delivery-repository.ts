@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, lt, lte, or, sql } from 'drizzle-orm';
 
 import { APIError } from '@/server/core/errors';
 import { newId } from '@/server/core/ids';
@@ -81,6 +81,31 @@ export class NeonDeliveryRepository implements DeliveryRepository {
       .limit(1);
 
     return row ? toDelivery(row) : null;
+  }
+
+  async listDue(now: Date, limit: number): Promise<EndpointDelivery[]> {
+    const rows = await db
+      .select()
+      .from(endpointDeliveries)
+      .where(
+        and(
+          eq(endpointDeliveries.tenantId, this.tenantId),
+          or(
+            and(
+              eq(endpointDeliveries.status, 'pending'),
+              lte(endpointDeliveries.nextAttemptAt, now),
+            ),
+            and(
+              eq(endpointDeliveries.status, 'delivering'),
+              lt(endpointDeliveries.leaseExpiresAt, now),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(endpointDeliveries.nextAttemptAt))
+      .limit(limit);
+
+    return rows.map(toDelivery);
   }
 
   /**
