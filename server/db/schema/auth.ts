@@ -52,7 +52,10 @@ export const accounts = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    issuer: text('issuer').notNull(),
+    // Better Auth 1.7.0–1.7.2 wrote this field; 1.7.3+ deliberately does not.
+    // Keep legacy values for reversibility, but new account rows must allow it
+    // to be absent. Provider identity is providerId + accountId again.
+    issuer: text('issuer'),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
     accessToken: text('access_token'),
@@ -66,7 +69,7 @@ export const accounts = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('accounts_issuer_account_id_key').on(table.issuer, table.accountId),
+    index('accounts_provider_account_idx').on(table.providerId, table.accountId),
     index('accounts_user_id_idx').on(table.userId),
   ],
 );

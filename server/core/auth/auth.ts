@@ -32,6 +32,19 @@ export const auth = betterAuth({
   baseURL: env.APP_URL,
   secret: env.BETTER_AUTH_SECRET,
 
+  // Better Auth enables this automatically only in production. Keep local and
+  // preview deployments honest too, and tighten every credential-creation
+  // path beyond the general API ceiling.
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 100,
+    customRules: {
+      '/sign-in/*': { window: 60, max: 5 },
+      '/sign-up/*': { window: 60, max: 3 },
+    },
+  },
+
   database: drizzleAdapter(db, {
     provider: 'pg',
     schema: {

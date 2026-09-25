@@ -4,6 +4,7 @@ import { DevSignInForm } from '@/components/layout/dev-sign-in-form';
 import { SignInButton } from '@/components/layout/sign-in-button';
 import { getOperatorSession } from '@/server/core/auth';
 import { isDevEmailLoginEnabled, isGithubLoginEnabled } from '@/server/core/config';
+import { safeInternalRedirect } from '@/server/core/http/redirect';
 
 export const metadata = { title: 'Sign in · MailPiston' };
 
@@ -27,8 +28,9 @@ export default async function SignInPage({
   const { next, error } = await searchParams;
   const githubEnabled = isGithubLoginEnabled();
   const devEmailEnabled = isDevEmailLoginEnabled();
+  const destination = safeInternalRedirect(next);
 
-  if (session) redirect(next ?? '/overview');
+  if (session) redirect(destination);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
@@ -46,7 +48,7 @@ export default async function SignInPage({
 
         {githubEnabled ? (
           <div className="mt-6">
-            <SignInButton next={next ?? '/overview'} />
+            <SignInButton next={destination} />
           </div>
         ) : null}
 
@@ -62,7 +64,7 @@ export default async function SignInPage({
               </div>
             ) : null}
 
-            <DevSignInForm next={next ?? '/overview'} />
+            <DevSignInForm next={destination} />
           </>
         ) : null}
       </div>

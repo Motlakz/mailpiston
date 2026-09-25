@@ -78,6 +78,13 @@
       "when": 1790283606997,
       "tag": "0010_unique_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790349159587,
+      "tag": "0011_tough_alex_power",
+      "breakpoints": true
     }
   ]
 }
