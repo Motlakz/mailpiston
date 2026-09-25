@@ -1,4 +1,8 @@
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import {
+  cursorPageLinks,
+  TablePagination,
+} from '@/components/layout/pagination';
 import { LogFilters } from '@/components/mail/log-filters';
 import { EventTimeline } from '@/components/mail/event-timeline';
 import { MAIL_EVENT_TYPES, type MailEventType } from '@/server/core/types';
@@ -30,6 +34,7 @@ export default async function LogsPage({
   const addressId = single(params.addressId);
   const endpointId = single(params.endpointId);
   const since = single(params.since);
+  const cursor = single(params.cursor);
 
   const [addresses, endpoints] = await Promise.all([
     repositories.addresses.list(),
@@ -50,9 +55,15 @@ export default async function LogsPage({
     endpointId: endpointId ?? undefined,
     since: since ? sinceDate(since) : undefined,
     limit: PAGE_SIZE,
+    cursor,
   });
 
   const filtered = Boolean(type || addressId || endpointId || since);
+  const pagination = cursorPageLinks({
+    pathname: '/logs',
+    params,
+    nextCursor: page.nextCursor,
+  });
 
   return (
     <>
@@ -93,12 +104,13 @@ export default async function LogsPage({
           <>
             <EventTimeline events={page.items} showMessageLink />
 
-            {page.nextCursor ? (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Showing the most recent {PAGE_SIZE}. Narrow the filters to see
-                further back.
-              </p>
-            ) : null}
+            <TablePagination
+              page={pagination.page}
+              itemCount={page.items.length}
+              noun="event"
+              previousHref={pagination.previousHref}
+              nextHref={pagination.nextHref}
+            />
           </>
         )}
       </div>

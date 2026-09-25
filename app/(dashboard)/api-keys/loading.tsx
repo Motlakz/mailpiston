@@ -1,5 +1,5 @@
 import { PageSkeleton } from '@/components/layout/page-skeleton';
 
 export default function Loading() {
-  return <PageSkeleton toolbar={false} />;
+  return <PageSkeleton variant="table" action={false} />;
 }

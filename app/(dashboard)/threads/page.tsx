@@ -2,6 +2,10 @@ import Link from 'next/link';
 
 import { NavTabs } from '@/components/layout/nav-tabs';
 import { EmptyState, PageHeader } from '@/components/layout/page-shell';
+import {
+  cursorPageLinks,
+  TablePagination,
+} from '@/components/layout/pagination';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { formatWhen } from '@/lib/format';
@@ -31,11 +35,18 @@ export default async function ThreadsPage({
   const repositories = repositoriesFor(tenantId);
   const params = await searchParams;
   const raw = Array.isArray(params.show) ? params.show[0] : params.show;
+  const cursor = Array.isArray(params.cursor) ? params.cursor[0] : params.cursor;
   const showAll = raw === 'all';
 
-  const { items } = await repositories.threads.list({
-    limit: 100,
+  const { items, nextCursor } = await repositories.threads.list({
+    limit: 50,
+    cursor: cursor || undefined,
     minMessages: showAll ? 1 : 2,
+  });
+  const pagination = cursorPageLinks({
+    pathname: '/threads',
+    params,
+    nextCursor,
   });
 
   return (
@@ -70,6 +81,7 @@ export default async function ThreadsPage({
           }
         />
       ) : (
+        <>
         <Card className="gap-0 overflow-hidden py-0">
           {items.map((thread) => (
             <Link
@@ -106,6 +118,14 @@ export default async function ThreadsPage({
             </Link>
           ))}
         </Card>
+        <TablePagination
+          page={pagination.page}
+          itemCount={items.length}
+          noun="conversation"
+          previousHref={pagination.previousHref}
+          nextHref={pagination.nextHref}
+        />
+        </>
       )}
     </>
   );
