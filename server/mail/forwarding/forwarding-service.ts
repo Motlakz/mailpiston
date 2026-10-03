@@ -234,7 +234,7 @@ function notificationBody(email: Email, managedAddress: string): string {
     'MailPiston delivery',
     `Original sender: ${email.from}`,
     `Received by MailPiston at: ${managedAddress}`,
-    'Reply to this message and MailPiston sends it to the customer as the managed address.',
+    `Reply to this message and MailPiston sends it to ${email.from} as ${managedAddress}.`,
   ]
     .join('\n');
 
@@ -256,7 +256,7 @@ function notificationHtml(email: Email, managedAddress: string): string {
     '<strong>MailPiston delivery</strong><br>',
     `Original sender: ${sender}<br>`,
     `Received by MailPiston at: ${receivedAt}<br>`,
-    'Reply to this message and MailPiston will send your response to the customer as the managed address.',
+    `Reply to this message and MailPiston will send your response to ${sender} as ${receivedAt}.`,
     '</div>',
     email.html ?? '',
   ].join('');

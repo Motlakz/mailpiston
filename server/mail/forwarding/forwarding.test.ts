@@ -188,6 +188,7 @@ describe('personal forwarding', () => {
     );
     expect(notification.replyTo).not.toBe(notification.to[0]);
     expect(notification.text).toContain(`Received by MailPiston at: support@${DOMAIN}`);
+    expect(notification.text).toContain(`sends it to "Ada Lovelace" <${CUSTOMER}> as support@${DOMAIN}`);
     expect(notification.text).not.toContain(`\nTo: support@${DOMAIN}`);
     // Loop prevention, so an autoresponder does not answer this forever.
     expect(notification.headers?.['Auto-Submitted']).toBe('auto-generated');
@@ -206,6 +207,7 @@ describe('personal forwarding', () => {
     const notification = provider.sentMessages[0];
     expect(notification.to).toEqual([PERSONAL]);
     expect(notification.html).toContain('Received by MailPiston at:');
+    expect(notification.html).toContain('send your response to Customer &lt;customer@example.com&gt;');
     expect(notification.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(notification.html).toContain('<p>It broke.</p>');
   });
