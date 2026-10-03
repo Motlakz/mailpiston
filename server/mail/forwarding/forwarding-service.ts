@@ -69,10 +69,19 @@ export class ForwardingService {
     const targets = await this.targetsFor(input.address.id);
     if (targets.length === 0) return { delivered: 0, failed: 0 };
 
-    const relayDomain = await this.domains.findRelayDomain();
+    // The reply address must stay on the same domain as the managed address.
+    // A workspace-wide relay made support@one.example appear to reply through
+    // reply+token@another.example when both domains belonged to one operator.
+    const relayDomain = await this.domains.findByName(input.address.domainName);
     const outcomes = await mapWithConcurrency(targets, 5, async (target) => {
       try {
-        await this.notify(target, input, relayDomain?.name ?? null);
+        await this.notify(
+          target,
+          input,
+          relayDomain?.relayEnabled && relayDomain.status === 'verified'
+            ? relayDomain.name
+            : null,
+        );
         return true;
       } catch (error) {
         await this.events.create({
@@ -127,7 +136,7 @@ export class ForwardingService {
 
     if (!relayDomain) {
       throw new ConflictError(
-        'Personal forwarding is disabled until a verified reply-relay domain is selected on the Domains page.',
+        `Personal forwarding for ${address.email} is disabled until ${address.domainName} is verified and enabled for replies on the Domains page.`,
       );
     }
     if (!email.threadId) {

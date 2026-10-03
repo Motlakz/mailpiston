@@ -35,6 +35,7 @@ import type { Domain, DomainDnsRecord } from '@/server/core/types';
 import { listDomainsWithWebhookKeys } from '@/server/mail/domains/webhook-keys';
 import { repositoriesFor } from '@/server/repositories';
 import { requireOperatorPage } from '@/server/core/auth';
+import { env } from '@/server/core/config';
 
 export const metadata = { title: 'Domains · MailPiston' };
 
@@ -46,11 +47,12 @@ export const metadata = { title: 'Domains · MailPiston' };
  * what an encryption-key rotation leaves behind if the re-encryption pass is
  * skipped, and it is otherwise completely silent.
  */
-type WebhookKeyState = 'fallback' | 'stored' | 'unreadable';
+type WebhookKeyState = 'missing' | 'fallback' | 'stored' | 'unreadable';
 const PAGE_SIZE = 10;
 
 const KEY_LABEL: Record<WebhookKeyState, string> = {
-  fallback: 'using env fallback',
+  missing: 'missing',
+  fallback: 'legacy env fallback',
   stored: 'stored',
   unreadable: 'unreadable',
 };
@@ -141,7 +143,7 @@ export default async function DomainsPage({
             <DomainCard
               key={domain.id}
               domain={domain}
-              webhookKey={keyState.get(domain.id) ?? 'fallback'}
+              webhookKey={keyState.get(domain.id) ?? (env.FORWARD_EMAIL_WEBHOOK_KEY ? 'fallback' : 'missing')}
             />
           ))}
           <TablePagination
@@ -205,9 +207,9 @@ function DomainCard({
           <p className="text-xs font-medium">Personal-inbox reply route</p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
             {domain.relayEnabled
-              ? `New reply tokens use reply+token@${domain.name}. Existing tokens keep working if you switch domains.`
+              ? `Forwarded mail from this domain uses reply+token@${domain.name}. Existing tokens remain valid if you pause new forwarding.`
               : domain.status === 'verified'
-                ? 'Use this domain for secure Reply-To addresses. MailPiston will explicitly point its catch-all at this ingress.'
+                ? 'Enable secure replies for addresses on this domain. MailPiston will point its catch-all at this ingress.'
                 : 'Verify this domain before using it for personal-inbox replies.'}
           </p>
         </div>
@@ -228,17 +230,19 @@ function DomainCard({
         />
 
         <p className="w-full text-xs leading-relaxed text-muted-foreground">
-          Copy the “Webhook Signature Payload Verification Key” from Forward
-          Email → My Account → Domains → Settings. MailPiston cannot generate
-          this value: Forward Email must hold the matching key used to sign its
-          inbound POSTs.
+          This key authenticates Forward Email&apos;s delivery into MailPiston. Copy
+          the “Webhook Signature Payload Verification Key” from Forward Email →
+          My Account → Domains → Settings. Forward Email issues it; MailPiston
+          cannot generate a matching key. The env fallback is for older Forward
+          Email setups only. A mailbox destination needs no webhook secret;
+          application webhooks have their own signing secret under Endpoints.
         </p>
 
         {webhookKey === 'unreadable' ? (
           <p className="w-full text-xs leading-relaxed text-destructive">
-            Stored under a different encryption key, so it is being skipped —
-            inbound mail for this domain is failing verification. Paste the key
-            from Forward Email again to fix it.
+            Stored under a different encryption key, so it is being skipped.
+            Inbound mail may fail verification unless the legacy env key still
+            matches. Paste the key from Forward Email again to fix it.
           </p>
         ) : null}
       </CardContent>

@@ -522,8 +522,8 @@ export function RelayDomainButton({
             ? 'Stopping…'
             : 'Configuring…'
           : active
-            ? 'Stop using for replies'
-            : 'Use for replies'}
+            ? 'Pause new replies'
+            : 'Enable replies'}
       </Button>
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
     </span>

@@ -30,7 +30,7 @@ export const frequentlyAskedQuestions = [
   },
   {
     question: "Can I receive support mail and reply from my personal inbox?",
-    answer: "Yes. Bind a verified personal-inbox endpoint, then select one of your verified domains for replies on the Domains dashboard. MailPiston sends a constructed notification with an opaque Reply-To address; your reply returns through MailPiston and leaves from the managed address. Forwarding is disabled when that safe route is missing.",
+    answer: "Yes. Bind a verified personal-inbox endpoint, then enable replies on each source domain in Domains. MailPiston sends a notification from the managed address with an opaque Reply-To on that same domain. Your reply returns through MailPiston and leaves from the managed address. Forwarding pauses for a domain without that route.",
   },
   {
     question: "Does this work for every domain I manage?",

@@ -98,19 +98,9 @@ export class InMemoryDomainRepository implements DomainRepository {
     return [...this.rows.values()];
   }
 
-  async findRelayDomain(): Promise<Domain | null> {
-    return [...this.rows.values()].find((domain) => domain.relayEnabled) ?? null;
-  }
-
   async setRelayDomain(id: string, enabled: boolean): Promise<Domain> {
     const existing = this.rows.get(id);
     if (!existing) throw new NotFoundError(`Domain ${id} not found`);
-
-    if (enabled) {
-      for (const [key, domain] of this.rows) {
-        this.rows.set(key, { ...domain, relayEnabled: false });
-      }
-    }
 
     const updated = { ...existing, relayEnabled: enabled, updatedAt: new Date() };
     this.rows.set(id, updated);

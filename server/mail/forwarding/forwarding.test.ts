@@ -21,7 +21,7 @@ import { ForwardingService } from './forwarding-service';
 import { RelayService, stripQuotedReply } from './relay-service';
 
 const DOMAIN = 'fixture-domain.test';
-const RELAY_DOMAIN = 'reply.mailpiston.test';
+const RELAY_DOMAIN = DOMAIN;
 const PERSONAL = 'operator@personal.example';
 const CUSTOMER = 'customer@example.com';
 
@@ -99,13 +99,7 @@ beforeEach(async () => {
     dnsRecords: [],
   });
 
-  const replyDomain = await domains.create({
-    name: RELAY_DOMAIN,
-    providerDomainId: RELAY_DOMAIN,
-    status: 'verified',
-    dnsRecords: [],
-  });
-  await domains.setRelayDomain(replyDomain.id, true);
+  await domains.setRelayDomain(domain.id, true);
 
   const address = await addresses.create({
     domainId: domain.id,
@@ -227,8 +221,8 @@ describe('personal forwarding', () => {
     expect(relay.relayDomain).toBe(RELAY_DOMAIN);
   });
 
-  it('fails closed when the workspace has not selected a reply domain', async () => {
-    const relayDomain = await domains.findRelayDomain();
+  it('fails closed when the source domain has not enabled replies', async () => {
+    const relayDomain = await domains.findByName(DOMAIN);
     await domains.setRelayDomain(relayDomain!.id, false);
 
     const result = await inbound.capture(delivery());
@@ -239,6 +233,39 @@ describe('personal forwarding', () => {
       event.type === 'personal_forward.failed' &&
       String(event.metadata.error).includes('Domains page'),
     )).toBe(true);
+  });
+
+  it('uses each source domain for its own reply tokens', async () => {
+    const otherDomain = await domains.create({
+      name: 'other-domain.test',
+      providerDomainId: 'other-domain.test',
+      status: 'verified',
+      dnsRecords: [],
+    });
+    await domains.setRelayDomain(otherDomain.id, true);
+    const otherAddress = await addresses.create({
+      domainId: otherDomain.id,
+      localPart: 'admin',
+      providerAliasId: 'alias_2',
+      canSend: true,
+      enabled: true,
+    });
+    const [endpoint] = await endpoints.list();
+    await endpoints.bindToAddress(otherAddress.id, endpoint.id);
+
+    await inbound.capture(delivery());
+    await inbound.capture(delivery({
+      providerMessageId: 'fe_2',
+      messageId: '<customer-2@example.com>',
+      recipient: 'admin@other-domain.test',
+      envelopeRecipients: ['admin@other-domain.test'],
+      to: ['admin@other-domain.test'],
+    }));
+
+    expect(provider.sentMessages).toHaveLength(2);
+    expect(provider.sentMessages[0].replyTo).toMatch(/@fixture-domain\.test$/);
+    expect(provider.sentMessages[1].replyTo).toMatch(/@other-domain\.test$/);
+    expect(provider.sentMessages[1].from).toContain('<admin@other-domain.test>');
   });
 
   it('never forwards to an unverified recipient', async () => {
@@ -398,17 +425,12 @@ describe('relayed replies', () => {
     expect(provider.sentMessages).toHaveLength(before);
   });
 
-  it('keeps an issued reply address valid after the selected domain changes', async () => {
+  it('keeps an issued reply address valid after its domain is disabled', async () => {
     await inbound.capture(delivery());
     const originalReply = relayReply();
 
-    const replacement = await domains.create({
-      name: 'new-relay.mailpiston.test',
-      providerDomainId: 'new-relay.mailpiston.test',
-      status: 'verified',
-      dnsRecords: [],
-    });
-    await domains.setRelayDomain(replacement.id, true);
+    const replyDomain = await domains.findByName(DOMAIN);
+    await domains.setRelayDomain(replyDomain!.id, false);
 
     const result = await inbound.capture(originalReply);
 

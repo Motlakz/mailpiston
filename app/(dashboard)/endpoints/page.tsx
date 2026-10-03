@@ -33,11 +33,13 @@ export default async function EndpointsPage({
   const { tenantId } = await requireOperatorPage();
   const params = await searchParams;
   const repositories = repositoriesFor(tenantId);
-  const [endpoints, addresses, relayDomain] = await Promise.all([
+  const [endpoints, addresses, domains] = await Promise.all([
     repositories.endpoints.list(),
     repositories.addresses.list(),
-    repositories.domains.findRelayDomain(),
+    repositories.domains.list(),
   ]);
+  const readyDomains = domains.filter((domain) => domain.relayEnabled && domain.status === 'verified');
+  const pausedDomains = domains.filter((domain) => !domain.relayEnabled || domain.status !== 'verified');
 
   const addressOptions = addresses.map((address) => ({
     id: address.id,
@@ -123,10 +125,10 @@ export default async function EndpointsPage({
           <strong>{routes}</strong>
           <small>managed address connections</small>
         </div>
-        <div data-warning={!relayDomain ? '' : undefined}>
+        <div data-warning={pausedDomains.length > 0 ? '' : undefined}>
           <span>Inbox replies</span>
-          <strong>{relayDomain ? 'Ready' : 'Paused'}</strong>
-          <small>{relayDomain?.name ?? 'select a reply domain'}</small>
+          <strong>{readyDomains.length} of {domains.length} ready</strong>
+          <small>configured per source domain</small>
         </div>
       </section>
 
@@ -165,16 +167,15 @@ export default async function EndpointsPage({
               attempts appear in Logs as <code>personal_forward.*</code> events.
             </p>
 
-            {!relayDomain ? (
+            {pausedDomains.length > 0 ? (
               <p className="endpoint-guide__warn">
-                <b>Inbox forwarding is paused.</b> Select a verified reply domain
-                on <Link href="/domains">Domains</Link> so every notification has
-                a safe route back through MailPiston.
+                <b>Some inbox forwarding is paused.</b> Verify and enable replies
+                for each source domain on <Link href="/domains">Domains</Link>.
               </p>
             ) : (
               <p className="endpoint-guide__ready">
-                <b>Reply route ready.</b> New inbox notifications use{' '}
-                <code>{relayDomain.name}</code>.
+                <b>Reply routes ready.</b> New inbox notifications use the same
+                domain as their source address.
               </p>
             )}
           </div>

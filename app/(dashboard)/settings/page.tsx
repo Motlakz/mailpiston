@@ -37,13 +37,14 @@ export default async function SettingsPage({
     ? params.auditCursor[0]
     : params.auditCursor;
   const repositories = repositoriesFor(tenantId);
-  const [audit, filters, providerConnected, sendUsage, relayDomain] = await Promise.all([
+  const [audit, filters, providerConnected, sendUsage, domains] = await Promise.all([
     repositories.audit.list({ limit: 50, cursor: cursor || undefined }),
     repositories.mailFilters.list(),
     hasTenantApiToken(tenantId),
     sendUsageFor(tenantId, repositories.emails),
-    repositories.domains.findRelayDomain(),
+    repositories.domains.list(),
   ]);
+  const readyReplyDomains = domains.filter((domain) => domain.relayEnabled && domain.status === 'verified');
   const auditPagination = cursorPageLinks({
     pathname: '/settings',
     params,
@@ -127,14 +128,10 @@ export default async function SettingsPage({
           </Setting>
 
           <Setting
-            label="Reply domain"
-            value={relayDomain?.name ?? 'not selected'}
+            label="Reply routes"
+            value={`${readyReplyDomains.length} of ${domains.length} domains ready`}
           >
-            {relayDomain ? (
-              <>Selected per workspace on <Link href="/domains" className="underline">Domains</Link>. Reply tokens expire after {env.RELAY_TOKEN_TTL_DAYS} days.</>
-            ) : (
-              <>Personal-inbox forwarding is paused. Select a verified domain on <Link href="/domains" className="underline">Domains</Link>.</>
-            )}
+            Enable replies on each source domain on <Link href="/domains" className="underline">Domains</Link>. Reply tokens expire after {env.RELAY_TOKEN_TTL_DAYS} days.
           </Setting>
 
           <Setting

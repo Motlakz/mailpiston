@@ -63,7 +63,7 @@ export class DomainService {
   }
 
   /**
-   * Makes a verified managed domain the workspace's reply-relay domain.
+   * Enables same-domain reply routing for a verified managed domain.
    *
    * Configuring the relay is an explicit routing operation, so it also makes
    * the provider catch-all point at this ingress. Merely toggling a database

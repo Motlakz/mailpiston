@@ -58,7 +58,6 @@ export interface DomainRepository {
   findById(id: string): Promise<Domain | null>;
   findByName(name: string): Promise<Domain | null>;
   list(): Promise<Domain[]>;
-  findRelayDomain(): Promise<Domain | null>;
   /** Atomically selects this domain, or clears it if `enabled` is false. */
   setRelayDomain(id: string, enabled: boolean): Promise<Domain>;
   update(id: string, data: UpdateDomainData): Promise<Domain>;

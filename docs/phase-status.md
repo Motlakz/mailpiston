@@ -4,7 +4,7 @@ Companion to [`PROJECT_ROADMAP.md`](./PROJECT_ROADMAP.md). What is built, what i
 deliberately deferred, and what still needs a live domain before it can be
 called done.
 
-Last updated: 2026-09-08.
+Last updated: 2026-09-25.
 
 ---
 
@@ -902,3 +902,56 @@ Deliberately deferred:
   bulk pass is worth writing when there are enough endpoints to make it tedious.
 - **Audit log pagination in the UI.** The Settings page shows the most recent
   50; the repository pages properly.
+
+---
+
+## Next architectural step — provider-scoped inbound authentication
+
+The webhook verification key shown during domain setup is not a DNS or domain
+ownership secret. It authenticates the provider-to-MailPiston HTTP delivery so
+an arbitrary caller cannot forge an inbound message, trigger endpoint fan-out,
+or cause a later outbound reply. The provider API token cannot serve this
+purpose: inbound requests must never carry that token.
+
+The current implementation is specifically correct for Forward Email, which
+issues a verification key per domain. It is not yet a provider-independent
+domain requirement:
+
+- `MAIL_PROVIDER` is selected deployment-wide and accepts only
+  `forward-email` or `mock`;
+- every real ingress URL points at `/api/providers/forward-email/inbound`;
+- the Domains page always presents a **Forward Email verification key** field;
+- stored ingress keys are attached to domains and the Forward Email verifier
+  tries every candidate key before parsing the request body.
+
+That model must not be copied unchanged when adding Inbound, Resend, or another
+provider. Each adapter must declare how it authenticates ingress and where the
+credential belongs. A provider may scope a signing secret to a webhook
+endpoint or account rather than to each domain. The setup UI should request the
+credential once at that provider's actual scope and should not show a generic
+"domain webhook secret" field. A provider without a trustworthy inbound
+authentication mechanism must remain unavailable in production.
+
+Required work before advertising bring-your-own-provider support:
+
+- [ ] Move provider selection from the deployment-wide environment into
+      workspace configuration, with an explicit provider identity on managed
+      domains where mixed providers are allowed.
+- [ ] Store encrypted provider credentials at their real scope: workspace,
+      webhook endpoint, or domain. Do not force every provider into
+      `domain_webhook_keys`.
+- [ ] Give each provider its own ingress route, signature verifier, payload
+      normalizer, DNS requirements, and delivery-event handling.
+- [ ] Make domain onboarding provider-aware so DNS records, catch-all behavior,
+      and credential prompts come from the selected adapter.
+- [ ] Rename the existing field and API as Forward Email-specific, and render
+      them only for Forward Email domains.
+- [ ] Keep MailPiston's public endpoint webhooks separate from provider ingress
+      credentials; those secrets authenticate the opposite direction.
+- [ ] Add cross-tenant and mixed-provider tests proving that one provider's
+      secret cannot authenticate another provider's delivery.
+
+Until this work is complete, MailPiston supports Forward Email (plus the local
+mock) as its mail transport. Supplying an Inbound or Resend API key is not
+enough to make the existing domain and ingress flow compatible with either
+provider.

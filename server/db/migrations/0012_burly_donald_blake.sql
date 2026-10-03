@@ -1,0 +1,1 @@
+DROP INDEX "domains_one_relay_per_tenant_key";

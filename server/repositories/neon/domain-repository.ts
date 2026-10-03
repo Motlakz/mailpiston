@@ -85,44 +85,14 @@ export class NeonDomainRepository implements DomainRepository {
     return rows.map(toDomain);
   }
 
-  async findRelayDomain(): Promise<Domain | null> {
-    const [row] = await db
-      .select()
-      .from(domains)
-      .where(
-        and(
-          eq(domains.tenantId, this.tenantId),
-          eq(domains.relayEnabled, true),
-        ),
-      )
-      .limit(1);
-    return row ? toDomain(row) : null;
-  }
-
   async setRelayDomain(id: string, enabled: boolean): Promise<Domain> {
-    return db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select({ id: domains.id })
-        .from(domains)
-        .where(and(eq(domains.tenantId, this.tenantId), eq(domains.id, id)))
-        .limit(1);
-      if (!existing) throw new NotFoundError(`Domain ${id} not found`);
-
-      if (enabled) {
-        await tx
-          .update(domains)
-          .set({ relayEnabled: false, updatedAt: new Date() })
-          .where(eq(domains.tenantId, this.tenantId));
-      }
-
-      const [row] = await tx
-        .update(domains)
-        .set({ relayEnabled: enabled, updatedAt: new Date() })
-        .where(and(eq(domains.tenantId, this.tenantId), eq(domains.id, id)))
-        .returning();
-
-      return toDomain(row);
-    });
+    const [row] = await db
+      .update(domains)
+      .set({ relayEnabled: enabled, updatedAt: new Date() })
+      .where(and(eq(domains.tenantId, this.tenantId), eq(domains.id, id)))
+      .returning();
+    if (!row) throw new NotFoundError(`Domain ${id} not found`);
+    return toDomain(row);
   }
 
   async update(id: string, data: UpdateDomainData): Promise<Domain> {

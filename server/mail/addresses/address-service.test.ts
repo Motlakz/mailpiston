@@ -136,14 +136,14 @@ describe('DomainService', () => {
     ]);
   });
 
-  it('keeps only one reply domain selected per workspace', async () => {
+  it('allows each verified domain to receive replies for its own addresses', async () => {
     const first = await verifiedDomain('first-relay.test');
     const second = await verifiedDomain('second-relay.test');
 
     await domains.configureRelay(first.id);
     await domains.configureRelay(second.id);
 
-    expect((await domainRepo.findById(first.id))?.relayEnabled).toBe(false);
+    expect((await domainRepo.findById(first.id))?.relayEnabled).toBe(true);
     expect((await domainRepo.findById(second.id))?.relayEnabled).toBe(true);
   });
 

@@ -81,6 +81,22 @@ export default function DocsPage() {
               </li>
             ))}
           </ol>
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            There are two different HTTP directions: the mail provider calls
+            MailPiston&apos;s inbound URL to deliver a message, then MailPiston
+            calls an application webhook only if that address is bound to one.
+            A mailbox endpoint receives an email instead and needs no
+            application webhook. Forward Email supplies the inbound signing
+            key; MailPiston supplies a separate secret for each application
+            webhook endpoint.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Each workspace connects its own account with the configured mail
+            provider ({env.MAIL_PROVIDER}). MailPiston does not offer a shared
+            provider account. A user can create a provider account and domain
+            during setup; they do not need an existing personal mailbox unless
+            they choose a mailbox endpoint.
+          </p>
         </Section>
 
         <Section
@@ -99,7 +115,7 @@ export default function DocsPage() {
             <DefinitionCard
               title="Email"
               badge="verified"
-              body="A personal inbox. Select a verified reply domain on the Domains page and MailPiston sends a notification whose Reply-To returns through the managed address."
+              body="A personal inbox. Enable replies for its source domain on the Domains page. MailPiston sends a notification whose Reply-To uses that same domain and returns through the managed address."
               detail="The destination must prove control first. Forwarding stays paused without a reply relay, and managed-domain destinations are refused to prevent loops."
             />
           </div>
@@ -113,8 +129,8 @@ export default function DocsPage() {
             spam filter you actually feel.
           </p>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            Personal-inbox forwarding runs only when a verified domain is
-            selected for replies on the Domains page. A destination on one of this workspace&apos;s managed
+            Personal-inbox forwarding runs only when its source domain is
+            verified and enabled for replies on the Domains page. A destination on one of this workspace&apos;s managed
             domains is refused because it would feed MailPiston&apos;s own output
             back into ingress.
           </p>

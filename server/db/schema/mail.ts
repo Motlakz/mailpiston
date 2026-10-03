@@ -58,7 +58,7 @@ export const domains = pgTable(
      * prerequisite for a managed mailbox. Null means no catch-all exists.
      */
     catchAllAliasId: text('catch_all_alias_id'),
-    /** The one managed domain this workspace uses for opaque reply addresses. */
+    /** Whether this domain receives its own opaque reply addresses. */
     relayEnabled: boolean('relay_enabled').notNull().default(false),
     /** DNS records the provider requires, cached for the dashboard table. */
     dnsRecords: jsonb('dns_records').notNull().default(sql`'[]'::jsonb`),
@@ -80,9 +80,6 @@ export const domains = pgTable(
       sql`lower(${table.name})`,
     ),
     index('domains_tenant_id_idx').on(table.tenantId),
-    uniqueIndex('domains_one_relay_per_tenant_key')
-      .on(table.tenantId)
-      .where(sql`${table.relayEnabled} = true`),
   ],
 );
 
