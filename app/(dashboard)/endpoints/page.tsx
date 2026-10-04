@@ -74,6 +74,7 @@ export default async function EndpointsPage({
           id: recipient.id,
           email: recipient.email,
           verified: Boolean(recipient.verifiedAt),
+          enabled: recipient.enabled,
         }),
       ),
       bound: (
@@ -89,8 +90,9 @@ export default async function EndpointsPage({
     })),
   );
 
+  const managedDomainNames = new Set(domains.map((domain) => domain.name.toLowerCase()));
   const live = detail.filter(({ endpoint, recipients, bound }) =>
-    isEndpointLive({ endpoint, recipients, bound }),
+    isEndpointLive({ endpoint, recipients, bound, managedDomainNames }),
   ).length;
   const routes = detail.reduce((count, item) => count + item.bound.length, 0);
   const totalPages = Math.max(1, Math.ceil(detail.length / PAGE_SIZE));
@@ -208,19 +210,19 @@ export default async function EndpointsPage({
                     </span>
                     <div>
                       <h2>{endpoint.name}</h2>
-                      <p>{readinessOf({ endpoint, recipients, bound })}</p>
+                      <p>{readinessOf({ endpoint, recipients, bound, managedDomainNames })}</p>
                     </div>
                   </div>
 
                   <div className="endpoint-card__tags">
                     <StatusDot
                       status={
-                        isEndpointLive({ endpoint, recipients, bound })
+                        isEndpointLive({ endpoint, recipients, bound, managedDomainNames })
                           ? 'verified'
                           : 'pending'
                       }
                       label={
-                        isEndpointLive({ endpoint, recipients, bound })
+                        isEndpointLive({ endpoint, recipients, bound, managedDomainNames })
                           ? 'Live'
                           : 'Needs setup'
                       }
@@ -298,39 +300,52 @@ function isEndpointLive({
   endpoint,
   recipients,
   bound,
+  managedDomainNames,
 }: {
   endpoint: { type: string; enabled: boolean };
-  recipients: Array<{ verified: boolean }>;
+  recipients: Array<{ email: string; verified: boolean; enabled: boolean }>;
   bound: string[];
+  managedDomainNames: Set<string>;
 }): boolean {
   if (!endpoint.enabled || bound.length === 0) return false;
   if (endpoint.type === 'webhook') return true;
-  return recipients.some((recipient) => recipient.verified);
+  return recipients.some((recipient) => isForwardableRecipient(recipient, managedDomainNames));
 }
 
-/**
- * One sentence saying whether this endpoint is actually going to receive
- * anything.
- *
- * The page previously showed configuration without ever stating the outcome,
- * so an endpoint that was fully set up and one that was connected to nothing
- * looked identical. The unbound case is the common dead end.
- */
+function isForwardableRecipient(
+  recipient: { email: string; verified: boolean; enabled: boolean },
+  managedDomainNames: Set<string>,
+): boolean {
+  const domain = recipient.email.split('@').at(-1)?.trim().toLowerCase();
+  return recipient.verified && recipient.enabled && domain !== undefined && domain.length > 0 &&
+    !managedDomainNames.has(domain);
+}
+
+/** Describes the delivery state, including legacy recipients that would loop. */
 function readinessOf({
   endpoint,
   recipients,
   bound,
+  managedDomainNames,
 }: {
   endpoint: { type: string; enabled: boolean };
-  recipients: Array<{ verified: boolean }>;
+  recipients: Array<{ email: string; verified: boolean; enabled: boolean }>;
   bound: string[];
+  managedDomainNames: Set<string>;
 }): string {
   if (!endpoint.enabled) return 'Disabled — nothing is delivered here.';
 
   if (endpoint.type !== 'webhook') {
-    const verified = recipients.filter((recipient) => recipient.verified).length;
     if (recipients.length === 0) return 'Add a mailbox to forward to.';
-    if (verified === 0) return 'Waiting on mailbox verification.';
+    if (recipients.some((recipient) =>
+      recipient.verified && recipient.enabled &&
+      managedDomainNames.has(recipient.email.split('@').at(-1)?.trim().toLowerCase() ?? ''),
+    )) {
+      return 'A destination uses a MailPiston-managed domain and is blocked to prevent a loop. Replace it with an external inbox.';
+    }
+    if (!recipients.some((recipient) => isForwardableRecipient(recipient, managedDomainNames))) {
+      return 'Waiting on an enabled, verified external mailbox.';
+    }
   }
 
   if (bound.length === 0) {

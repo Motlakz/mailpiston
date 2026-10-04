@@ -87,7 +87,7 @@ export async function apiRequest<T>(
   });
 
   const text = await response.text();
-  const parsed: unknown = text ? JSON.parse(text) : null;
+  const parsed: unknown = parseJsonResponse(text, response);
 
   if (!response.ok) {
     const body = parsed as ApiErrorBody | null;
@@ -100,6 +100,11 @@ export async function apiRequest<T>(
     );
   }
 
+  // DELETE and revoke routes intentionally return 204 with no JSON body.
+  if (response.status === 204 || response.status === 205) return undefined as T;
+  if (!parsed || typeof parsed !== 'object' || !('data' in parsed)) {
+    throw new ApiRequestError('The server returned an invalid response', 'INVALID_RESPONSE', response.status);
+  }
   return (parsed as { data: T }).data;
 }
 
@@ -116,7 +121,7 @@ export async function apiEnvelope<T>(
     },
   });
   const text = await response.text();
-  const parsed: unknown = text ? JSON.parse(text) : null;
+  const parsed: unknown = parseJsonResponse(text, response);
 
   if (!response.ok) {
     const body = parsed as ApiErrorBody | null;
@@ -129,4 +134,17 @@ export async function apiEnvelope<T>(
   }
 
   return parsed as T;
+}
+
+function parseJsonResponse(text: string, response: Response): unknown {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new ApiRequestError(
+      response.ok ? 'The server returned an invalid response' : 'Request failed with ' + response.status,
+      'INVALID_RESPONSE',
+      response.status,
+    );
+  }
 }
