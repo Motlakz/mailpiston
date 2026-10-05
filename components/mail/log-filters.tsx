@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
   SelectContent,
@@ -72,6 +73,7 @@ export function LogFilters({
         placeholder="All event types"
         value={draft.type}
         options={eventTypes}
+        searchable
         onChange={(type) => apply({ ...draft, type })}
       />
       <FilterSelect
@@ -79,6 +81,7 @@ export function LogFilters({
         placeholder="All addresses"
         value={draft.addressId}
         options={addresses}
+        searchable
         onChange={(addressId) => apply({ ...draft, addressId })}
       />
       <FilterSelect
@@ -86,6 +89,7 @@ export function LogFilters({
         placeholder="All endpoints"
         value={draft.endpointId}
         options={endpoints}
+        searchable
         onChange={(endpointId) => apply({ ...draft, endpointId })}
       />
       <FilterSelect
@@ -120,15 +124,30 @@ function FilterSelect({
   placeholder,
   value,
   options,
+  searchable = false,
   onChange,
 }: {
   label: string;
   placeholder: string;
   value: string | undefined;
   options: FilterOption[];
+  searchable?: boolean;
   onChange: (value: string | undefined) => void;
 }) {
   if (options.length === 0) return null;
+
+  if (searchable) {
+    return (
+      <SearchableSelect
+        label={label}
+        placeholder={placeholder}
+        options={[{ value: ANY, label: placeholder }, ...options]}
+        value={value ?? ANY}
+        onValueChange={(chosen) => onChange(chosen === ANY ? undefined : chosen)}
+        className="min-w-40 max-w-56"
+      />
+    );
+  }
 
   return (
     <Select

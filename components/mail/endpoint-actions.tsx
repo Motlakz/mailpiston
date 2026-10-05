@@ -7,6 +7,7 @@ import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
   SelectContent,
@@ -458,25 +459,16 @@ function VerifyRecipient({
         </form>
       ) : (
         <>
-          <Select
-            items={addresses.map((address) => ({
+          <SearchableSelect
+            options={addresses.map((address) => ({
               value: address.id,
               label: `from ${address.email}`,
             }))}
             value={addressId}
             onValueChange={(value) => setAddressId(String(value))}
-          >
-            <SelectTrigger aria-label="Send the challenge from" className="w-auto min-w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {addresses.map((address) => (
-                <SelectItem key={address.id} value={address.id}>
-                  from {address.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            label="Send the challenge from"
+            className="w-auto min-w-48"
+          />
           <Button type="button" variant="outline" size="sm" onClick={sendChallenge}>
             Send code
           </Button>
@@ -805,25 +797,16 @@ export function EndpointBindings({
 
       {unbound.length > 0 ? (
         <div className="endpoint-source-add">
-          <Select
-            items={unbound.map((address) => ({
+          <SearchableSelect
+            options={unbound.map((address) => ({
               value: address.id,
               label: address.email,
             }))}
             value={selectedId}
             onValueChange={(value) => setAddressId(String(value))}
-          >
-            <SelectTrigger aria-label="Address to bind" className="min-w-0 flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {unbound.map((address) => (
-                <SelectItem key={address.id} value={address.id}>
-                  {address.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            label="Address to bind"
+            className="min-w-0 flex-1"
+          />
           <Button
             type="button"
             variant="outline"
@@ -920,22 +903,13 @@ export function AddressEndpointBindings({
 
           {unbound.length > 0 ? (
             <div className="flex items-center gap-2 border-t border-border pt-3">
-              <Select
-                items={unbound.map((endpoint) => ({ value: endpoint.id, label: endpoint.name }))}
+              <SearchableSelect
+                options={unbound.map((endpoint) => ({ value: endpoint.id, label: `${endpoint.name} · ${endpoint.type}` }))}
                 value={selectedId}
                 onValueChange={(value) => setEndpointId(String(value))}
-              >
-                <SelectTrigger className="min-w-52 flex-1" aria-label="Endpoint to bind">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {unbound.map((endpoint) => (
-                    <SelectItem key={endpoint.id} value={endpoint.id}>
-                      {endpoint.name} · {endpoint.type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                label="Endpoint to bind"
+                className="min-w-52 flex-1"
+              />
               <Button disabled={pending || !selectedId} onClick={bind}>Bind</Button>
             </div>
           ) : (

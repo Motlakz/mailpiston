@@ -7,13 +7,7 @@ import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { apiRequest, messageFor } from '@/lib/api-client';
@@ -90,27 +84,17 @@ export function ComposeForm({ addresses }: { addresses: SendableAddress[] }) {
         <form onSubmit={submit} className="flex flex-col gap-3.5">
           <Field>
             <FieldLabel htmlFor="compose-from">From</FieldLabel>
-            <Select
-              // Gives Select.Value the label for the selected id; without it the
-              // trigger renders the raw address id.
-              items={addresses.map((address) => ({
+            <SearchableSelect
+              options={addresses.map((address) => ({
                 value: address.id,
                 label: address.email,
               }))}
               value={addressId}
               onValueChange={(value) => setAddressId(String(value))}
-            >
-              <SelectTrigger id="compose-from" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {addresses.map((address) => (
-                  <SelectItem key={address.id} value={address.id}>
-                    {address.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              label="From"
+              id="compose-from"
+              className="w-full"
+            />
           </Field>
 
           <Field>

@@ -9,13 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ConfirmDialog, useConfirm } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { keepWithin } from '@/lib/select-value';
 import { apiRequest, messageFor } from '@/lib/api-client';
@@ -83,26 +77,16 @@ export function AddAddressForm({
 
       <span className="text-xs text-muted-foreground">@</span>
 
-      <Select
-        // Without `items` the trigger shows the domain id rather than its name.
-        items={domains.map((domain) => ({
+      <SearchableSelect
+        options={domains.map((domain) => ({
           value: domain.id,
           label: domain.name,
         }))}
         value={domainId}
         onValueChange={(value) => setDomainId(String(value))}
-      >
-        <SelectTrigger className="w-44" aria-label="Domain">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {domains.map((domain) => (
-            <SelectItem key={domain.id} value={domain.id}>
-              {domain.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        label="Domain"
+        className="w-44"
+      />
 
       <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
         <Checkbox

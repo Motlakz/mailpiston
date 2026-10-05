@@ -80,6 +80,18 @@ describe('ForwardEmailNormalizer.normalizeInbound', () => {
     ]);
   });
 
+  it('preserves the case of reply relay tokens from both envelope fields', async () => {
+    const relay = 'reply+AbC_9xY-Z@FIXTURE-DOMAIN.TEST';
+    const result = await normalizer.normalizeInbound({
+      ...plainText,
+      recipients: [relay],
+      session: { ...plainText.session, recipient: relay },
+    });
+
+    expect(result.recipient).toBe('reply+AbC_9xY-Z@fixture-domain.test');
+    expect(result.envelopeRecipients).toEqual([result.recipient]);
+  });
+
   it('refuses a payload with no envelope recipient', async () => {
     await expect(
       normalizer.normalizeInbound({ ...plainText, recipients: [], session: {} }),

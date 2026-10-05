@@ -151,14 +151,27 @@ export class ForwardEmailNormalizer {
  * first entry is what the caller routes on.
  */
 function collectEnvelopeRecipients(body: ForwardEmailInboundPayload): string[] {
-  const primary = body.session?.recipient?.toLowerCase();
+  const primary = normalizeEnvelopeRecipient(body.session?.recipient);
   const all = (body.recipients ?? [])
     .filter((value): value is string => typeof value === 'string')
-    .map((value) => value.toLowerCase());
+    .map(normalizeEnvelopeRecipient);
 
   const ordered = primary ? [primary, ...all.filter((r) => r !== primary)] : all;
 
   return Array.from(new Set(ordered.filter(Boolean)));
+}
+
+function normalizeEnvelopeRecipient(value: string | undefined): string {
+  if (!value) return '';
+  const address = value.trim();
+  const at = address.lastIndexOf('@');
+  if (at <= 0) return address.toLowerCase();
+
+  const localPart = address.slice(0, at);
+  const domain = address.slice(at + 1).toLowerCase();
+  // Relay tokens are base64url and therefore case-sensitive. Lowercasing the
+  // local part changes the token and turns a valid phone reply into unknown_token.
+  return `${/^reply\+.+/i.test(localPart) ? localPart : localPart.toLowerCase()}@${domain}`;
 }
 
 function flattenAddresses(field: ParsedAddress | string | undefined): string[] {
