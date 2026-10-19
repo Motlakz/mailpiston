@@ -13,7 +13,7 @@
     "check:boundaries": "bash scripts/check-boundaries.sh",
     "check": "bun run lint && bun run typecheck && bun run test && bun run check:boundaries",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node scripts/migrate.mjs",
     "db:studio": "drizzle-kit studio",
     "post:inbound": "node scripts/post-inbound.mjs",
     "send-limit": "node scripts/send-limit.mjs",
