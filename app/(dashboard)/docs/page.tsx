@@ -64,7 +64,7 @@ export default function DocsPage() {
           id="pipeline"
           icon="inbox"
           title="What happens to an inbound message"
-          summary="Eight steps, with explicit stops for invalid, unroutable, looped, and quarantined mail."
+          summary="Nine steps, with explicit stops for invalid, unroutable, looped, blocked, and quarantined mail."
         >
           <ol className="flex flex-col gap-2.5">
             {PIPELINE.map((step, index) => (
@@ -219,14 +219,27 @@ export default function DocsPage() {
             A message that is a reply to something you already hold is heavily
             discounted — but not exempt, because a compromised account replying
             in-thread is how a convincing attack arrives. Every verdict stores
-            the rules that produced it, visible on the message. Your{' '}
+            the rules that produced it, visible on the message. Mail from
+            trusted platforms such as Google, Apple and GitHub is discounted
+            when its envelope or authentication agrees with the sender, so
+            account alerts do not land in Review. Your{' '}
             <Link
-              href="/settings"
+              href="/settings#mail-filtering"
               className="text-foreground underline underline-offset-2"
             >
-              allow and deny lists
+              trusted and blocked senders
             </Link>{' '}
-            override all of it.
+            override all of it, across every domain.
+          </p>
+
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            Flagged mail waits in Review. A sender left there — or in Spam —
+            for three days is blocked the next time they write, and when two or
+            more addresses on one company domain do it, the whole domain is.
+            Shared providers like Gmail are only ever blocked one address at a
+            time, and nobody you have written to or released mail from is
+            blocked automatically. There is no timer: the check runs inside the
+            delivery that would otherwise have been stored.
           </p>
         </Section>
 
@@ -326,6 +339,10 @@ const PIPELINE = [
   {
     title: 'An unknown local part stops here',
     body: 'Recorded as email.rejected and dropped, never bounced. Bouncing would tell a spam run which addresses exist, and would send mail on your behalf to an address that has proven nothing.',
+  },
+  {
+    title: 'A blocked sender stops here too',
+    body: 'A sender on your blocked list — or one whose flagged mail sat unreviewed for three days, checked as they write again — is recorded as email.rejected with reason sender_blocked. Nothing is stored and nothing is fanned out.',
   },
   {
     title: 'Optional bytes are stored before their rows',

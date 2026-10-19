@@ -49,6 +49,9 @@ export const spamVerdict = pgEnum('spam_verdict', [
 /** Whether an operator list entry vouches for a sender or blocks one. */
 export const mailFilterKind = pgEnum('mail_filter_kind', ['allow', 'deny']);
 
+/** Whether an operator made a list entry or the persistent-sender sweep did. */
+export const mailFilterSource = pgEnum('mail_filter_source', ['operator', 'auto']);
+
 /**
  * Execution plan §4.7, plus `email.rejected` — required by the catch-all
  * decision (roadmap §1.2): mail for an unknown local part is recorded and

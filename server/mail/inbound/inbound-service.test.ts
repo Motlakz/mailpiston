@@ -455,7 +455,7 @@ describe('InboundService quarantine', () => {
     expect([...emails.rows.values()][0].spamVerdict).toBe('clean');
   });
 
-  it('honours a deny-list entry over the rules', async () => {
+  it('refuses a blocked sender before storing anything', async () => {
     const filtered = new InboundService(
       emails,
       addresses,
@@ -468,10 +468,49 @@ describe('InboundService quarantine', () => {
 
     const result = await filtered.capture(delivery());
 
-    expect(result.status).toBe('quarantined');
-    expect([...emails.rows.values()][0].spamSignals[0].rule).toBe(
-      'sender_denied',
+    expect(result).toMatchObject({ status: 'rejected', reason: 'sender_blocked' });
+    expect(emails.rows.size).toBe(0);
+    expect(events.rows.at(-1)?.metadata).toMatchObject({
+      reason: 'sender_blocked',
+      pattern: 'example.com',
+    });
+  });
+
+  it('refuses a blocked envelope sender behind a rotated From address', async () => {
+    const filtered = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: false },
+      { filters: listsOf({ deny: ['bulk@sender.test'] }) },
     );
+
+    const result = await filtered.capture(
+      delivery({ from: 'New Name <fresh@other.test>', envelopeSender: 'bulk@sender.test' }),
+    );
+
+    expect(result.status).toBe('rejected');
+  });
+
+  it('lets an allowed address through a blocked domain', async () => {
+    const filtered = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: false },
+      {
+        filters: listsOf({
+          deny: ['example.com'],
+          allow: ['customer@example.com'],
+        }),
+      },
+    );
+
+    expect((await filtered.capture(delivery())).status).toBe('captured');
   });
 
   it('honours an allow-list entry over the rules', async () => {
@@ -504,6 +543,7 @@ describe('InboundService quarantine', () => {
           list: () => Promise.reject(new Error('database is down')),
           add: () => Promise.reject(new Error('database is down')),
           remove: () => Promise.reject(new Error('database is down')),
+          removePattern: () => Promise.reject(new Error('database is down')),
         },
       },
     );
@@ -535,5 +575,54 @@ function listsOf(seed: { allow?: string[]; deny?: string[] }): MailFilterReposit
       throw new Error('not needed in this test');
     },
     remove: async () => {},
+    removePattern: async () => {},
   };
 }
+
+describe('InboundService persistent senders', () => {
+  it('refuses a sender whose flagged mail went unreviewed past the window', async () => {
+    let asked: string | null = null;
+    const guarded = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: false },
+      {
+        filters: listsOf({}),
+        senders: {
+          blockIfPersistent: async (from) => {
+            asked = from;
+            return 'customer@example.com';
+          },
+        },
+      },
+    );
+
+    const result = await guarded.capture(delivery());
+
+    expect(asked).toBe('customer@example.com');
+    expect(result).toMatchObject({ status: 'rejected', reason: 'sender_blocked' });
+    expect(emails.rows.size).toBe(0);
+    expect(events.rows.at(-1)?.metadata).toMatchObject({ automatic: true });
+  });
+
+  it('captures the message if the persistence check itself fails', async () => {
+    const guarded = new InboundService(
+      emails,
+      addresses,
+      events,
+      new DefaultThreadResolver(threads),
+      storage,
+      { storeRawMime: false },
+      {
+        senders: {
+          blockIfPersistent: () => Promise.reject(new Error('database is down')),
+        },
+      },
+    );
+
+    expect((await guarded.capture(delivery())).status).toBe('captured');
+  });
+});

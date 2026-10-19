@@ -20,6 +20,7 @@ import {
   endpointType,
   mailEventType,
   mailFilterKind,
+  mailFilterSource,
   spamVerdict,
 } from './enums';
 
@@ -368,6 +369,7 @@ export const mailFilterEntries = pgTable(
     pattern: text('pattern').notNull(),
     /** Why, for the operator reading this list in six months. */
     note: text('note'),
+    source: mailFilterSource('source').notNull().default('operator'),
     createdAt: createdAt(),
   },
   (table) => [

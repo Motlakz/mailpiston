@@ -13,7 +13,8 @@ import {
 } from './reading-pane';
 import { EmptyBinButton } from '@/components/mail/message-actions';
 import { QuotaBar } from '@/components/mail/quota-bar';
-import type { EmailStatus } from '@/server/core/types';
+import { AUTO_BLOCK_AFTER_DAYS, type EmailStatus } from '@/server/core/types';
+import { withAutoBlock } from '@/server/mail/filtering/sender-policy-service';
 import { getOutboundQuota } from '@/server/mail/emails/quota';
 import type { EmailFilter } from '@/server/repositories';
 import { repositoriesFor } from '@/server/repositories';
@@ -31,6 +32,13 @@ const PAGE_SIZE = 50;
  * which half of it they were looking for. Direction is a filter here, not a
  * destination.
  *
+ * The default is Inbox — received mail the filter had no doubts about — and
+ * everything it flagged waits in Review instead. Half of what arrives is bulk
+ * mail nobody asked for; mixing it into the default view made the inbox a
+ * triage queue whether or not the operator wanted one. Review is that queue,
+ * kept on purpose: each sender gets a Trust or a Block, and a sender left
+ * there past `AUTO_BLOCK_AFTER_DAYS` is refused the next time they write.
+ *
  * Spam and Bin are filters too, for the same reason — they are not different
  * kinds of thing, they are the same messages in a different state, and a
  * message moves between them. What separates them from the rest is that they
@@ -43,9 +51,16 @@ const PAGE_SIZE = 50;
  * are different questions.
  */
 const FILTERS = {
-  all: { label: 'All', query: {} },
-  received: { label: 'Received', query: { direction: 'inbound' as const } },
+  inbox: {
+    label: 'Inbox',
+    query: { direction: 'inbound' as const, spamVerdicts: ['clean' as const] },
+  },
+  review: {
+    label: 'Review',
+    query: { direction: 'inbound' as const, spamVerdicts: ['suspicious' as const] },
+  },
   sent: { label: 'Sent', query: { direction: 'outbound' as const } },
+  all: { label: 'All', query: {} },
   bounced: {
     label: 'Bounced',
     // Soft and hard together: which one it was is our retry decision, not the
@@ -67,6 +82,9 @@ const FILTERS = {
 
 type FilterKey = keyof typeof FILTERS;
 
+/** Old links: `?show=received` was the inbox before Review split out of it. */
+const ALIASES: Record<string, FilterKey> = { received: 'inbox' };
+
 export default async function MailPage({
   searchParams,
 }: {
@@ -76,23 +94,33 @@ export default async function MailPage({
   const repositories = repositoriesFor(tenantId);
   const params = await searchParams;
   const raw = Array.isArray(params.show) ? params.show[0] : params.show;
-  const active: FilterKey = raw && raw in FILTERS ? (raw as FilterKey) : 'all';
+  const active: FilterKey =
+    raw && raw in FILTERS
+      ? (raw as FilterKey)
+      : (raw && ALIASES[raw]) || 'inbox';
   const selectedId = Array.isArray(params.id) ? params.id[0] : params.id;
 
   /** Selection is a query parameter, so it survives a filter change and a refresh. */
   const hrefFor = (id?: string) => {
     const query = new URLSearchParams();
-    if (active !== 'all') query.set('show', active);
+    if (active !== 'inbox') query.set('show', active);
     if (id) query.set('id', id);
     const suffix = query.toString();
     return suffix ? `/mail?${suffix}` : '/mail';
   };
 
-  const [page, addresses, quota] = await Promise.all([
+  const [page, addresses, quota, flagged, lists] = await Promise.all([
     repositories.emails.list({ ...FILTERS[active].query, limit: PAGE_SIZE }),
     repositories.addresses.list(),
     getOutboundQuota(),
+    repositories.emails.countFlagged(),
+    repositories.mailFilters.lists(),
   ]);
+  const items = withAutoBlock(page.items, lists.allow);
+  const counts: Partial<Record<FilterKey, number>> = {
+    review: flagged.suspicious,
+    spam: flagged.spam,
+  };
 
   const sendable = addresses
     .filter((address) => address.canSend && address.enabled && address.providerAliasId)
@@ -118,11 +146,25 @@ export default async function MailPage({
 
       {showQuota ? <QuotaBar quota={quota} /> : null}
 
+      {active === 'review' ? (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Flagged, but delivered. Trust a sender to keep their mail in your
+          inbox, or block them to refuse what they send next. Anyone left here
+          for {AUTO_BLOCK_AFTER_DAYS} days is refused the next time they write
+          — except trusted platforms like Google and Apple, and people you have
+          written to.
+        </p>
+      ) : null}
+
       {active === 'spam' ? (
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Quarantined, not deleted. None of these reached a webhook or a personal
-          inbox. Releasing one makes it visible again — it does not re-send the
-          delivery your application never received.
+          Quarantined, not deleted — none of these reached a webhook or a
+          personal inbox. Senders left here for {AUTO_BLOCK_AFTER_DAYS} days are
+          refused the next time they write. Releasing a message does not re-send
+          the delivery your application never received.{' '}
+          <Link href="/settings#mail-filtering" className="text-foreground underline underline-offset-2">
+            Blocked senders
+          </Link>
         </p>
       ) : null}
 
@@ -133,121 +175,92 @@ export default async function MailPage({
         </p>
       ) : null}
 
-      <div>
-        {page.items.length === 0 ? (
-          <div className="mail-split">
-            <div className="mail-list-col">
-              <div className="mail-list-sticky">
-                <div className="mail-list-head">
-                  <div className="mail-list-title">
-                    <strong>{FILTERS[active].label}</strong>
-                    <span>0 messages</span>
-                  </div>
-
-                  <nav className="mail-list-filters" aria-label="Filter mail">
-                    {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
-                      <Link
-                        key={key}
-                        href={key === 'all' ? '/mail' : `/mail?show=${key}`}
-                        aria-current={key === active ? 'page' : undefined}
-                        data-active={key === active ? '' : undefined}
-                      >
-                        {FILTERS[key].label}
-                      </Link>
-                    ))}
-                  </nav>
-                </div>
-
-                <div className="mail-list-scroll">
-                  <div className="mail-list-empty">
-                    <span className="mail-list-empty__mark" aria-hidden>
-                      <Icon name={EMPTY_ICON[active]} size={18} />
-                    </span>
-                    <div>
-                      <p>{emptyTitle(active)}</p>
-                      <small>{emptyDescription(active)}</small>
-                    </div>
-                  </div>
-                </div>
+      <div className="mail-split" data-reading={selectedId ? '' : undefined}>
+        <div className="mail-list-col">
+          {/* The sticky lives on an inner box, not on the column itself: the
+              column has to stretch for the divider between the halves to run
+              their full shared height, and a stretched box has nothing left to
+              stick to. */}
+          <div className="mail-list-sticky">
+            <div className="mail-list-head">
+              <div className="mail-list-title">
+                <strong>{FILTERS[active].label}</strong>
+                <span>
+                  {items.length}
+                  {page.nextCursor ? '+' : ''} message
+                  {items.length === 1 ? '' : 's'}
+                </span>
               </div>
+
+              <nav className="mail-list-filters" aria-label="Filter mail">
+                {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
+                  <Link
+                    key={key}
+                    href={key === 'inbox' ? '/mail' : `/mail?show=${key}`}
+                    aria-current={key === active ? 'page' : undefined}
+                    data-active={key === active ? '' : undefined}
+                  >
+                    {FILTERS[key].label}
+                    {counts[key] ? (
+                      <span className="mail-list-filters__count">{counts[key]}</span>
+                    ) : null}
+                  </Link>
+                ))}
+              </nav>
             </div>
-            <div className="mail-read-col">
-              <ReadingPanePlaceholder empty />
-            </div>
-          </div>
-        ) : (
-          <div className="mail-split" data-reading={selectedId ? '' : undefined}>
-            <div className="mail-list-col">
-              {/* The sticky lives on an inner box, not on the column itself:
-                  the column has to stretch for the divider between the halves to
-                  run their full shared height, and a stretched box has nothing
-                  left to stick to. */}
-              <div className="mail-list-sticky">
-              <div className="mail-list-head">
-                <div className="mail-list-title">
-                  <strong>{FILTERS[active].label}</strong>
-                  <span>
-                    {page.items.length}
-                    {page.nextCursor ? '+' : ''} message
-                    {page.items.length === 1 ? '' : 's'}
+
+            <div className="mail-list-scroll">
+              {items.length === 0 ? (
+                <div className="mail-list-empty">
+                  <span className="mail-list-empty__mark" aria-hidden>
+                    <Icon name={EMPTY_ICON[active]} size={18} />
                   </span>
+                  <div>
+                    <p>{emptyTitle(active)}</p>
+                    <small>{emptyDescription(active)}</small>
+                  </div>
                 </div>
-
-                <nav className="mail-list-filters" aria-label="Filter mail">
-                  {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
-                    <Link
-                      key={key}
-                      href={key === 'all' ? '/mail' : `/mail?show=${key}`}
-                      aria-current={key === active ? 'page' : undefined}
-                      data-active={key === active ? '' : undefined}
-                    >
-                      {FILTERS[key].label}
-                    </Link>
-                  ))}
-                </nav>
-              </div>
-
-              <div className="mail-list-scroll">
-                {/* First page from the server, the rest fetched as you reach
-                    the bottom. The old cap was not a display limit — mail past
-                    the hundredth message had no route to the screen. */}
+              ) : (
+                // First page from the server, the rest fetched as you reach
+                // the bottom. The old cap was not a display limit — mail past
+                // the hundredth message had no route to the screen.
                 <ConversationList
-                  initialItems={page.items}
+                  initialItems={items}
                   initialCursor={page.nextCursor}
                   show={active}
                   selectedId={selectedId}
                 />
-              </div>
-              </div>
-            </div>
-
-            <div className="mail-read-col">
-              {/* A back affordance only where the panes are stacked. */}
-              {selectedId ? (
-                <Link href={hrefFor()} className="mail-read-back">
-                  <Icon name="arrowLeft" size={13} />
-                  All mail
-                </Link>
-              ) : null}
-
-              {selectedId ? (
-                <Suspense key={selectedId} fallback={<ReadingPaneSkeleton />}>
-                  <ReadingPane emailId={selectedId} tenantId={tenantId} />
-                </Suspense>
-              ) : (
-                <ReadingPanePlaceholder />
               )}
             </div>
           </div>
-        )}
+        </div>
+
+        <div className="mail-read-col">
+          {/* A back affordance only where the panes are stacked. */}
+          {selectedId ? (
+            <Link href={hrefFor()} className="mail-read-back">
+              <Icon name="arrowLeft" size={13} />
+              {FILTERS[active].label}
+            </Link>
+          ) : null}
+
+          {selectedId ? (
+            <Suspense key={selectedId} fallback={<ReadingPaneSkeleton />}>
+              <ReadingPane emailId={selectedId} tenantId={tenantId} view={active} />
+            </Suspense>
+          ) : (
+            <ReadingPanePlaceholder empty={items.length === 0} />
+          )}
+        </div>
       </div>
     </>
   );
 }
 
-const EMPTY_ICON: Record<FilterKey, 'inbox' | 'spam' | 'delete'> = {
+const EMPTY_ICON: Record<FilterKey, 'inbox' | 'spam' | 'delete' | 'shield'> = {
+  inbox: 'inbox',
+  review: 'shield',
   all: 'inbox',
-  received: 'inbox',
   sent: 'inbox',
   bounced: 'inbox',
   spam: 'spam',
@@ -258,6 +271,8 @@ function emptyTitle(filter: FilterKey): string {
   switch (filter) {
     case 'bounced':
       return 'Nothing has bounced';
+    case 'review':
+      return 'Nothing to review';
     case 'spam':
       return 'Nothing quarantined';
     case 'bin':
@@ -269,8 +284,10 @@ function emptyTitle(filter: FilterKey): string {
 
 function emptyDescription(filter: FilterKey): string {
   switch (filter) {
-    case 'received':
-      return 'Send mail to one of your managed addresses. A verified provider POST becomes exactly one durable record here.';
+    case 'inbox':
+      return 'Mail to a managed address lands here once the filter has no doubts about it. Anything flagged waits in Review.';
+    case 'review':
+      return 'Mail the filter was unsure about appears here. Trust or block each sender, and the ones you leave are refused after a few days.';
     case 'sent':
       return 'Compose a message from a send-capable address, or reply to something you have received.';
     case 'bounced':

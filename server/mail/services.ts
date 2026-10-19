@@ -20,6 +20,7 @@ import { InboundService } from './inbound/inbound-service';
 import { MailboxService } from './mailbox/mailbox-service';
 import { ReconciliationService } from './reconciliation/reconciliation-service';
 import { RetentionService } from './retention/retention-service';
+import { SenderPolicyService } from './filtering/sender-policy-service';
 import { DefaultThreadResolver } from './threads/thread-resolver';
 import { WebhookService } from './webhooks/webhook-service';
 
@@ -52,6 +53,7 @@ export interface MailServices {
   webhooks: () => WebhookService;
   reconciliation: () => ReconciliationService;
   retention: () => RetentionService;
+  senders: () => SenderPolicyService;
 }
 
 const bundles = new Map<string, MailServices>();
@@ -75,6 +77,7 @@ export function servicesFor(tenantId: string): MailServices {
   let webhooks: WebhookService | undefined;
   let reconciliation: ReconciliationService | undefined;
   let retention: RetentionService | undefined;
+  let senders: SenderPolicyService | undefined;
 
   const bundle: MailServices = {
     domains: () =>
@@ -164,6 +167,7 @@ export function servicesFor(tenantId: string): MailServices {
           forwarding: bundle.forwarding(),
           webhooks: bundle.webhooks(),
           filters: repositories.mailFilters,
+          senders: bundle.senders(),
         },
       )),
 
@@ -183,6 +187,13 @@ export function servicesFor(tenantId: string): MailServices {
         repositories.domains,
         repositories.addresses,
         provider(),
+      )),
+
+    senders: () =>
+      (senders ??= new SenderPolicyService(
+        repositories.emails,
+        repositories.mailFilters,
+        repositories.events,
       )),
 
     retention: () =>

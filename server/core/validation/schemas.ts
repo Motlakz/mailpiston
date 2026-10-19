@@ -243,7 +243,13 @@ export const reclassifyEmailSchema = z.object({
 
 export const bulkEmailActionSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(500),
-  action: z.enum(['bin', 'purge']),
+  /** `trust` and `block` act on the sender of each message, not the message. */
+  action: z.enum(['bin', 'purge', 'trust', 'block']),
+});
+
+export const senderDecisionSchema = z.object({
+  decision: z.enum(['trust', 'block']),
+  scope: z.enum(['address', 'domain']).default('address'),
 });
 
 /** Sender patterns are a full address or a bare domain, never a wildcard. */
@@ -268,4 +274,5 @@ export const createMailFilterSchema = z.object({
 
 export type ReclassifyEmailInput = z.infer<typeof reclassifyEmailSchema>;
 export type BulkEmailActionInput = z.infer<typeof bulkEmailActionSchema>;
+export type SenderDecisionInput = z.infer<typeof senderDecisionSchema>;
 export type CreateMailFilterInput = z.infer<typeof createMailFilterSchema>;

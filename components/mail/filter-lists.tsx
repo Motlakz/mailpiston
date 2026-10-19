@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { Icon } from '@/components/icon';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,10 @@ import type { MailFilterEntry } from '@/server/core/types';
  *
  * Both lists are global rather than per domain, because the person running
  * three apps has one opinion about an agency, not three.
+ *
+ * Automatic blocks are listed with everything else, badged, rather than in a
+ * separate place: the operator should be able to see in one list everything
+ * that is refused, whoever decided it.
  */
 export function FilterLists({ entries }: { entries: MailFilterEntry[] }) {
   const allow = entries.filter((entry) => entry.kind === 'allow');
@@ -28,14 +33,14 @@ export function FilterLists({ entries }: { entries: MailFilterEntry[] }) {
     <div className="grid gap-4 md:grid-cols-2">
       <FilterList
         kind="allow"
-        title="Always allow"
-        caption="Never classified, whatever the rules say. Use it when the filter has been wrong about somebody you hear from."
+        title="Trusted senders"
+        caption="Always reach your inbox, whatever the rules say, and are never blocked automatically. A trusted address gets through even if its domain is blocked."
         entries={allow}
       />
       <FilterList
         kind="deny"
-        title="Always block"
-        caption="Quarantined on arrival, no scoring. Use it for a sender who keeps coming back under new subject lines."
+        title="Blocked senders"
+        caption="Refused on arrival: nothing is stored or delivered, and the attempt is logged as rejected. Remove an entry to let them back in."
         entries={deny}
       />
     </div>
@@ -127,7 +132,8 @@ function FilterList({
 
       {entries.length === 0 ? (
         <p className="px-5 py-4 text-xs text-muted-foreground">
-          Nothing here yet. A bare domain covers its subdomains.
+          Nothing here yet. Add one here, or use Trust and Block on any message.
+          A bare domain covers its subdomains.
         </p>
       ) : (
         <ul className="divide-y divide-border">
@@ -139,9 +145,15 @@ function FilterList({
               <code className="min-w-0 flex-1 truncate font-mono text-xs">
                 {entry.pattern}
               </code>
+              {entry.source === 'auto' ? (
+                <Badge variant="muted" className="shrink-0">Auto</Badge>
+              ) : null}
               {entry.note ? (
-                <span className="shrink-0 truncate text-xs text-muted-foreground">
-                  {entry.note}
+                <span
+                  className="max-w-[45%] shrink truncate text-xs text-muted-foreground"
+                  title={entry.note}
+                >
+                  {entry.note.replace(/^Auto: /, '')}
                 </span>
               ) : null}
               <Button

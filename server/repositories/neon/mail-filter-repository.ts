@@ -50,6 +50,7 @@ export class NeonMailFilterRepository implements MailFilterRepository {
     kind: MailFilterEntry['kind'];
     pattern: string;
     note: string | null;
+    source?: MailFilterEntry['source'];
   }): Promise<MailFilterEntry> {
     try {
       const [row] = await db
@@ -62,6 +63,7 @@ export class NeonMailFilterRepository implements MailFilterRepository {
           // comparison agree without either having to remember.
           pattern: data.pattern.trim().toLowerCase(),
           note: data.note,
+          source: data.source ?? 'operator',
         })
         .returning();
 
@@ -86,6 +88,21 @@ export class NeonMailFilterRepository implements MailFilterRepository {
         ),
       );
   }
+
+  async removePattern(
+    kind: MailFilterEntry['kind'],
+    pattern: string,
+  ): Promise<void> {
+    await db
+      .delete(mailFilterEntries)
+      .where(
+        and(
+          eq(mailFilterEntries.tenantId, this.tenantId),
+          eq(mailFilterEntries.kind, kind),
+          eq(mailFilterEntries.pattern, pattern.trim().toLowerCase()),
+        ),
+      );
+  }
 }
 
 function toEntry(row: typeof mailFilterEntries.$inferSelect): MailFilterEntry {
@@ -94,6 +111,7 @@ function toEntry(row: typeof mailFilterEntries.$inferSelect): MailFilterEntry {
     kind: row.kind,
     pattern: row.pattern,
     note: row.note,
+    source: row.source,
     createdAt: row.createdAt,
   };
 }

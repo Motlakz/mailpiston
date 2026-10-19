@@ -12,6 +12,7 @@ import type {
   EndpointEmailRecipient,
   EndpointWebhookConfig,
   MailEventType,
+  MailFilterEntry,
   Paginated,
   ReconciliationItem,
   ReconciliationItemStatus,
@@ -30,7 +31,9 @@ import type {
   EnqueueResult,
   EventFilter,
   EventRepository,
+  FlaggedMessage,
   InboundCaptureResult,
+  MailFilterRepository,
   InboundThreadTarget,
   EndpointRepository,
   ReconciliationRepository,
@@ -42,6 +45,7 @@ import type {
   UpdateAddressData,
   UpdateDomainData,
 } from '@/server/repositories/types';
+import { addressOf, matchesList } from '@/server/mail/filtering/classifier';
 import type { Storage } from '@/server/storage/types';
 
 /**
@@ -364,6 +368,9 @@ export class InMemoryEmailRepository implements EmailRepository {
         (filter.spamVerdicts ?? ['clean', 'suspicious']).includes(row.spamVerdict),
       )
       .filter((row) => (filter.deleted ? row.deletedAt : !row.deletedAt))
+      .filter(
+        (row) => !filter.sender || matchesList(addressOf(row.from), [filter.sender]),
+      )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, filter.limit ?? 50)
       .map((row) => ({
@@ -485,6 +492,52 @@ export class InMemoryEmailRepository implements EmailRepository {
     return updated;
   }
 
+  async listFlaggedBefore(
+    sender: string,
+    before: Date,
+    limit: number,
+  ): Promise<FlaggedMessage[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.direction === 'inbound' &&
+          row.spamVerdict !== 'clean' &&
+          row.createdAt < before &&
+          matchesList(addressOf(row.from), [sender]),
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((row) => ({
+        from: row.from,
+        spamVerdict: row.spamVerdict as FlaggedMessage['spamVerdict'],
+        createdAt: row.createdAt,
+      }));
+  }
+
+  async findVouched(sender: string): Promise<string[]> {
+    const sent = [...this.rows.values()]
+      .filter((row) => row.direction === 'outbound')
+      .flatMap((row) => row.to);
+    const released = (this.eventStore?.rows ?? [])
+      .filter((event) => event.type === 'email.released')
+      .map((event) => event.metadata.from)
+      .filter((from): from is string => typeof from === 'string');
+
+    return [...sent, ...released].filter((address) =>
+      matchesList(addressOf(address), [sender]),
+    );
+  }
+
+  async countFlagged(): Promise<{ suspicious: number; spam: number }> {
+    const live = [...this.rows.values()].filter(
+      (row) => row.direction === 'inbound' && !row.deletedAt,
+    );
+    return {
+      suspicious: live.filter((row) => row.spamVerdict === 'suspicious').length,
+      spam: live.filter((row) => row.spamVerdict === 'spam').length,
+    };
+  }
+
   async softDelete(id: string): Promise<Email> {
     return this.setDeletedAt(id, new Date());
   }
@@ -541,6 +594,57 @@ export class InMemoryEmailRepository implements EmailRepository {
   }
 }
 
+
+/** The allow and deny lists, with the database's lower-cased uniqueness. */
+export class InMemoryMailFilterRepository implements MailFilterRepository {
+  readonly rows: MailFilterEntry[] = [];
+
+  async list(): Promise<MailFilterEntry[]> {
+    return [...this.rows];
+  }
+
+  async lists(): Promise<{ allow: string[]; deny: string[] }> {
+    return {
+      allow: this.rows.filter((row) => row.kind === 'allow').map((row) => row.pattern),
+      deny: this.rows.filter((row) => row.kind === 'deny').map((row) => row.pattern),
+    };
+  }
+
+  async add(data: {
+    kind: MailFilterEntry['kind'];
+    pattern: string;
+    note: string | null;
+    source?: MailFilterEntry['source'];
+  }): Promise<MailFilterEntry> {
+    const pattern = data.pattern.trim().toLowerCase();
+
+    if (this.rows.some((row) => row.kind === data.kind && row.pattern === pattern)) {
+      throw new ConflictError(`${data.pattern} is already on the ${data.kind} list`);
+    }
+
+    const entry: MailFilterEntry = {
+      id: nextId('filter'),
+      kind: data.kind,
+      pattern,
+      note: data.note,
+      source: data.source ?? 'operator',
+      createdAt: new Date(),
+    };
+    this.rows.push(entry);
+    return entry;
+  }
+
+  async remove(id: string): Promise<void> {
+    const index = this.rows.findIndex((row) => row.id === id);
+    if (index !== -1) this.rows.splice(index, 1);
+  }
+
+  async removePattern(kind: MailFilterEntry['kind'], pattern: string): Promise<void> {
+    const value = pattern.trim().toLowerCase();
+    const index = this.rows.findIndex((row) => row.kind === kind && row.pattern === value);
+    if (index !== -1) this.rows.splice(index, 1);
+  }
+}
 
 export class InMemoryThreadRepository implements ThreadRepository {
   readonly rows = new Map<string, Thread>();

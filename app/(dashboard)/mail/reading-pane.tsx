@@ -4,17 +4,26 @@ import { Icon } from '@/components/icon';
 import { EmailBody } from '@/components/mail/email-body';
 import { ReplyForm } from '@/components/mail/compose';
 import { MessageActions } from '@/components/mail/message-actions';
+import { SenderActions } from '@/components/mail/sender-actions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatBytes } from '@/lib/format';
+import { autoBlockLabel, reasonsFor } from '@/lib/spam-reasons';
+import {
+  senderStandingFor,
+  withAutoBlock,
+} from '@/server/mail/filtering/sender-policy-service';
 import { repositoriesFor } from '@/server/repositories';
 
 export async function ReadingPane({
   emailId,
   tenantId,
+  view,
 }: {
   emailId: string;
   /** Passed down rather than resolved here: the page already has it. */
   tenantId: string;
+  /** The list beside the pane, which decides whether a decision removes its row. */
+  view: string;
 }) {
   const repositories = repositoriesFor(tenantId);
   const email = await repositories.emails.findById(emailId);
@@ -30,13 +39,17 @@ export async function ReadingPane({
     );
   }
 
-  const [attachments, deliveredAddress] = await Promise.all([
+  const [attachments, deliveredAddress, lists] = await Promise.all([
     repositories.emails.listAttachments(email.id),
     email.addressId
       ? repositories.addresses.findByIdWithDomain(email.addressId)
       : null,
+    repositories.mailFilters.lists(),
   ]);
   const outbound = email.direction === 'outbound';
+  const flagged = email.spamVerdict !== 'clean';
+  const sender = senderStandingFor(email.from, lists);
+  const [{ autoBlockAt }] = withAutoBlock([email], lists.allow);
   const when = outbound
     ? (email.sentAt ?? email.createdAt)
     : (email.receivedAt ?? email.createdAt);
@@ -94,16 +107,36 @@ export async function ReadingPane({
           </time>
         </div>
 
-        {email.spamVerdict !== 'clean' ? (
-          <p className="reading-pane__flag">
-            <StatusBadge
-              status={email.spamVerdict}
-              label={email.spamVerdict === 'spam' ? 'Quarantined' : 'Suspicious'}
+        {!outbound && !email.deletedAt ? (
+          <div className="reading-pane__sender" data-flagged={flagged ? '' : undefined}>
+            <p className="reading-pane__flag">
+              {flagged ? (
+                <StatusBadge
+                  status={email.spamVerdict}
+                  label={email.spamVerdict === 'spam' ? 'Quarantined' : 'Suspicious'}
+                />
+              ) : null}
+              {sender.standing === 'trusted' ? (
+                <StatusBadge status="clean" label="Trusted sender" />
+              ) : sender.standing === 'blocked' ? (
+                <StatusBadge status="spam" label="Blocked sender" />
+              ) : null}
+              <span>{flagNote(email.spamVerdict, reasonsFor(email.spamSignals), sender.standing)}</span>
+              {autoBlockAt && sender.standing === null ? (
+                <span className="conversation-row__countdown">{autoBlockLabel(autoBlockAt)}</span>
+              ) : null}
+            </p>
+
+            <SenderActions
+              emailId={email.id}
+              flagged={flagged}
+              sender={sender}
+              leavesView={{
+                trust: view === 'review' || view === 'spam',
+                block: view !== 'spam',
+              }}
             />
-            {email.spamVerdict === 'spam'
-              ? 'Held here. It reached no webhook and no personal inbox.'
-              : 'Delivered, but it matched enough signals to be worth a look.'}
-          </p>
+          </div>
         ) : null}
 
         <EmailBody html={email.html} text={email.text} />
@@ -132,6 +165,21 @@ export async function ReadingPane({
       </div>
     </div>
   );
+}
+
+/** One sentence on why the message is where it is, and what happens next. */
+function flagNote(
+  verdict: 'clean' | 'suspicious' | 'spam',
+  reasons: string,
+  standing: 'trusted' | 'blocked' | null,
+): string {
+  if (standing === 'blocked') return 'Their next message will be refused.';
+  if (standing === 'trusted') return 'Their mail always reaches your inbox.';
+
+  const why = reasons ? ` Flagged for ${reasons}.` : '';
+  if (verdict === 'spam') return `Held here — it reached no webhook and no personal inbox.${why}`;
+  if (verdict === 'suspicious') return `Delivered, but worth a look.${why}`;
+  return 'Not what you want? Block the sender and their next message is refused.';
 }
 
 export function ReadingPaneSkeleton() {

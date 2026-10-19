@@ -409,3 +409,73 @@ describe('the known-correspondent discount', () => {
     expect(result.verdict).toBe('spam');
   });
 });
+
+describe('the trusted-platform discount', () => {
+  /** Google's account mail as it actually scored: bulk headers and preference links. */
+  function googleAlert(overrides: Partial<ClassificationInput> = {}) {
+    return message({
+      from: 'Google <noreply-accounts@google.com>',
+      envelopeSender: '3abc-bounce@scoutcamp.bounces.google.com',
+      subject: 'Security alert',
+      text:
+        'A new sign-in on Windows. If this was you, you do not need to do ' +
+        'anything. You are receiving this email because of a change to your ' +
+        'account. Manage your email preferences or unsubscribe here.',
+      headers: { 'List-Unsubscribe': '<https://accounts.google.com/unsub>' },
+      ...overrides,
+    });
+  }
+
+  it('keeps Google account mail out of Suspicious when the envelope agrees', () => {
+    const result = classify(googleAlert());
+
+    expect(result.verdict).toBe('clean');
+    expect(result.signals.map((signal) => signal.rule)).toContain('trusted_platform');
+  });
+
+  it('accepts an authentication result in place of envelope alignment', () => {
+    const result = classify(
+      googleAlert({
+        envelopeSender: null,
+        headers: {
+          'List-Unsubscribe': '<https://accounts.google.com/unsub>',
+          'Authentication-Results':
+            'mx.test; dkim=pass header.d=accounts.google.com; dmarc=pass header.from=google.com',
+        },
+      }),
+    );
+
+    expect(result.verdict).toBe('clean');
+  });
+
+  it('withholds the discount from a forged From with a foreign envelope', () => {
+    const result = classify(googleAlert({ envelopeSender: 'bulk@cheap-mailer.test' }));
+
+    expect(result.signals.map((signal) => signal.rule)).not.toContain('trusted_platform');
+    expect(result.verdict).toBe('suspicious');
+  });
+
+  it('withholds it when authentication failed, whatever the envelope says', () => {
+    const result = classify(
+      googleAlert({
+        headers: {
+          'List-Unsubscribe': '<https://accounts.google.com/unsub>',
+          'Authentication-Results': 'mx.test; spf=fail; dkim=fail; dmarc=fail',
+        },
+      }),
+    );
+
+    expect(result.signals.map((signal) => signal.rule)).not.toContain('trusted_platform');
+  });
+
+  it('does not treat a lookalike domain as the platform', () => {
+    const result = classify(
+      googleAlert({
+        from: 'Google <noreply@google.com.account-check.test>',
+        envelopeSender: 'noreply@google.com.account-check.test',
+      }),
+    );
+
+    expect(result.signals.map((signal) => signal.rule)).not.toContain('trusted_platform');
+  });
+});

@@ -8,5 +8,5 @@ import { redirect } from 'next/navigation';
  * yesterday is a worse answer than the page they wanted.
  */
 export default function InboxPage() {
-  redirect('/mail?show=received');
+  redirect('/mail');
 }

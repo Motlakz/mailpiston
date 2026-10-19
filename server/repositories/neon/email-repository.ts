@@ -36,6 +36,7 @@ import type {
   CreateEmailData,
   EmailFilter,
   EmailRepository,
+  FlaggedMessage,
   InboundCaptureResult,
   InboundThreadTarget,
 } from '@/server/repositories/types';
@@ -223,6 +224,7 @@ export class NeonEmailRepository implements EmailRepository {
           filter.deleted
             ? isNotNull(emails.deletedAt)
             : isNull(emails.deletedAt),
+          filter.sender ? fromMatches(filter.sender) : undefined,
           cursorDate ? lt(emails.createdAt, cursorDate) : undefined,
         ),
       )
@@ -405,6 +407,89 @@ export class NeonEmailRepository implements EmailRepository {
     return toEmail(row);
   }
 
+  async listFlaggedBefore(
+    sender: string,
+    before: Date,
+    limit: number,
+  ): Promise<FlaggedMessage[]> {
+    const rows = await db
+      .select({
+        from: emails.from,
+        spamVerdict: emails.spamVerdict,
+        createdAt: emails.createdAt,
+      })
+      .from(emails)
+      .where(
+        and(
+          eq(emails.tenantId, this.tenantId),
+          eq(emails.direction, 'inbound'),
+          inArray(emails.spamVerdict, ['suspicious', 'spam']),
+          lt(emails.createdAt, before),
+          fromMatches(sender),
+        ),
+      )
+      .orderBy(desc(emails.createdAt))
+      .limit(limit);
+
+    return rows.filter(
+      (row): row is FlaggedMessage => row.spamVerdict !== 'clean',
+    );
+  }
+
+  async findVouched(sender: string): Promise<string[]> {
+    const expression = senderExpression(sender);
+
+    // Both reads are narrowed in SQL, so this stays one small result on the
+    // inbound path however much mail the workspace has sent.
+    const [sent, released] = await Promise.all([
+      db
+        .select({ to: emails.to })
+        .from(emails)
+        .where(
+          and(
+            eq(emails.tenantId, this.tenantId),
+            eq(emails.direction, 'outbound'),
+            sql`exists (select 1 from unnest(${emails.to}) as recipient where lower(recipient) ~ ${expression})`,
+          ),
+        )
+        .limit(50),
+      db
+        .select({ from: sql<string>`${mailEvents.metadata}->>'from'` })
+        .from(mailEvents)
+        .where(
+          and(
+            eq(mailEvents.tenantId, this.tenantId),
+            eq(mailEvents.type, 'email.released'),
+            sql`lower(${mailEvents.metadata}->>'from') ~ ${expression}`,
+          ),
+        )
+        .limit(50),
+    ]);
+
+    return [
+      ...sent.flatMap((row) => row.to),
+      ...released.map((row) => row.from).filter(Boolean),
+    ];
+  }
+
+  async countFlagged(): Promise<{ suspicious: number; spam: number }> {
+    const [row] = await db
+      .select({
+        suspicious: sql<number>`count(*) filter (where ${emails.spamVerdict} = 'suspicious')::int`,
+        spam: sql<number>`count(*) filter (where ${emails.spamVerdict} = 'spam')::int`,
+      })
+      .from(emails)
+      .where(
+        and(
+          eq(emails.tenantId, this.tenantId),
+          eq(emails.direction, 'inbound'),
+          isNull(emails.deletedAt),
+        ),
+      );
+
+    return { suspicious: row?.suspicious ?? 0, spam: row?.spam ?? 0 };
+  }
+
   async softDelete(id: string): Promise<Email> {
     const [row] = await db
       .update(emails)
@@ -547,6 +632,28 @@ async function attachToThread(
     .returning({ id: threads.id });
 
   return row.id;
+}
+
+/**
+ * `From:` matching an allow/deny pattern, in SQL.
+ *
+ * The stored value is the header as sent — `Dana <dana@example.com>` or a bare
+ * address — so the pattern is anchored to the *end*, where the real address
+ * always sits (see `addressOf` in the classifier). A domain pattern accepts
+ * either `@` or `.` before it, which is what makes `example.com` cover
+ * `news.example.com` and not `notexample.com`.
+ */
+function fromMatches(pattern: string) {
+  return sql`lower(${emails.from}) ~ ${senderExpression(pattern)}`;
+}
+
+function senderExpression(pattern: string): string {
+  const value = pattern.trim().toLowerCase();
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  return value.includes('@')
+    ? `(^|[<\\s"'])${escaped}>?\\s*$`
+    : `[@.]${escaped}>?\\s*$`;
 }
 
 function toEmail(row: EmailRow): Email {

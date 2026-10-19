@@ -7,8 +7,10 @@ import { EmailBody } from '@/components/mail/email-body';
 import { EventTimeline } from '@/components/mail/event-timeline';
 import { ReplyForm } from '@/components/mail/compose';
 import { MessageActions } from '@/components/mail/message-actions';
+import { SenderActions } from '@/components/mail/sender-actions';
 import type { Email } from '@/server/core/types';
 import { formatBytes } from '@/lib/format';
+import { senderStandingFor } from '@/server/mail/filtering/sender-policy-service';
 import { repositoriesFor } from '@/server/repositories';
 import { requireOperatorPage } from '@/server/core/auth';
 
@@ -26,12 +28,13 @@ export default async function EmailPage({
   const email = await repositories.emails.findById(id);
   if (!email) notFound();
 
-  const [attachments, events, deliveredAddress] = await Promise.all([
+  const [attachments, events, deliveredAddress, lists] = await Promise.all([
     repositories.emails.listAttachments(email.id),
     repositories.events.list({ emailId: email.id, limit: 20 }),
     email.addressId
       ? repositories.addresses.findByIdWithDomain(email.addressId)
       : null,
+    repositories.mailFilters.lists(),
   ]);
 
   return (
@@ -59,6 +62,19 @@ export default async function EmailPage({
       />
 
       <ClassificationPanel email={email} />
+
+      {email.direction === 'inbound' && !email.deletedAt ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-card px-4 py-2.5 ring-1 ring-foreground/10">
+          <span className="text-xs text-muted-foreground">
+            Sender decisions apply to every domain you manage.
+          </span>
+          <SenderActions
+            emailId={email.id}
+            flagged={email.spamVerdict !== 'clean'}
+            sender={senderStandingFor(email.from, lists)}
+          />
+        </div>
+      ) : null}
 
       <dl className="message-metadata mb-6 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 rounded-lg bg-card p-5 text-sm ring-1 ring-foreground/10">
         {email.direction === 'inbound' ? (

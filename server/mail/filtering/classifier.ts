@@ -30,6 +30,12 @@ import type {
   SpamVerdict,
 } from '@/server/core/types';
 
+import {
+  isTrustedPlatform,
+  registrableDomain,
+  sameDomain,
+} from './sender-reputation';
+
 export type { SpamCategory, SpamSignal, SpamVerdict };
 
 export interface Classification {
@@ -79,7 +85,13 @@ export const SUSPICIOUS_THRESHOLD = 30;
 export function classify(input: ClassificationInput): Classification {
   // Explicit operator decisions come first and end the question. A rule engine
   // that can overrule an allow-list entry is one the operator has to fight.
+  // Allow is checked first so a trusted address inside a blocked domain gets
+  // through — the more specific decision wins, as it does at the inbound door.
   const sender = addressOf(input.from);
+
+  if (matchesList(sender, input.allowList)) {
+    return { verdict: 'clean', score: 0, category: null, signals: [] };
+  }
 
   if (matchesList(sender, input.denyList)) {
     return verdictOf([
@@ -92,10 +104,6 @@ export function classify(input: ClassificationInput): Classification {
     ]);
   }
 
-  if (matchesList(sender, input.allowList)) {
-    return { verdict: 'clean', score: 0, category: null, signals: [] };
-  }
-
   const signals = [
     ...authenticationSignals(input),
     ...phishingSignals(input),
@@ -105,6 +113,9 @@ export function classify(input: ClassificationInput): Classification {
     ...coldOutreachSignals(input),
     ...emptinessSignals(input),
   ];
+
+  const trusted = trustedPlatformSignal(input, signals);
+  if (trusted) signals.push(trusted);
 
   /**
    * A reply, or somebody we have talked to before, is heavily discounted.
@@ -689,6 +700,76 @@ function emptinessSignals(input: ClassificationInput): SpamSignal[] {
   ];
 }
 
+// --- Trusted platforms ------------------------------------------------------
+
+/**
+ * Google, Apple, GitHub and the rest of `TRUSTED_PLATFORM_DOMAINS`.
+ *
+ * Their account and security mail carries `List-Unsubscribe` and preference
+ * links like any newsletter, so on headers alone it scored as bulk and landed
+ * in Suspicious — and Suspicious is what the automatic blocker reads. This
+ * discount is what keeps a sign-in alert out of that queue.
+ *
+ * A `From:` header is free to forge, so the domain is not enough on its own.
+ * One of two things has to agree with it:
+ *
+ *  - an authentication result naming the domain as passing DMARC or DKIM, or
+ *  - the SMTP envelope sender being on the same registrable domain — the
+ *    address the receiving server checked SPF against, which a forger sending
+ *    from their own infrastructure does not control.
+ *
+ * And it is withheld entirely when anything else says the message is not what
+ * it claims: a failed authentication check, a spoofed display name, a link
+ * whose text lies about where it goes, or an executable attachment. Those are
+ * how a convincing fake arrives, and the discount must not be what lets one
+ * through.
+ */
+function trustedPlatformSignal(
+  input: ClassificationInput,
+  signals: SpamSignal[],
+): SpamSignal | null {
+  const domain = domainOf(input.from);
+  if (!domain || !isTrustedPlatform(domain)) return null;
+
+  const contradicted = signals.some(
+    (signal) =>
+      signal.category === 'authentication' ||
+      signal.category === 'malware' ||
+      signal.rule === 'display_name_spoof' ||
+      signal.rule === 'link_text_mismatch',
+  );
+  if (contradicted) return null;
+
+  const owner = registrableDomain(domain);
+  const results = [
+    headerText(input.headers, 'authentication-results'),
+    headerText(input.headers, 'arc-authentication-results'),
+  ].join(' ');
+
+  const dmarcPass = [...results.matchAll(/dmarc=pass[^;]*?header\.from=([\w.-]+)/gi)];
+  const dkimPass = [...results.matchAll(/dkim=pass[^;]*?header\.d=([\w.-]+)/gi)];
+  const authenticated = [...dmarcPass, ...dkimPass].some(
+    (match) => registrableDomain(match[1]) === owner,
+  );
+
+  const envelopeDomain = input.envelopeSender
+    ? domainOf(input.envelopeSender)
+    : null;
+  const envelopeAligned =
+    envelopeDomain !== null && registrableDomain(envelopeDomain) === owner;
+
+  if (!authenticated && !envelopeAligned) return null;
+
+  return {
+    rule: 'trusted_platform',
+    category: 'promotional',
+    score: -40,
+    detail: authenticated
+      ? `${owner}, authenticated`
+      : `${owner}, envelope sender agrees`,
+  };
+}
+
 // --- Shared helpers ---------------------------------------------------------
 
 function headerText(
@@ -728,20 +809,8 @@ function displayNameOf(value: string): string {
   return index === -1 ? '' : value.slice(0, index).replace(/["']/g, '').trim();
 }
 
-function domainOf(value: string): string | null {
+export function domainOf(value: string): string | null {
   return addressOf(value).split('@')[1] ?? null;
-}
-
-/** Equal, or one is a subdomain of the other — `mail.stripe.com` is Stripe. */
-function sameDomain(a: string, b: string): boolean {
-  const left = a.toLowerCase().replace(/\.$/, '');
-  const right = b.toLowerCase().replace(/\.$/, '');
-
-  return (
-    left === right ||
-    left.endsWith(`.${right}`) ||
-    right.endsWith(`.${left}`)
-  );
 }
 
 /**
@@ -750,7 +819,7 @@ function sameDomain(a: string, b: string): boolean {
  * An entry is either a full address or a bare domain, and a domain entry covers
  * its subdomains — an operator who allows `stripe.com` means the whole of it.
  */
-function matchesList(sender: string, list: string[] | undefined): boolean {
+export function matchesList(sender: string, list: string[] | undefined): boolean {
   if (!list?.length) return false;
 
   const domain = sender.split('@')[1] ?? '';

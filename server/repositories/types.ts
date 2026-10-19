@@ -188,8 +188,21 @@ export interface EmailFilter {
    * not.
    */
   deleted?: boolean;
+  /**
+   * Only mail from this sender: a full address, or a domain that also covers
+   * its subdomains — the same matching the allow and deny lists use, so
+   * "everything this block applies to" is one query.
+   */
+  sender?: string;
   limit?: number;
   cursor?: string | null;
+}
+
+/** One flagged inbound message, reduced to what the persistent-sender sweep reads. */
+export interface FlaggedMessage {
+  from: string;
+  spamVerdict: Exclude<SpamVerdict, 'clean'>;
+  createdAt: Date;
 }
 
 /** `prunedAt` is set by retention, never at capture. */
@@ -310,6 +323,29 @@ export interface EmailRepository {
     signals: SpamSignal[],
   ): Promise<Email>;
 
+  /**
+   * Inbound mail from `sender` (an address, or a domain covering its
+   * subdomains) still marked suspicious or spam that arrived before `before` —
+   * binned or not, because binning a pitch is reviewing it as junk, not
+   * forgiving it. Newest first, capped at `limit`.
+   */
+  listFlaggedBefore(
+    sender: string,
+    before: Date,
+    limit: number,
+  ): Promise<FlaggedMessage[]>;
+
+  /**
+   * Senders matching `sender` that the automatic blocker must never touch, as
+   * raw address strings: anyone this workspace has sent mail to, and the
+   * sender of any message an operator released from quarantine. Both are the
+   * operator saying "this person is real" without writing it on the allow list.
+   */
+  findVouched(sender: string): Promise<string[]>;
+
+  /** Unbinned inbound mail awaiting a decision, for the Mail view's counts. */
+  countFlagged(): Promise<{ suspicious: number; spam: number }>;
+
   /** Bin and un-bin. Neither touches stored bytes. */
   softDelete(id: string): Promise<Email>;
   restore(id: string): Promise<Email>;
@@ -341,8 +377,12 @@ export interface MailFilterRepository {
     kind: MailFilterEntry['kind'];
     pattern: string;
     note: string | null;
+    /** Defaults to `operator`. */
+    source?: MailFilterEntry['source'];
   }): Promise<MailFilterEntry>;
   remove(id: string): Promise<void>;
+  /** Removes an exact pattern from one list. A no-op when it is not there. */
+  removePattern(kind: MailFilterEntry['kind'], pattern: string): Promise<void>;
 }
 
 export interface ThreadRepository {

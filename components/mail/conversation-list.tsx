@@ -148,7 +148,7 @@ export function ConversationList({
               : `Select ${loadedIds.length} loaded`}
           </button>
           {Object.keys(selection).length > 0 ? (
-            <BulkActions binned={show === 'bin'} />
+            <BulkActions view={show} />
           ) : hasNextPage ? (
             <Button
               variant="outline"
@@ -168,6 +168,7 @@ export function ConversationList({
           email={email}
           href={hrefFor(show, email.id)}
           selected={email.id === selectedId}
+          view={show}
         />
       ))}
 
@@ -193,8 +194,9 @@ const PAGE_SIZE = 50;
  * not match the second.
  */
 const FILTER_PARAMS: Record<string, string> = {
+  inbox: 'direction=inbound&spamVerdict=clean',
+  review: 'direction=inbound&spamVerdict=suspicious',
   all: '',
-  received: 'direction=inbound',
   sent: 'direction=outbound',
   bounced: 'status=soft_bounced&status=hard_bounced',
   spam: 'spamVerdict=spam',
@@ -203,7 +205,7 @@ const FILTER_PARAMS: Record<string, string> = {
 
 function hrefFor(show: string, id: string): string {
   const params = new URLSearchParams();
-  if (show !== 'all') params.set('show', show);
+  if (show !== 'inbox') params.set('show', show);
   params.set('id', id);
   return `/mail?${params}`;
 }
@@ -219,5 +221,6 @@ function reviveDates(email: EmailListItem): EmailListItem {
     createdAt: new Date(email.createdAt),
     sentAt: email.sentAt ? new Date(email.sentAt) : null,
     receivedAt: email.receivedAt ? new Date(email.receivedAt) : null,
+    autoBlockAt: email.autoBlockAt ? new Date(email.autoBlockAt) : null,
   };
 }

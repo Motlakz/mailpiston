@@ -3,20 +3,32 @@
 import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
+import { SenderActions } from '@/components/mail/sender-actions';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatDay, previewOf } from '@/lib/format';
 import { useEmailOverlay, useIsSelected, useOptimisticStore } from '@/lib/optimistic-store';
+import { autoBlockLabel, reasonsFor } from '@/lib/spam-reasons';
 import type { EmailListItem } from '@/server/core/types';
+
+const NO_STANDING = {
+  standing: null,
+  domain: null,
+  canTrustDomain: false,
+  canBlockDomain: false,
+} as const;
 
 export function ConversationRow({
   email,
   href,
   selected,
+  view,
 }: {
   email: EmailListItem;
   href: string;
   selected: boolean;
+  /** The active filter, which decides whether a sender decision removes the row. */
+  view: string;
 }) {
   /**
    * The row's own in-flight state, layered over what the server rendered.
@@ -33,12 +45,15 @@ export function ConversationRow({
   if (overlay?.gone) return null;
 
   const outbound = email.direction === 'outbound';
+  const flagged = email.spamVerdict !== 'clean';
   const when = outbound
     ? (email.sentAt ?? email.createdAt)
     : (email.receivedAt ?? email.createdAt);
 
   const counterparty = (outbound ? email.to.join(', ') : email.from) || '—';
   const preview = previewOf(email.text);
+  const reasons = flagged ? reasonsFor(email.spamSignals) : '';
+  const autoBlockAt = email.autoBlockAt ? new Date(email.autoBlockAt) : null;
 
   return (
     <div
@@ -67,7 +82,7 @@ export function ConversationRow({
         className="conversation-row__body"
       >
         <span className="conversation-row__top">
-          <strong>{displayNameOf(counterparty)}</strong>
+          <strong title={addressOf(counterparty)}>{displayNameOf(counterparty)}</strong>
           <time
             dateTime={when.toISOString()}
             title={`${when.toISOString().replace('T', ' ').slice(0, 19)} UTC`}
@@ -93,11 +108,22 @@ export function ConversationRow({
             </span>
           )}
 
-          {email.spamVerdict !== 'clean' ? (
+          {flagged ? (
             <StatusBadge
               status={email.spamVerdict}
               label={email.spamVerdict === 'spam' ? 'Quarantined' : 'Suspicious'}
             />
+          ) : null}
+
+          {reasons ? <span className="conversation-row__reason">{reasons}</span> : null}
+
+          {autoBlockAt && !email.deletedAt ? (
+            <span
+              className="conversation-row__countdown"
+              title="Unless you trust this sender, their next message after this is refused."
+            >
+              {autoBlockLabel(autoBlockAt)}
+            </span>
           ) : null}
 
           {outbound ? <StatusBadge status={email.status} /> : null}
@@ -108,9 +134,23 @@ export function ConversationRow({
               {email.attachmentCount}
             </span>
           ) : null}
-
         </span>
       </Link>
+
+      {!outbound && !email.deletedAt ? (
+        <span className="conversation-row__quick">
+          <SenderActions
+            emailId={email.id}
+            flagged={flagged}
+            sender={NO_STANDING}
+            compact
+            leavesView={{
+              trust: view === 'review' || view === 'spam',
+              block: view !== 'spam',
+            }}
+          />
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -130,4 +170,10 @@ function initialsOf(value: string): string {
 function displayNameOf(value: string): string {
   const match = value.match(/^\s*"?([^"<]+?)"?\s*</);
   return match ? match[1].trim() : value;
+}
+
+/** The bare address, for the hover title — the display name is the forgeable half. */
+function addressOf(value: string): string {
+  const groups = [...value.matchAll(/<([^<>]+)>/g)];
+  return groups.at(-1)?.[1] ?? value;
 }

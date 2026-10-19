@@ -5,9 +5,12 @@ import { createInboundFingerprint } from '@/server/core/idempotency';
 import { newId } from '@/server/core/ids';
 import type { AddressWithDomain } from '@/server/core/types';
 import {
+  addressOf,
   classify,
+  matchesList,
   type Classification,
 } from '@/server/mail/filtering/classifier';
+import type { SenderPolicyService } from '@/server/mail/filtering/sender-policy-service';
 import type { ForwardingService } from '@/server/mail/forwarding/forwarding-service';
 import type { RelayService } from '@/server/mail/forwarding/relay-service';
 import type { ThreadResolver } from '@/server/mail/threads/thread-resolver';
@@ -30,6 +33,7 @@ import { attachmentKey, rawMimeKey } from '@/server/storage';
  *   normalize (done by the provider)
  *     → resolve recipient
  *         ├─ unknown local part → 'email.rejected' event, stop
+ *         ├─ sender on the deny list → 'email.rejected' event, stop
  *         └─ known → store bytes → resolve thread
  *                      → atomic insert (thread + message + attachments + event)
  *                      ├─ fingerprint already present → duplicate, stop
@@ -72,6 +76,12 @@ export interface InboundHandlers {
    * the correct behaviour for a fresh deployment anyway.
    */
   filters?: MailFilterRepository;
+  /**
+   * Turns a sender whose flagged mail went unreviewed for too long into a
+   * standing block, checked as they write again. Optional for the same reason
+   * as `filters`.
+   */
+  senders?: Pick<SenderPolicyService, 'blockIfPersistent'>;
 }
 
 export class InboundService {
@@ -120,6 +130,22 @@ export class InboundService {
       );
     }
 
+    const lists = await this.readLists();
+    const blockedBy = blockingEntry(normalized, lists);
+
+    if (blockedBy) {
+      return this.reject(normalized, 'sender_blocked', { pattern: blockedBy });
+    }
+
+    const autoBlocked = await this.blockIfPersistent(normalized, lists);
+
+    if (autoBlocked) {
+      return this.reject(normalized, 'sender_blocked', {
+        pattern: autoBlocked,
+        automatic: true,
+      });
+    }
+
     // The id is minted here rather than by the repository because storage keys
     // embed it, and the bytes go up before the row goes in.
     const emailId = newId('email');
@@ -127,7 +153,7 @@ export class InboundService {
     const attachments = await this.storeAttachments(emailId, normalized);
     const rawStorageKey = await this.storeRawMime(emailId, normalized);
     const thread = await this.resolveThread(normalized);
-    const classification = await this.classify(normalized, thread);
+    const classification = this.classify(normalized, thread, lists);
 
     const result = await this.emails.createInbound({
       email: {
@@ -244,23 +270,12 @@ export class InboundService {
    * before. It discounts rather than exempts — a compromised account replying
    * in-thread is exactly how a convincing attack arrives.
    *
-   * A failure to read the lists must not cost the message. Classification is a
-   * convenience; capture is the product.
    */
-  private async classify(
+  private classify(
     normalized: NormalizedInboundEmail,
     thread: InboundThreadTarget,
-  ): Promise<Classification> {
-    let lists = { allow: [] as string[], deny: [] as string[] };
-
-    if (this.handlers.filters) {
-      try {
-        lists = await this.handlers.filters.lists();
-      } catch (error) {
-        console.error('Could not read mail filter lists; classifying without them', error);
-      }
-    }
-
+    lists: SenderLists,
+  ): Classification {
     return classify({
       from: normalized.from,
       envelopeSender: normalized.envelopeSender,
@@ -277,6 +292,42 @@ export class InboundService {
       denyList: lists.deny,
       knownCorrespondent: thread.existingId !== undefined,
     });
+  }
+
+  /**
+   * The operator's allow and deny lists, read once per delivery.
+   *
+   * A failure to read them must not cost the message: with no lists, nothing
+   * is blocked and the rules classify on their own. Blocking and
+   * classification are conveniences; capture is the product.
+   */
+  private async readLists(): Promise<SenderLists> {
+    if (!this.handlers.filters) return { allow: [], deny: [] };
+
+    try {
+      return await this.handlers.filters.lists();
+    } catch (error) {
+      console.error('Could not read mail filter lists; capturing without them', error);
+      return { allow: [], deny: [] };
+    }
+  }
+
+  /** Same contract as `readLists`: a failure here never costs the message. */
+  private async blockIfPersistent(
+    normalized: NormalizedInboundEmail,
+    lists: SenderLists,
+  ): Promise<string | null> {
+    if (!this.handlers.senders) return null;
+
+    try {
+      return await this.handlers.senders.blockIfPersistent(
+        normalized.from,
+        lists.allow,
+      );
+    } catch (error) {
+      console.error('Could not check for a persistent sender; capturing anyway', error);
+      return null;
+    }
   }
 
   /**
@@ -312,11 +363,13 @@ export class InboundService {
   private async reject(
     normalized: NormalizedInboundEmail,
     reason: string,
+    detail: Record<string, unknown> = {},
   ): Promise<InboundResult> {
     await this.events.create({
       emailId: null,
       type: 'email.rejected',
       metadata: {
+        ...detail,
         reason,
         provider: normalized.provider,
         recipient: normalized.recipient,
@@ -372,6 +425,43 @@ export class InboundService {
 
     return key;
   }
+}
+
+type SenderLists = { allow: string[]; deny: string[] };
+
+/**
+ * The deny-list entry that refuses this delivery, or null.
+ *
+ * A blocked sender is refused at the door, like an unknown recipient: nothing
+ * is stored, nothing is fanned out, and the `email.rejected` event is the whole
+ * trace. That is a deliberate exception to "quarantine, never drop", and it is
+ * only safe because a deny entry is a decision somebody made about a sender —
+ * by hand, or by the sweep after days of that sender's mail going unclaimed —
+ * never a verdict on one message's content.
+ *
+ * The envelope sender is checked as well as `From:`, so rotating the display
+ * address over the same sending account does not get round a block. An allow
+ * entry for the `From:` address still wins: "block focusapps.app, but not
+ * the founder I actually talk to" has to be expressible.
+ */
+function blockingEntry(
+  normalized: NormalizedInboundEmail,
+  lists: SenderLists,
+): string | null {
+  if (lists.deny.length === 0) return null;
+
+  const sender = addressOf(normalized.from);
+  if (matchesList(sender, lists.allow)) return null;
+
+  const envelope = normalized.envelopeSender?.toLowerCase() ?? null;
+
+  return (
+    lists.deny.find(
+      (pattern) =>
+        matchesList(sender, [pattern]) ||
+        (envelope !== null && matchesList(envelope, [pattern])),
+    ) ?? null
+  );
 }
 
 function hasHeader(

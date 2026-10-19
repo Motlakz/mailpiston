@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { withApi } from '@/server/core/http';
 import type { EmailStatus, SpamVerdict } from '@/server/core/types';
+import { withAutoBlock } from '@/server/mail/filtering/sender-policy-service';
 import { repositoriesFor } from '@/server/repositories';
 
 export const GET = withApi(
@@ -19,7 +20,7 @@ export const GET = withApi(
     const spamVerdicts = params.getAll('spamVerdict').filter(isSpamVerdict);
     const deleted = params.get('deleted');
 
-    const page = await repositories.emails.list({
+    const [page, lists] = await Promise.all([repositories.emails.list({
       direction: direction === 'inbound' || direction === 'outbound' ? direction : undefined,
       addressId: params.get('addressId') ?? undefined,
       threadId: params.get('threadId') ?? undefined,
@@ -30,9 +31,12 @@ export const GET = withApi(
       deleted: deleted === 'true' ? true : undefined,
       limit: params.get('limit') ? Number(params.get('limit')) : undefined,
       cursor: params.get('cursor'),
-    });
+    }), repositories.mailFilters.lists()]);
 
-    return NextResponse.json({ data: page.items, nextCursor: page.nextCursor });
+    return NextResponse.json({
+      data: withAutoBlock(page.items, lists.allow),
+      nextCursor: page.nextCursor,
+    });
   },
   { endpoint: '/v1/emails' },
 );

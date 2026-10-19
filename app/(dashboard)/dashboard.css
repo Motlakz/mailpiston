@@ -1254,3 +1254,64 @@
 .send-usage__bar > span { background: var(--success); display: block; height: 100%; }
 .send-usage__bar > span[data-full] { background: var(--warning); }
 .send-usage__note { color: var(--muted-foreground); font-size: .74rem; line-height: 1.6; margin: 0; max-width: 64ch; }
+
+/* Review and Spam carry a count, so the queue that needs a decision is visible
+   from whichever view the operator is in. */
+.mail-list-filters__count {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 999px;
+  font-size: .6rem;
+  font-weight: 600;
+  margin-left: .3rem;
+  padding: .05rem .38rem;
+}
+.mail-list-filters a[data-active] .mail-list-filters__count {
+  background: color-mix(in srgb, var(--orange) 22%, transparent);
+}
+
+/* Why a row is flagged, in two words, and when its sender stops getting
+   through. The countdown is the one piece of urgency on the row. */
+.conversation-row__reason { color: var(--muted-foreground); font-size: .62rem; }
+.conversation-row__countdown {
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+  border-radius: .3rem;
+  color: var(--warning);
+  font-size: .6rem;
+  font-weight: 600;
+  padding: .08rem .32rem;
+  white-space: nowrap;
+}
+
+/* Trust/Block on hover, pinned bottom-right so they never cover the sender or
+   the date. Always shown where there is no hover to reveal them. */
+.conversation-row__quick {
+  background: var(--card);
+  border-radius: .45rem;
+  bottom: .55rem;
+  box-shadow: 0 0 0 1px var(--border);
+  opacity: 0;
+  position: absolute;
+  right: .75rem;
+  transition: opacity .14s ease;
+}
+.conversation-row:hover .conversation-row__quick,
+.conversation-row__quick:focus-within { opacity: 1; }
+@media (hover: none) {
+  .conversation-row__quick { opacity: 1; }
+}
+
+.reading-pane__sender {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: .7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem 1rem;
+  justify-content: space-between;
+  padding: .55rem .7rem .55rem .85rem;
+}
+.reading-pane__sender[data-flagged] {
+  background: color-mix(in srgb, var(--warning) 6%, var(--card));
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border));
+}
+.reading-pane__sender .reading-pane__flag { flex: 1 1 16rem; }

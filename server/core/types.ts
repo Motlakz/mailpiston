@@ -170,8 +170,25 @@ export interface MailFilterEntry {
   kind: 'allow' | 'deny';
   pattern: string;
   note: string | null;
+  /**
+   * Who made the decision. `auto` entries come from the persistent-sender
+   * sweep and are listed separately, so an operator can see — and undo —
+   * everything the system blocked on their behalf.
+   */
+  source: MailFilterSource;
   createdAt: Date;
 }
+
+export type MailFilterSource = 'operator' | 'auto';
+
+/**
+ * How long flagged mail may sit unreviewed before its sender is blocked.
+ *
+ * A value rather than configuration because the dashboard counts down to it on
+ * every flagged row, and a countdown that disagrees with the job is worse than
+ * none. Three days covers a weekend away from the inbox.
+ */
+export const AUTO_BLOCK_AFTER_DAYS = 3;
 
 export interface Email {
   id: string;
@@ -225,6 +242,13 @@ export interface Email {
 export interface EmailListItem extends Email {
   addressEmail: string | null;
   attachmentCount: number;
+  /**
+   * When this sender is refused on their next delivery if nobody reviews the
+   * message first. Null for mail the rule never applies to — clean, outbound,
+   * an allowed sender, a trusted platform. Set by the list endpoints, not the
+   * repository: it is policy, not data.
+   */
+  autoBlockAt?: Date | null;
 }
 
 /** §18 */

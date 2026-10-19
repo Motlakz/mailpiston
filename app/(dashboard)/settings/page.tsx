@@ -6,6 +6,7 @@ import {
   TablePagination,
 } from '@/components/layout/pagination';
 import { FilterLists } from '@/components/mail/filter-lists';
+import { AUTO_BLOCK_AFTER_DAYS } from '@/server/core/types';
 import { ProviderConnection } from '@/components/mail/provider-connection';
 import { env } from '@/server/core/config';
 import { hasTenantApiToken } from '@/server/core/tenancy/credentials';
@@ -184,8 +185,14 @@ export default async function SettingsPage({
           operator's own judgement about senders rather than deployment
           configuration, and they have to be changeable the moment the filter
           gets somebody wrong. */}
-      <section className="mt-6">
-        <h2 className="mb-2 text-sm font-medium">Mail filtering</h2>
+      <section id="mail-filtering" className="mt-6 scroll-mt-6">
+        <h2 className="mb-1 text-sm font-medium">Mail filtering</h2>
+        <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+          These apply to every domain you manage. A sender whose flagged mail
+          sits unreviewed for {AUTO_BLOCK_AFTER_DAYS} days is added to Blocked
+          automatically the next time they write — trusted platforms and people
+          you have written to excepted.
+        </p>
         <FilterLists entries={filters} />
       </section>
 
